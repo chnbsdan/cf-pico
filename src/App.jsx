@@ -132,15 +132,29 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen py-8 px-4">
+    <div className="min-h-screen py-8 px-4 relative">
+      {/* 左上角 LOGO - 使用 favicon.ico */}
+      <a 
+        href="https://github.com/chnbsdan/imgbed" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        className="fixed top-4 left-4 z-50 bg-white/30 backdrop-blur-md p-2 rounded-xl hover:bg-white/50 transition-all duration-300 shadow-lg"
+        title="GitHub 仓库"
+      >
+        <img src="/favicon.ico" alt="Logo" className="w-6 h-6" />
+      </a>
+
       <div className="max-w-4xl mx-auto">
         <Header onRefreshBg={setRandomBackground} />
-        <div className="space-y-6">
+        
+        {/* 卡片区域 - 毛玻璃效果 */}
+        <div className="space-y-6 backdrop-blur-md bg-white/30 rounded-2xl p-6 shadow-xl border border-white/30">
           <StatsCard stats={stats} />
           <ApiSection />
           <UploadArea onUpload={handleUpload} isLoading={isUploading} />
           <UploadResult results={uploadResults} />
         </div>
+        
         <Footer />
       </div>
     </div>
