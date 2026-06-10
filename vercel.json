@@ -1,0 +1,13 @@
+{
+  "rewrites": [
+    { "source": "/api/random", "destination": "/api/random" },
+    { "source": "/api/wallpaper", "destination": "/api/wallpaper" },
+    { "source": "/api/cover", "destination": "/api/cover" },
+    { "source": "/api/json", "destination": "/api/json" },
+    { "source": "/api/list", "destination": "/api/list" },
+    { "source": "/api/stats", "destination": "/api/stats" },
+    { "source": "/api/upload", "destination": "/api/upload" },
+    { "source": "/wallpaper/:path*", "destination": "/api/img/:path*" },
+    { "source": "/cover/:path*", "destination": "/api/img/:path*" }
+  ]
+}
