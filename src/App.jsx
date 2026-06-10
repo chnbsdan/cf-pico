@@ -138,10 +138,10 @@ function App() {
         href="https://github.com/chnbsdan/imgbed" 
         target="_blank" 
         rel="noopener noreferrer"
-        className="fixed top-4 left-4 z-50"
+        className="fixed top-2 left-2 z-50"
         title="GitHub仓库"
       >
-        <img src="/favicon.ico" alt="Logo" className="w-6 h-6 hover:opacity-80 transition-opacity" />
+        <img src="/favicon.ico" alt="Logo" className="w-12 h-12 hover:opacity-80 transition-opacity" />
       </a>
 
       <div className="max-w-4xl mx-auto">
