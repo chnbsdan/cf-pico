@@ -13,10 +13,6 @@
     @apply bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20;
   }
   
-  .btn-primary {
-    @apply px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl hover:-translate-y-0.5;
-  }
-  
   .upload-area {
     @apply transition-all duration-200 rounded-2xl border-2 border-dashed p-8 text-center cursor-pointer;
   }
