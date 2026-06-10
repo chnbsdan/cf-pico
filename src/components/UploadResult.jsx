@@ -46,7 +46,7 @@ export default function UploadResult({ results }) {
                 <span className={`text-sm font-medium ${result.success ? 'text-green-700' : 'text-red-700'}`}>
                   {result.success ? '✓' : '✗'} {result.filename}
                 </span>
-                <span className="text-xs text-gray-500">{result.folder === 'wallpaper' ? '📐横屏' : '📱竖屏'}</span>
+                <span className="text-xs text-gray-500">{result.folder === 'wallpaper' ? '横屏' : '竖屏'}</span>
               </div>
               {result.success && result.url && (
                 <>
@@ -56,16 +56,16 @@ export default function UploadResult({ results }) {
                       onClick={() => handleCopy(result.url, `url-${idx}`)}
                       className="p-1.5 hover:bg-white rounded-lg transition"
                     >
-                      {copied === `url-${idx}` ? <span className="text-green-500">✓</span> : <span className="text-gray-400">📋</span>}
+                      {copied === `url-${idx}` ? <i className="fas fa-check text-green-500"></i> : <i className="fas fa-copy text-gray-400"></i>}
                     </button>
                     <a href={result.url} target="_blank" rel="noopener noreferrer" className="p-1.5 hover:bg-white rounded-lg transition">
-                      <span className="text-gray-400">🔗</span>
+                      <i className="fas fa-external-link-alt text-gray-400"></i>
                     </a>
                     <button
                       onClick={() => handlePreview(result.url, idx)}
                       className="p-1.5 hover:bg-white rounded-lg transition"
                     >
-                      <span className="text-gray-400">👁️</span>
+                      <i className="fas fa-eye text-gray-400"></i>
                     </button>
                   </div>
                   <div id={`preview-${idx}`} className="mt-2">
