@@ -1,11 +1,10 @@
 import React from 'react'
-import { Images, Grid3x3, Image, Globe } from 'lucide-react'
 
 const statsConfig = [
-  { id: 'total', label: '总图片数', icon: Images, color: 'text-blue-600', bg: 'bg-blue-50' },
-  { id: 'wallpaper', label: '横屏图片', icon: Grid3x3, color: 'text-green-600', bg: 'bg-green-50' },
-  { id: 'cover', label: '竖屏图片', icon: Image, color: 'text-purple-600', bg: 'bg-purple-50' },
-  { id: 'external', label: '外部图源', icon: Globe, color: 'text-orange-600', bg: 'bg-orange-50' },
+  { id: 'total', label: '总图片数', emoji: '🖼️', color: 'text-blue-600', bg: 'bg-blue-50' },
+  { id: 'wallpaper', label: '横屏图片', emoji: '📐', color: 'text-green-600', bg: 'bg-green-50' },
+  { id: 'cover', label: '竖屏图片', emoji: '📱', color: 'text-purple-600', bg: 'bg-purple-50' },
+  { id: 'external', label: '外部图源', emoji: '🌐', color: 'text-orange-600', bg: 'bg-orange-50' },
 ]
 
 export default function StatsCard({ stats }) {
@@ -22,7 +21,7 @@ export default function StatsCard({ stats }) {
         <div key={item.id} className="card p-4 hover:shadow-2xl transition-all duration-300 hover:-translate-y-1">
           <div className="flex items-center justify-between mb-2">
             <div className={`p-2 rounded-xl ${item.bg}`}>
-              <item.icon className={`w-5 h-5 ${item.color}`} />
+              <span className="text-xl">{item.emoji}</span>
             </div>
           </div>
           <div className="text-2xl md:text-3xl font-bold text-gray-800">{item.value}</div>
