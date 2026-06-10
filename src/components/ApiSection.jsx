@@ -2,10 +2,10 @@ import React, { useState } from 'react'
 import { copyToClipboard } from '../lib/api'
 
 const apis = [
-  { id: 'random', label: '随机图片接口', emoji: '🎲', path: '/api/random' },
-  { id: 'wallpaper', label: '横屏图片接口', emoji: '📐', path: '/api/wallpaper' },
-  { id: 'cover', label: '竖屏图片接口', emoji: '📱', path: '/api/cover' },
-  { id: 'json', label: 'JSON 接口', emoji: '📋', path: '/api/json' },
+  { id: 'random', label: '随机图片接口', icon: 'fa-dice-d6', path: '/api/random' },
+  { id: 'wallpaper', label: '横屏图片接口', icon: 'fa-arrows-alt', path: '/api/wallpaper' },
+  { id: 'cover', label: '竖屏图片接口', icon: 'fa-mobile-alt', path: '/api/cover' },
+  { id: 'json', label: 'JSON 接口', icon: 'fa-code', path: '/api/json' },
 ]
 
 export default function ApiSection() {
@@ -22,7 +22,7 @@ export default function ApiSection() {
   return (
     <div className="card p-5 mb-6 animate-slide-up">
       <h3 className="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-        <span className="text-lg">🔌</span>
+        <i className="fas fa-plug text-blue-500"></i>
         API 接口
       </h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -31,7 +31,7 @@ export default function ApiSection() {
           return (
             <div key={api.id} className="bg-gray-50 rounded-xl p-3">
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-base">{api.emoji}</span>
+                <i className={`fas ${api.icon} text-gray-500`}></i>
                 <span className="text-sm font-medium text-gray-700">{api.label}</span>
               </div>
               <div className="flex items-center justify-between gap-2">
@@ -41,9 +41,9 @@ export default function ApiSection() {
                   className="p-1.5 hover:bg-gray-200 rounded-lg transition"
                 >
                   {copied === api.id ? (
-                    <span className="text-green-500">✓</span>
+                    <i className="fas fa-check text-green-500"></i>
                   ) : (
-                    <span className="text-gray-400">📋</span>
+                    <i className="fas fa-copy text-gray-400"></i>
                   )}
                 </button>
               </div>
