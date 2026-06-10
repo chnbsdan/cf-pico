@@ -3,6 +3,21 @@ const GITHUB_USER = process.env.GITHUB_USER || 'chnbsdan'
 const GITHUB_REPO = process.env.GITHUB_REPO || 'imgbed-storage'
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN
 
+// 根据文件扩展名获取正确的 Content-Type
+function getContentType(filename) {
+  const ext = filename.split('.').pop().toLowerCase()
+  const types = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'webp': 'image/webp',
+    'gif': 'image/gif',
+    'avif': 'image/avif',
+    'svg': 'image/svg+xml'
+  }
+  return types[ext] || 'image/jpeg'
+}
+
 export default async function handler(req, res) {
   const { filename } = req.query
   
@@ -10,13 +25,13 @@ export default async function handler(req, res) {
     return res.status(400).send('Filename required')
   }
   
-  // 设置响应头 - 关键：禁止缓存，强制内联显示
+  // 设置响应头
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
-  res.setHeader('Pragma', 'no-cache')
-  res.setHeader('Expires', '0')
+  res.setHeader('Cache-Control', 'public, max-age=86400')
   // 关键：强制浏览器显示而不是下载
   res.setHeader('Content-Disposition', 'inline')
+  // 关键：手动设置 Content-Type
+  res.setHeader('Content-Type', getContentType(filename))
   
   const folders = ['wallpaper', 'cover']
   
@@ -32,10 +47,7 @@ export default async function handler(req, res) {
       })
       
       if (response.ok) {
-        const contentType = response.headers.get('Content-Type') || 'image/jpeg'
         const body = await response.arrayBuffer()
-        
-        res.setHeader('Content-Type', contentType)
         return res.send(Buffer.from(body))
       }
     }
