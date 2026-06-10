@@ -1,11 +1,4 @@
-import { clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
-
-export function cn(...inputs) {
-  return twMerge(clsx(inputs))
-}
-
-// 使用相对路径，调用同域下的 API
+// src/lib/api.js - 简化版，移除 clsx 和 tailwind-merge
 export async function fetchStats() {
   const res = await fetch(`/api/stats`)
   if (!res.ok) throw new Error('Failed to fetch stats')
