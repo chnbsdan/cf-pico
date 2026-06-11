@@ -1,10 +1,10 @@
 import React from 'react'
 
 const statsConfig = [
-  { id: 'total', label: '总图片数', emoji: '🖼️', color: 'text-blue-600', bg: 'bg-blue-50' },
-  { id: 'wallpaper', label: '横屏图片', emoji: '📐', color: 'text-green-600', bg: 'bg-green-50' },
-  { id: 'cover', label: '竖屏图片', emoji: '📱', color: 'text-purple-600', bg: 'bg-purple-50' },
-  { id: 'external', label: '外部图源', emoji: '🌐', color: 'text-orange-600', bg: 'bg-orange-50' },
+  { id: 'total', label: '总图片数', icon: 'fa-images', color: 'text-blue-600', bg: 'bg-blue-50' },
+  { id: 'wallpaper', label: '横屏图片', icon: 'fa-arrows-alt', color: 'text-green-600', bg: 'bg-green-50' },
+  { id: 'cover', label: '竖屏图片', icon: 'fa-mobile-alt', color: 'text-purple-600', bg: 'bg-purple-50' },
+  { id: 'external', label: '外部图源', icon: 'fa-globe', color: 'text-orange-600', bg: 'bg-orange-50' },
 ]
 
 export default function StatsCard({ stats }) {
@@ -21,7 +21,7 @@ export default function StatsCard({ stats }) {
         <div key={item.id} className="card py-3 px-3 hover:shadow-2xl transition-all duration-300 hover:-translate-y-0.5">
           <div className="flex items-center gap-3">
             <div className={`p-2 rounded-xl ${item.bg}`}>
-              <span className="text-lg">{item.emoji}</span>
+              <i className={`fas ${item.icon} text-lg ${item.color}`}></i>
             </div>
             <div>
               <div className="text-xl font-bold text-gray-800">{item.value}</div>
