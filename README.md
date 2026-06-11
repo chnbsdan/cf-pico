@@ -1,6 +1,4 @@
-好的！我来帮你整理一份**完整的最新版 README.md**，包含所有功能和你后续的所有优化修改。
 
----
 
 # ImgBed - 现代化个人图床
 
@@ -11,7 +9,7 @@
 
 > 基于 Vercel + GitHub 私有仓库的现代化个人图床服务，支持横屏/竖屏分类上传、批量上传、自动压缩、随机图片 API 等功能。
 
-**[在线演示](https://tt.hangdn.com)** | **[GitHub 仓库](https://github.com/chnbsdan/imgbed)**
+**[在线演示](https://tt.2098.nyc.mn)** | **[GitHub 仓库](https://github.com/chnbsdan/imgbed)**
 
 ---
 
