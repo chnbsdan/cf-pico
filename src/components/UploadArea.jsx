@@ -3,10 +3,15 @@ import React, { useRef, useState } from 'react'
 export default function UploadArea({ onUpload, isLoading }) {
   const [dragOver, setDragOver] = useState(false)
   const [folder, setFolder] = useState('wallpaper')
+  const [bgRefresh, setBgRefresh] = useState(false)  // 换背景按钮状态
   const fileInputRef = useRef(null)
 
   // 换背景：只从横屏图片中获取
   const refreshBackground = () => {
+    // 添加点击动画效果
+    setBgRefresh(true)
+    setTimeout(() => setBgRefresh(false), 200)
+    
     const img = new Image()
     const url = '/api/wallpaper?t=' + Date.now()
     img.onload = () => {
@@ -38,10 +43,14 @@ export default function UploadArea({ onUpload, isLoading }) {
           上传图片
         </h3>
         <div className="flex items-center gap-2">
-          {/* 换背景按钮 - 绿色背景，悬停变亮 */}
+          {/* 换背景按钮 - 有点击状态变化 */}
           <button
             onClick={refreshBackground}
-            className="text-white text-xs transition flex items-center gap-1 bg-green-500 hover:bg-green-400 px-2 py-1 rounded-lg"
+            className={`text-xs transition flex items-center gap-1 px-2 py-1 rounded-lg ${
+              bgRefresh
+                ? 'bg-green-700 text-white shadow-md'
+                : 'bg-green-500 text-white hover:bg-green-400'
+            }`}
             title="换一张背景"
           >
             <i className="fas fa-sync-alt text-xs"></i>
@@ -74,7 +83,7 @@ export default function UploadArea({ onUpload, isLoading }) {
         </div>
       </div>
 
-      {/* 上传区域 - 高度增加，悬停变天蓝色 */}
+      {/* 上传区域 */}
       <div
         className={`upload-area rounded-xl border-2 border-dashed p-8 text-center transition-all duration-200 ${
           dragOver
