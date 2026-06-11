@@ -34,7 +34,7 @@ export default function UploadResult({ results }) {
 
   return (
     <div className="space-y-3 mt-4 animate-slide-up">
-      <h4 className="text-sm font-medium text-gray-700">上传结果</h4>
+      <h4 className="text-sm font-medium text-gray-300">上传结果</h4>
       {results.map((result, idx) => (
         <div 
           key={idx} 
