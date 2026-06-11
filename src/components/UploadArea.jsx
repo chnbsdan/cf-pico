@@ -74,22 +74,22 @@ export default function UploadArea({ onUpload, isLoading }) {
         </div>
       </div>
 
-      {/* 上传区域 - 悬停变亮（背景变浅） */}
+      {/* 上传区域 - 高度增加，悬停变天蓝色 */}
       <div
-        className={`upload-area rounded-xl border-2 border-dashed p-5 text-center transition-all duration-200 ${
+        className={`upload-area rounded-xl border-2 border-dashed p-8 text-center transition-all duration-200 ${
           dragOver
-            ? 'border-blue-500 bg-blue-100'
-            : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-blue-400'
+            ? 'border-blue-500 bg-sky-100'
+            : 'border-gray-300 bg-gray-50 hover:bg-sky-100 hover:border-sky-400'
         }`}
         onClick={() => fileInputRef.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
       >
-        <i className="fas fa-cloud-upload-alt text-3xl text-gray-400 mb-2 block"></i>
-        <p className="text-gray-600 text-sm mb-1">点击或拖拽图片到此处上传</p>
+        <i className="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-3 block"></i>
+        <p className="text-gray-600 text-base mb-2">点击或拖拽图片到此处上传</p>
         <p className="text-xs text-gray-400">支持 JPG、PNG、WebP、GIF、AVIF | 大图自动压缩</p>
-        <p className="text-xs text-blue-500 mt-2">
+        <p className="text-xs text-blue-500 mt-3">
           当前上传到: {folder === 'wallpaper' ? '📁 横屏 (wallpaper)' : '📁 竖屏 (cover)'}
         </p>
       </div>
