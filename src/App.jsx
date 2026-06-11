@@ -148,7 +148,7 @@ function App() {
         <Header />
         
         {/* 卡片区域 - 毛玻璃效果 */}
-        <div className="space-y-4 backdrop-blur-md bg-white/30 rounded-xl p-4 shadow-xl border border-white/30">
+        <div className="space-y-4 backdrop-blur-md bg-white/5 rounded-xl p-4 shadow-xl border border-white/5">
           <StatsCard stats={stats} />
           <ApiSection />
           <UploadArea onUpload={handleUpload} isLoading={isUploading} onRefreshBg={setRandomBackground} />
