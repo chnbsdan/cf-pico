@@ -1,9 +1,19 @@
 import React, { useRef, useState } from 'react'
 
-export default function UploadArea({ onUpload, isLoading, onRefreshBg }) {
+export default function UploadArea({ onUpload, isLoading }) {
   const [dragOver, setDragOver] = useState(false)
   const [folder, setFolder] = useState('wallpaper')
   const fileInputRef = useRef(null)
+
+  // 换背景：只从横屏图片中获取
+  const refreshBackground = () => {
+    const img = new Image()
+    const url = '/api/wallpaper?t=' + Date.now()
+    img.onload = () => {
+      document.body.style.backgroundImage = `url(${url})`
+    }
+    img.src = url
+  }
 
   const handleFileSelect = (files) => {
     if (files.length > 0) {
@@ -28,10 +38,10 @@ export default function UploadArea({ onUpload, isLoading, onRefreshBg }) {
           上传图片
         </h3>
         <div className="flex items-center gap-2">
-          {/* 换背景按钮 */}
+          {/* 换背景按钮 - 绿色背景，悬停变亮 */}
           <button
-            onClick={onRefreshBg}
-            className="text-white/50 hover:text-white text-xs transition flex items-center gap-1 bg-white/20 px-2 py-1 rounded-lg"
+            onClick={refreshBackground}
+            className="text-white text-xs transition flex items-center gap-1 bg-green-500 hover:bg-green-400 px-2 py-1 rounded-lg"
             title="换一张背景"
           >
             <i className="fas fa-sync-alt text-xs"></i>
@@ -43,7 +53,7 @@ export default function UploadArea({ onUpload, isLoading, onRefreshBg }) {
             className={`px-3 py-1 rounded-lg text-xs flex items-center gap-1 transition-all ${
               folder === 'wallpaper'
                 ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-300'
             }`}
           >
             <i className="fas fa-arrows-alt text-xs"></i>
@@ -55,7 +65,7 @@ export default function UploadArea({ onUpload, isLoading, onRefreshBg }) {
             className={`px-3 py-1 rounded-lg text-xs flex items-center gap-1 transition-all ${
               folder === 'cover'
                 ? 'bg-purple-600 text-white shadow-md'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-300'
             }`}
           >
             <i className="fas fa-mobile-alt text-xs"></i>
@@ -64,11 +74,12 @@ export default function UploadArea({ onUpload, isLoading, onRefreshBg }) {
         </div>
       </div>
 
+      {/* 上传区域 - 悬停变亮（背景变浅） */}
       <div
-        className={`upload-area rounded-xl border-2 border-dashed p-5 text-center ${
+        className={`upload-area rounded-xl border-2 border-dashed p-5 text-center transition-all duration-200 ${
           dragOver
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 bg-gray-50 hover:border-blue-400 hover:bg-blue-50/50'
+            ? 'border-blue-500 bg-blue-100'
+            : 'border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-blue-400'
         }`}
         onClick={() => fileInputRef.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
