@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     const boundary = getBoundary(contentType)
     if (!boundary) return res.status(400).json({ error: 'Cannot parse boundary' })
     
-    const formData = await parseMultipart(buffer, boundary)  // 🔧 改为 await
+    const formData = parseMultipart(buffer, boundary)  // 不需要 await
     const file = formData.file
     const targetFolder = formData.folder || 'wallpaper'
     
@@ -71,26 +71,30 @@ function getBoundary(contentType) {
   return match ? (match[1] || match[2]) : null
 }
 
-// 🔧 重写 parseMultipart 函数，使用 Buffer 而不是 binary 字符串
-async function parseMultipart(buffer, boundary) {
+function parseMultipart(buffer, boundary) {
   const result = {}
   const boundaryBuffer = Buffer.from(`--${boundary}`)
-  const endBoundaryBuffer = Buffer.from(`--${boundary}--`)
   
   let start = 0
   let end = buffer.indexOf(boundaryBuffer, start)
   
   while (end !== -1) {
     start = end + boundaryBuffer.length
-    end = buffer.indexOf(boundaryBuffer, start)
+    let nextBoundary = buffer.indexOf(boundaryBuffer, start)
+    let partEnd = nextBoundary !== -1 ? nextBoundary : buffer.length
     
-    let partEnd = end !== -1 ? end : buffer.length
+    // 跳过开头的 \r\n
+    if (buffer[start] === 13 && buffer[start+1] === 10) {
+      start += 2
+    }
+    
     const part = buffer.slice(start, partEnd)
+    if (part.length === 0) {
+      end = nextBoundary
+      continue
+    }
     
-    // 跳过空部分
-    if (part.length <= 2) continue
-    
-    // 查找 header 结束位置（\r\n\r\n）
+    // 查找 headers 结束位置 (\r\n\r\n)
     let headerEnd = -1
     for (let i = 0; i < part.length - 3; i++) {
       if (part[i] === 13 && part[i+1] === 10 && part[i+2] === 13 && part[i+3] === 10) {
@@ -98,27 +102,45 @@ async function parseMultipart(buffer, boundary) {
         break
       }
     }
-    if (headerEnd === -1) continue
     
-    const headers = part.slice(0, headerEnd).toString('utf-8')
-    const content = part.slice(headerEnd + 4, part.length - 2) // 去掉末尾的\r\n
+    if (headerEnd === -1) {
+      end = nextBoundary
+      continue
+    }
     
-    // 解析 name
+    const headers = part.slice(0, headerEnd).toString()
+    const content = part.slice(headerEnd + 4)
+    
     const nameMatch = headers.match(/name="([^"]+)"/)
-    if (!nameMatch) continue
+    if (!nameMatch) {
+      end = nextBoundary
+      continue
+    }
+    
     const name = nameMatch[1]
     
-    // 检查是否是文件
     if (headers.includes('filename')) {
       const filenameMatch = headers.match(/filename="([^"]+)"/)
+      // 移除末尾的 \r\n
+      const contentEnd = content.length >= 2 && content[content.length-2] === 13 && content[content.length-1] === 10 
+        ? content.length - 2 
+        : content.length
+      const fileData = content.slice(0, contentEnd)
+      
       result[name] = {
         filename: filenameMatch ? filenameMatch[1] : 'unknown',
-        data: Buffer.from(content),  // 直接使用 Buffer
-        size: content.length
+        data: Buffer.from(fileData),
+        size: fileData.length
       }
     } else {
-      result[name] = content.toString('utf-8').trim()
+      // 移除末尾的 \r\n
+      const textEnd = content.length >= 2 && content[content.length-2] === 13 && content[content.length-1] === 10
+        ? content.length - 2
+        : content.length
+      result[name] = content.slice(0, textEnd).toString()
     }
+    
+    end = nextBoundary
   }
   
   return result
