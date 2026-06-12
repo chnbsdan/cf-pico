@@ -1,4 +1,4 @@
-# PCBed - 现代化个人图床
+# PCBed v2.0 - 现代化个人图床
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black)](https://vercel.com)
