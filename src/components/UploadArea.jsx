@@ -39,7 +39,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     <div className="mb-4">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 className="font-semibold text-green-500 text-sm flex items-center gap-1">
-          <i className="fas fa-upload text-orange-600 text-sm"></i>
+          <i className="fas fa-upload text-blue-600 text-sm"></i>
           上传图片
         </h3>
         <div className="flex items-center gap-2">
