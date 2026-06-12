@@ -9,8 +9,9 @@
     { "source": "/api/list", "destination": "/api/list" },
     { "source": "/api/stats", "destination": "/api/stats" },
     { "source": "/api/upload", "destination": "/api/upload" },
-    { "source": "/wallpaper/:path*", "destination": "/api/img/wallpaper/:path*" },
-    { "source": "/cover/:path*", "destination": "/api/img/cover/:path*" },
+    { "source": "/api/img/(.*)", "destination": "/api/img/$1" },
+    { "source": "/wallpaper/(.*)", "destination": "/api/img/$1" },
+    { "source": "/cover/(.*)", "destination": "/api/img/$1" },
     { "source": "/manage", "destination": "/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
