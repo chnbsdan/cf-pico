@@ -13,7 +13,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     setTimeout(() => setBgRefresh(false), 200)
     
     const img = new Image()
-    const url = '/api/wallpaper?t=' + Date.now()
+    // 时间戳 + 随机数，双重防缓存
+    const url = '/api/wallpaper?t=' + Date.now() + '&r=' + Math.random()
     img.onload = () => {
       document.body.style.backgroundImage = `url(${url})`
     }
