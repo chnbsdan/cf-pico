@@ -236,7 +236,7 @@ export default function Manage() {
       </div>
 
       {/* ========= 右侧内容区 ========= */}
-      <div className="max-w-7xl mx-auto pl-72">
+      <div className="max-w-[90rem] mx-auto pl-72">
         {/* 标题栏 */}
         <div className="bg-white/10 backdrop-blur-md rounded-xl border border-white/20 p-4 mb-6">
           <div className="flex items-center justify-between">
