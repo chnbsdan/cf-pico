@@ -8,7 +8,7 @@ export default function Header() {
           <i className="fas fa-cloud-upload-alt text-xl text-white"></i>
         </div>
         <h1 className="text-xl md:text-2xl font-bold text-white drop-shadow-lg">
-          ImgBed
+          Hangdn ImgBed
         </h1>
       </div>
       <p className="text-white/60 text-xs">
