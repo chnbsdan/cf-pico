@@ -1,6 +1,6 @@
 // api/img/[filename].js
 const GITHUB_USER = process.env.GITHUB_USER || 'chnbsdan'
-const GITHUB_REPO = process.env.GITHUB_REPO || 'imgbed-storage'
+const GITHUB_REPO = process.env.GITHUB_REPO || 'pcbed'
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN
 
 // 根据文件扩展名获取正确的 Content-Type
