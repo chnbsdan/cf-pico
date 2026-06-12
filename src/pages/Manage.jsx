@@ -1,4 +1,4 @@
-// src/pages/Manage.jsx - 图片管理页面（动态比例：横屏16:9，竖屏9:16）
+// src/pages/Manage.jsx - 图片管理页面（完整移动端适配版）
 import React, { useState, useEffect } from 'react'
 import { fetchImageList, copyToClipboard } from '../lib/api'
 
@@ -17,6 +17,7 @@ export default function Manage() {
   
   const [previewImage, setPreviewImage] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const getProxyUrl = (img) => {
     if (img.source === 'external') {
@@ -26,9 +27,8 @@ export default function Manage() {
     return `${baseUrl}/api/image?path=${img.folder}/${img.name}`
   }
 
-  // 根据文件名判断是横屏还是竖屏（或者根据分类）
+  // 根据文件夹获取比例
   const getImageAspect = (img) => {
-    // 横屏分类默认用 16:9，竖屏分类默认用 9:16
     if (img.folder === 'wallpaper') {
       return 'aspect-video'  // 16:9
     } else {
@@ -38,7 +38,7 @@ export default function Manage() {
 
   const handleLogin = (e) => {
     e.preventDefault()
-    if (password === 'admin123') {
+    if (password === 'your-password') {
       setIsAuthenticated(true)
       setPasswordError(false)
       loadImages()
@@ -107,6 +107,7 @@ export default function Manage() {
   const handleTabChange = (tab) => {
     setActiveTab(tab)
     setCurrentPage(1)
+    setMobileMenuOpen(false) // 移动端切换后关闭菜单
   }
 
   const currentImages = images[activeTab] || []
@@ -122,7 +123,7 @@ export default function Manage() {
         backgroundImage: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         backgroundAttachment: 'fixed'
       }}>
-        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 w-full max-w-md border border-white/30">
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 sm:p-8 w-full max-w-md border border-white/30">
           <div className="text-center mb-6">
             <i className="fas fa-lock text-5xl text-white/70 mb-3"></i>
             <h2 className="text-2xl font-bold text-white">管理后台</h2>
@@ -170,78 +171,104 @@ export default function Manage() {
       backgroundImage: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       backgroundAttachment: 'fixed'
     }}>
+      {/* ========= 移动端菜单按钮 ========= */}
+      <button
+        onClick={() => setMobileMenuOpen(true)}
+        className="fixed top-4 left-4 z-50 lg:hidden bg-white/20 backdrop-blur-sm p-2.5 rounded-lg text-white shadow-lg"
+      >
+        <i className="fas fa-bars text-lg"></i>
+      </button>
+
       {/* ========= 左侧悬浮目录 ========= */}
-      <div className="fixed left-4 top-1/2 -translate-y-1/2 z-40 w-60">
-        <div className="bg-white/10 backdrop-blur-md rounded-xl border border-white/20 overflow-hidden shadow-xl">
-          <div className="p-4 border-b border-white/20 bg-white/5">
-            <div className="flex items-center gap-2 text-white font-medium">
-              <i className="fas fa-folder-tree"></i>
-              <span>图片库</span>
+      {/* 移动端遮罩层 */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+      
+      {/* 目录侧边栏 */}
+      <div className={`
+        fixed top-0 left-0 h-full z-50 w-72 bg-black/90 backdrop-blur-md shadow-xl transition-transform duration-300 ease-in-out
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+        lg:translate-x-0 lg:left-4 lg:top-1/2 lg:-translate-y-1/2 lg:w-64 lg:h-auto lg:rounded-xl lg:bg-white/10 lg:backdrop-blur-md lg:border lg:border-white/20
+      `}>
+        <div className="p-4 border-b border-white/20 flex justify-between items-center lg:block">
+          <div className="flex items-center gap-2 text-white font-medium">
+            <i className="fas fa-folder-tree"></i>
+            <span>图片库</span>
+          </div>
+          {/* 移动端关闭按钮 */}
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            className="lg:hidden text-white/70 hover:text-white text-xl"
+          >
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <div className="p-3 border-b border-white/20">
+          <a
+            href="/"
+            className="flex items-center gap-2 w-full p-2 rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition"
+          >
+            <i className="fas fa-home w-4"></i>
+            <span className="text-sm">返回首页</span>
+          </a>
+          <button
+            onClick={() => setIsAuthenticated(false)}
+            className="flex items-center gap-2 w-full p-2 rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition mt-1"
+          >
+            <i className="fas fa-sign-out-alt w-4"></i>
+            <span className="text-sm">退出登录</span>
+          </button>
+        </div>
+        
+        <div className="p-2">
+          <div
+            onClick={() => handleTabChange('wallpaper')}
+            className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition ${
+              activeTab === 'wallpaper'
+                ? 'bg-blue-600/50 text-white'
+                : 'text-white/70 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <i className={`fas ${activeTab === 'wallpaper' ? 'fa-folder-open' : 'fa-folder'}`}></i>
+              <span className="text-sm">横屏图片</span>
             </div>
+            <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
+              {images.wallpaper.length}
+            </span>
           </div>
           
-          <div className="p-3 border-b border-white/20">
-            <a
-              href="/"
-              className="flex items-center gap-2 w-full p-2 rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition"
-            >
-              <i className="fas fa-home w-4"></i>
-              <span className="text-sm">返回首页</span>
-            </a>
-            <button
-              onClick={() => setIsAuthenticated(false)}
-              className="flex items-center gap-2 w-full p-2 rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition mt-1"
-            >
-              <i className="fas fa-sign-out-alt w-4"></i>
-              <span className="text-sm">退出登录</span>
-            </button>
-          </div>
-          
-          <div className="p-2">
-            <div
-              onClick={() => handleTabChange('wallpaper')}
-              className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition ${
-                activeTab === 'wallpaper'
-                  ? 'bg-blue-600/50 text-white'
-                  : 'text-white/70 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <i className={`fas ${activeTab === 'wallpaper' ? 'fa-folder-open' : 'fa-folder'}`}></i>
-                <span className="text-sm">横屏图片</span>
-              </div>
-              <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
-                {images.wallpaper.length}
-              </span>
+          <div
+            onClick={() => handleTabChange('cover')}
+            className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition mt-1 ${
+              activeTab === 'cover'
+                ? 'bg-purple-600/50 text-white'
+                : 'text-white/70 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <i className={`fas ${activeTab === 'cover' ? 'fa-folder-open' : 'fa-folder'}`}></i>
+              <span className="text-sm">竖屏图片</span>
             </div>
-            
-            <div
-              onClick={() => handleTabChange('cover')}
-              className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition ${
-                activeTab === 'cover'
-                  ? 'bg-purple-600/50 text-white'
-                  : 'text-white/70 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <i className={`fas ${activeTab === 'cover' ? 'fa-folder-open' : 'fa-folder'}`}></i>
-                <span className="text-sm">竖屏图片</span>
-              </div>
-              <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
-                {images.cover.length}
-              </span>
-            </div>
+            <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">
+              {images.cover.length}
+            </span>
           </div>
         </div>
       </div>
 
       {/* ========= 右侧内容区 ========= */}
-      <div className="max-w-[140rem] mx-auto pl-72">
-        {/* 标题栏 */}
-        <div className="bg-white/10 backdrop-blur-md rounded-xl border border-white/20 p-4 mb-6">
-          <div className="flex items-center justify-between">
+      <div className="lg:pl-72">
+        {/* 标题栏 - 移动端适配 */}
+        <div className="bg-white/10 backdrop-blur-md rounded-xl border border-white/20 p-3 sm:p-4 mb-4 sm:mb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h2 className="text-white font-medium flex items-center gap-2">
+              <h2 className="text-white font-medium flex items-center gap-2 text-sm sm:text-base">
                 <i className={`fas ${activeTab === 'wallpaper' ? 'fa-arrows-alt' : 'fa-mobile-alt'}`}></i>
                 {activeTab === 'wallpaper' ? '横屏图片' : '竖屏图片'}
               </h2>
@@ -249,22 +276,23 @@ export default function Manage() {
                 共 {totalCount} 张图片 · 第 {currentPage}/{totalPages || 1} 页
               </p>
             </div>
+            {/* 分页控件 - 移动端简化 */}
             {totalPages > 1 && (
               <div className="flex gap-1">
                 <button
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded bg-white/10 text-white/60 hover:bg-white/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition"
+                  className="px-2 sm:px-3 py-1.5 rounded bg-white/10 text-white/60 hover:bg-white/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition text-xs sm:text-sm"
                 >
                   <i className="fas fa-chevron-left"></i>
                 </button>
-                <span className="px-4 py-1.5 rounded bg-white/20 text-white text-sm">
+                <span className="px-2 sm:px-4 py-1.5 rounded bg-white/20 text-white text-xs sm:text-sm">
                   {currentPage} / {totalPages}
                 </span>
                 <button
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded bg-white/10 text-white/60 hover:bg-white/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition"
+                  className="px-2 sm:px-3 py-1.5 rounded bg-white/10 text-white/60 hover:bg-white/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition text-xs sm:text-sm"
                 >
                   <i className="fas fa-chevron-right"></i>
                 </button>
@@ -273,7 +301,7 @@ export default function Manage() {
           </div>
         </div>
 
-        {/* 图片网格 - 每行8个，横屏16:9，竖屏9:16 */}
+        {/* 图片网格 - 响应式列数 */}
         {loading ? (
           <div className="flex justify-center items-center py-20 bg-white/5 rounded-xl">
             <i className="fas fa-spinner fa-pulse text-3xl text-white/50"></i>
@@ -289,7 +317,7 @@ export default function Manage() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-8 gap-3">
+            <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 sm:gap-3">
               {paginatedImages.map((img, idx) => {
                 const proxyUrl = getProxyUrl(img)
                 const aspectClass = getImageAspect(img)
@@ -298,7 +326,6 @@ export default function Manage() {
                     key={img.sha || idx}
                     className="group bg-white/10 backdrop-blur-sm rounded-lg overflow-hidden border border-white/20 hover:border-white/40 transition-all hover:scale-105 hover:shadow-lg"
                   >
-                    {/* 动态比例：横屏16:9，竖屏9:16 */}
                     <div 
                       className={`${aspectClass} bg-black/30 overflow-hidden cursor-pointer relative`}
                       onClick={() => setPreviewImage(img)}
@@ -313,22 +340,22 @@ export default function Manage() {
                         }}
                       />
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                        <i className="fas fa-search-plus text-white text-sm"></i>
+                        <i className="fas fa-search-plus text-white text-xs sm:text-sm"></i>
                       </div>
                     </div>
                     
-                    <div className="p-1">
-                      <p className="text-white/60 text-[9px] truncate" title={img.name}>
+                    <div className="p-1 sm:p-1.5">
+                      <p className="text-white/60 text-[8px] sm:text-[9px] lg:text-[10px] truncate" title={img.name}>
                         {img.name}
                       </p>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-[8px] text-white/30">
+                      <div className="flex items-center justify-between mt-0.5 sm:mt-1">
+                        <span className="text-[7px] sm:text-[8px] text-white/30">
                           {img.source === 'external' ? '🌐' : '📦'}
                         </span>
                         <div className="flex gap-0.5">
                           <button
                             onClick={(e) => handleCopy(proxyUrl, img.name, e)}
-                            className="text-white/50 hover:text-green-400 transition text-[9px] px-1 py-0.5 rounded"
+                            className="text-white/50 hover:text-green-400 transition text-[8px] sm:text-[9px] px-1 py-0.5 rounded"
                             title="复制链接"
                           >
                             {copiedId === img.name ? <i className="fas fa-check"></i> : <i className="fas fa-copy"></i>}
@@ -336,7 +363,7 @@ export default function Manage() {
                           <button
                             onClick={(e) => handleDelete(img, activeTab, e)}
                             disabled={deletingId === img.name}
-                            className="text-white/50 hover:text-red-400 transition text-[9px] px-1 py-0.5 rounded disabled:opacity-30"
+                            className="text-white/50 hover:text-red-400 transition text-[8px] sm:text-[9px] px-1 py-0.5 rounded disabled:opacity-30"
                             title="删除"
                           >
                             {deletingId === img.name ? <i className="fas fa-spinner fa-pulse"></i> : <i className="fas fa-trash-alt"></i>}
@@ -351,35 +378,35 @@ export default function Manage() {
             
             {/* 底部分页 */}
             {totalPages > 1 && (
-              <div className="flex justify-center gap-2 mt-6">
+              <div className="flex justify-center gap-1 sm:gap-2 mt-6 sm:mt-8">
                 <button
                   onClick={() => setCurrentPage(1)}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition text-sm"
+                  className="px-2 sm:px-4 py-1.5 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition text-xs sm:text-sm"
                 >
                   首页
                 </button>
                 <button
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition text-sm"
+                  className="px-2 sm:px-4 py-1.5 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition text-xs sm:text-sm"
                 >
                   上一页
                 </button>
-                <span className="px-3 py-1.5 rounded bg-white/20 text-white text-sm">
+                <span className="px-2 sm:px-4 py-1.5 rounded bg-white/20 text-white text-xs sm:text-sm">
                   {currentPage} / {totalPages}
                 </span>
                 <button
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition text-sm"
+                  className="px-2 sm:px-4 py-1.5 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition text-xs sm:text-sm"
                 >
                   下一页
                 </button>
                 <button
                   onClick={() => setCurrentPage(totalPages)}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition text-sm"
+                  className="px-2 sm:px-4 py-1.5 rounded bg-white/10 text-white/70 hover:bg-white/20 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition text-xs sm:text-sm"
                 >
                   末页
                 </button>
@@ -409,16 +436,16 @@ export default function Manage() {
                 e.stopPropagation()
                 setPreviewImage(null)
               }}
-              className="absolute -top-12 right-0 text-white/70 hover:text-white text-2xl flex items-center gap-1"
+              className="absolute -top-10 sm:-top-12 right-0 text-white/70 hover:text-white text-xl sm:text-2xl flex items-center gap-1"
             >
               <i className="fas fa-times-circle"></i>
             </button>
-            <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-3 rounded-b-lg">
-              <p className="text-white text-sm truncate">
+            <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-2 sm:p-3 rounded-b-lg">
+              <p className="text-white text-xs sm:text-sm truncate">
                 <i className="fas fa-image mr-2"></i>
                 {previewImage.name}
               </p>
-              <div className="flex justify-end gap-3 mt-2">
+              <div className="flex justify-end gap-2 sm:gap-3 mt-1 sm:mt-2">
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -427,7 +454,7 @@ export default function Manage() {
                     setCopiedId(previewImage.name)
                     setTimeout(() => setCopiedId(null), 2000)
                   }}
-                  className="text-white/70 hover:text-green-400 text-sm flex items-center gap-1 transition"
+                  className="text-white/70 hover:text-green-400 text-xs sm:text-sm flex items-center gap-1 transition"
                 >
                   <i className="fas fa-copy"></i>
                   复制链接
@@ -438,7 +465,7 @@ export default function Manage() {
                     handleDelete(previewImage, activeTab, e)
                     setPreviewImage(null)
                   }}
-                  className="text-white/70 hover:text-red-400 text-sm flex items-center gap-1 transition"
+                  className="text-white/70 hover:text-red-400 text-xs sm:text-sm flex items-center gap-1 transition"
                 >
                   <i className="fas fa-trash-alt"></i>
                   删除
