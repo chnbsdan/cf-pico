@@ -15,20 +15,20 @@ export default function Manage() {
   const [previewImage, setPreviewImage] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
 
-// 生成代理 URL
-const getProxyUrl = (img) => {
-  if (img.source === 'external') {
-    return img.url
+  // 生成完整的代理 URL（动态获取域名）
+  const getProxyUrl = (img) => {
+    if (img.source === 'external') {
+      return img.url
+    }
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://pcbed.vercel.app'
+    return `${baseUrl}/api/image?path=${img.folder}/${img.name}`
   }
-  // 使用新的 API 格式
-  return `/api/image?path=${img.folder}/${img.name}`
-}
 
   // 验证密码
   const handleLogin = (e) => {
     e.preventDefault()
     // ⚠️ 请修改下面的密码为你自己的密码
-    if (password === 'admin123') {
+    if (password === 'your-password') {
       setIsAuthenticated(true)
       setPasswordError(false)
       loadImages()
@@ -50,7 +50,6 @@ const getProxyUrl = (img) => {
     }
   }
 
-  // 统一的复制处理函数
   const handleCopy = (url, name, event) => {
     if (event) {
       event.stopPropagation()
@@ -232,7 +231,6 @@ const getProxyUrl = (img) => {
                   key={img.sha || idx}
                   className="group bg-white/10 backdrop-blur-sm rounded-xl overflow-hidden border border-white/20 hover:border-white/40 transition-all hover:scale-105 hover:shadow-xl"
                 >
-                  {/* 图片区域 - 点击放大 */}
                   <div 
                     className="aspect-square bg-black/30 overflow-hidden cursor-pointer relative"
                     onClick={() => setPreviewImage(img)}
@@ -246,13 +244,11 @@ const getProxyUrl = (img) => {
                         e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x="50" y="50" text-anchor="middle" dy=".3em" fill="%23ccc">?</text></svg>'
                       }}
                     />
-                    {/* 悬停预览提示 */}
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                       <i className="fas fa-search-plus text-white text-xl"></i>
                     </div>
                   </div>
                   
-                  {/* 图片信息 */}
                   <div className="p-2">
                     <p className="text-white/80 text-xs truncate" title={img.name}>
                       {img.name}
@@ -263,7 +259,6 @@ const getProxyUrl = (img) => {
                         {img.source === 'external' ? '外部' : '本地'}
                       </span>
                       <div className="flex gap-1">
-                        {/* 复制按钮 - 使用代理链接 */}
                         <button
                           onClick={(e) => handleCopy(proxyUrl, img.name, e)}
                           className="text-white/60 hover:text-green-400 transition text-xs flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-white/10"
@@ -271,7 +266,6 @@ const getProxyUrl = (img) => {
                         >
                           {copiedId === img.name ? <i className="fas fa-check"></i> : <i className="fas fa-copy"></i>}
                         </button>
-                        {/* 删除按钮 */}
                         <button
                           onClick={(e) => handleDelete(img, activeTab, e)}
                           disabled={deletingId === img.name}
@@ -305,7 +299,6 @@ const getProxyUrl = (img) => {
               alt={previewImage.name}
               className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
             />
-            {/* 关闭按钮 */}
             <button
               onClick={(e) => {
                 e.stopPropagation()
@@ -315,7 +308,6 @@ const getProxyUrl = (img) => {
             >
               <i className="fas fa-times-circle"></i>
             </button>
-            {/* 图片信息栏 */}
             <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-3 rounded-b-lg">
               <p className="text-white text-sm truncate">
                 <i className="fas fa-image mr-2"></i>
