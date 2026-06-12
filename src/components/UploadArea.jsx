@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react'
 
-export default function UploadArea({ onUpload, isLoading }) {
+export default function UploadArea({ onUpload, isLoading, convertToWebp, onConvertChange }) {
   const [dragOver, setDragOver] = useState(false)
   const [folder, setFolder] = useState('wallpaper')
   const [bgRefresh, setBgRefresh] = useState(false)  // 换背景按钮状态
@@ -83,9 +83,31 @@ export default function UploadArea({ onUpload, isLoading }) {
         </div>
       </div>
 
+      {/* 🆕 WebP 转换选项 */}
+      <div className="flex justify-center items-center mb-4">
+        <label className="flex items-center gap-2 cursor-pointer group">
+          <input
+            type="checkbox"
+            checked={convertToWebp || false}
+            onChange={(e) => onConvertChange?.(e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300 bg-white/80 
+                       checked:bg-blue-500 checked:border-blue-500 
+                       focus:ring-2 focus:ring-blue-400 focus:ring-offset-0
+                       cursor-pointer"
+          />
+          <span className="text-white/80 text-sm group-hover:text-white/100 transition">
+            <i className="fas fa-file-image mr-1"></i>
+            自动转换为 WebP 格式
+          </span>
+          <span className="text-white/40 text-xs hidden sm:inline">
+            (更小体积，相同画质)
+          </span>
+        </label>
+      </div>
+
       {/* 上传区域 */}
       <div
-        className={`upload-area rounded-xl border-2 border-dashed p-8 text-center transition-all duration-200 ${
+        className={`upload-area rounded-xl border-2 border-dashed p-8 text-center transition-all duration-200 cursor-pointer ${
           dragOver
             ? 'border-blue-500 bg-sky-100'
             : 'border-gray-300 bg-gray-50 hover:bg-sky-100 hover:border-sky-400'
@@ -98,6 +120,13 @@ export default function UploadArea({ onUpload, isLoading }) {
         <i className="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-3 block"></i>
         <p className="text-gray-600 text-base mb-2">点击或拖拽图片到此处上传</p>
         <p className="text-xs text-gray-400">支持 JPG、PNG、WebP、GIF、AVIF | 大图自动压缩</p>
+        {/* 🆕 显示转换状态提示 */}
+        {convertToWebp && (
+          <p className="text-xs text-green-600 mt-2">
+            <i className="fas fa-exchange-alt mr-1"></i>
+            已开启 WebP 转换，上传后将自动转换格式
+          </p>
+        )}
         <p className="text-xs text-blue-500 mt-3">
           当前上传到: {folder === 'wallpaper' ? '📁 横屏 (wallpaper)' : '📁 竖屏 (cover)'}
         </p>
