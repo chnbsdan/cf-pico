@@ -1,14 +1,12 @@
-// src/components/UploadArea.jsx - 添加粘贴上传和上传进度
 import React, { useRef, useState, useEffect } from 'react'
 
 export default function UploadArea({ onUpload, isLoading, convertToWebp, onConvertChange }) {
   const [dragOver, setDragOver] = useState(false)
   const [folder, setFolder] = useState('wallpaper')
   const [bgRefresh, setBgRefresh] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(null) // 上传进度
+  const [uploadProgress, setUploadProgress] = useState(null)
   const fileInputRef = useRef(null)
 
-  // 换背景：只从横屏图片中获取
   const refreshBackground = () => {
     setBgRefresh(true)
     setTimeout(() => setBgRefresh(false), 200)
@@ -21,7 +19,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     img.src = url
   }
 
-  // 处理上传（带进度回调）
   const handleUploadWithProgress = async (files, selectedFolder) => {
     const fileArray = Array.from(files)
     let completed = 0
@@ -50,7 +47,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     }
   }
 
-  // 🆕 粘贴上传
   useEffect(() => {
     const handlePaste = (e) => {
       const items = e.clipboardData?.items
@@ -71,7 +67,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         e.preventDefault()
         handleUploadWithProgress(imageFiles, folder)
         
-        // 显示提示
         const toast = document.createElement('div')
         toast.innerHTML = '<i class="fas fa-paste mr-1"></i> 检测到粘贴的图片，开始上传'
         toast.className = 'fixed bottom-20 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm z-50 shadow-lg animate-fade-in-up'
@@ -109,7 +104,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             className={`px-3 py-1 rounded-lg text-xs flex items-center gap-1 transition-all ${
               folder === 'wallpaper'
                 ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-300'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700'
             }`}
           >
             <i className="fas fa-arrows-alt text-xs"></i>
@@ -120,7 +115,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             className={`px-3 py-1 rounded-lg text-xs flex items-center gap-1 transition-all ${
               folder === 'cover'
                 ? 'bg-purple-600 text-white shadow-md'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-300'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700'
             }`}
           >
             <i className="fas fa-mobile-alt text-xs"></i>
@@ -129,7 +124,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         </div>
       </div>
 
-      {/* WebP 转换复选框 */}
       <div className="flex justify-center items-center mb-4">
         <label className="flex items-center gap-2 cursor-pointer group">
           <input
@@ -151,12 +145,11 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         </label>
       </div>
 
-      {/* 上传区域 */}
       <div
         className={`upload-area rounded-xl border-2 border-dashed p-8 text-center transition-all duration-200 cursor-pointer ${
           dragOver
-            ? 'border-blue-500 bg-sky-100'
-            : 'border-gray-300 bg-gray-50 hover:bg-sky-100 hover:border-sky-400'
+            ? 'border-blue-500 bg-sky-100 dark:bg-sky-900/30'
+            : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 hover:bg-sky-100 dark:hover:bg-sky-900/30 hover:border-sky-400'
         }`}
         onClick={() => fileInputRef.current?.click()}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
@@ -164,14 +157,14 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         onDrop={handleDrop}
       >
         <i className="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-3 block"></i>
-        <p className="text-gray-600 text-base mb-2">点击或拖拽图片到此处上传</p>
-        <p className="text-xs text-gray-400">支持 JPG、PNG、WebP、GIF、AVIF | 大图自动压缩</p>
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-gray-600 dark:text-gray-300 text-base mb-2">点击或拖拽图片到此处上传</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">支持 JPG、PNG、WebP、GIF、AVIF | 大图自动压缩</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
           <i className="fas fa-paste mr-1"></i>也可直接 Ctrl+V 粘贴截图上传
         </p>
         
         {convertToWebp && (
-          <p className="text-xs text-green-600 mt-2">
+          <p className="text-xs text-green-600 dark:text-green-400 mt-2">
             <i className="fas fa-exchange-alt mr-1"></i>
             已开启 WebP 转换，上传后将自动转换格式
           </p>
@@ -191,7 +184,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         onChange={(e) => handleFileSelect(e.target.files)}
       />
 
-      {/* 上传进度条 */}
       {uploadProgress && (
         <div className="mt-3">
           <div className="flex items-center justify-between text-sm text-white/70 mb-1">
