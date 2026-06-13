@@ -58,7 +58,7 @@ export default async function handler(req, res) {
     const host = req.headers.host
     const protocol = req.headers['x-forwarded-proto'] || 'https'
     // 🔧 修改：使用代理 API 格式
-    const fullUrl = `${protocol}://${host}/api/image?path=${targetFolder}/${filename}`
+    const fullUrl = `${protocol}://${host}/${targetFolder}/${filename}`
     
     res.status(200).json({ success: true, filename, folder: targetFolder, url: fullUrl })
   } catch (error) {
