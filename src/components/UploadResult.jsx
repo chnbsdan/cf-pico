@@ -1,233 +1,92 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import Header from './components/Header'
-import StatsCard from './components/StatsCard'
-import ApiSection from './components/ApiSection'
-import UploadArea from './components/UploadArea'
-import UploadResult from './components/UploadResult'
-import Footer from './components/Footer'
-import { fetchStats, uploadImage } from './lib/api'
-import Manage from './pages/Manage'
+import React, { useState } from 'react'
+import { copyToClipboard } from '../lib/api'
 
-function App() {
-  const [stats, setStats] = useState({ grand_total: 0, github_folders: { wallpaper: 0, cover: 0 }, external_total: 0 })
-  const [uploadResults, setUploadResults] = useState([])
-  const [isUploading, setIsUploading] = useState(false)
-  const [convertToWebp, setConvertToWebp] = useState(false)
+export default function UploadResult({ results }) {
+  const [copied, setCopied] = useState(null)
 
-  const isManagePage = typeof window !== 'undefined' && window.location.pathname === '/manage'
-  if (isManagePage) {
-    return <Manage />
+  const handleCopy = (url, id) => {
+    copyToClipboard(url)
+    setCopied(id)
+    setTimeout(() => setCopied(null), 2000)
   }
 
-  const setRandomBackground = useCallback(() => {
+  const handlePreview = (url, id) => {
+    const container = document.getElementById(`preview-${id}`)
+    if (!container) return
+    
+    container.innerHTML = '<div class="text-xs text-gray-400 flex items-center gap-1"><div class="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div> 加载中...</div>'
+    
     const img = new Image()
-    const url = `/api/random?t=${Date.now()}`
     img.onload = () => {
-      document.body.style.backgroundImage = `url(${url})`
+      container.innerHTML = ''
+      container.appendChild(img)
+      img.className = 'max-w-full max-h-24 rounded-lg mt-2'
     }
-    img.src = url
-  }, [])
-
-  useEffect(() => {
-    loadStats()
-    setRandomBackground()
-    const interval = setInterval(loadStats, 30000)
-    return () => clearInterval(interval)
-  }, [setRandomBackground])
-
-  const loadStats = async () => {
-    try {
-      const data = await fetchStats()
-      setStats(data)
-    } catch (err) {
-      console.error('加载统计失败:', err)
+    img.onerror = () => {
+      container.innerHTML = '<span class="text-xs text-red-500">加载失败</span>'
     }
+    img.src = url + '?t=' + Date.now()
   }
 
-  const compressImage = useCallback((file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.readAsDataURL(file)
-      reader.onload = (e) => {
-        const img = new Image()
-        img.src = e.target.result
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          canvas.width = img.width
-          canvas.height = img.height
-          const ctx = canvas.getContext('2d')
-          ctx.drawImage(img, 0, 0)
-          let quality = 0.85
-          let dataUrl = canvas.toDataURL('image/jpeg', quality)
-          let size = dataURLToBlob(dataUrl).size
-          while (size > 3 * 1024 * 1024 && quality > 0.6) {
-            quality -= 0.05
-            dataUrl = canvas.toDataURL('image/jpeg', quality)
-            size = dataURLToBlob(dataUrl).size
-          }
-          const name = file.name.replace(/\.[^/.]+$/, '')
-          const compressed = new File([dataURLToBlob(dataUrl)], `${name}.jpg`, { type: 'image/jpeg' })
-          resolve(compressed)
-        }
-        img.onerror = reject
-      }
-      reader.onerror = reject
-    })
-  }, [])
-
-  const convertToWebP = useCallback((file, quality = 0.85) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.readAsDataURL(file)
-      reader.onload = (e) => {
-        const img = new Image()
-        img.src = e.target.result
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          canvas.width = img.width
-          canvas.height = img.height
-          const ctx = canvas.getContext('2d')
-          ctx.drawImage(img, 0, 0)
-          canvas.toBlob(
-            (blob) => {
-              if (!blob) {
-                reject(new Error('WebP 转换失败'))
-                return
-              }
-              const webpFile = new File([blob], file.name.replace(/\.[^/.]+$/, '.webp'), {
-                type: 'image/webp',
-              })
-              resolve(webpFile)
-            },
-            'image/webp',
-            quality
-          )
-        }
-        img.onerror = reject
-      }
-      reader.onerror = reject
-    })
-  }, [])
-
-  const dataURLToBlob = (dataURL) => {
-    const arr = dataURL.split(',')
-    const bstr = atob(arr[1])
-    const u8arr = new Uint8Array(bstr.length)
-    for (let i = 0; i < bstr.length; i++) u8arr[i] = bstr.charCodeAt(i)
-    return new Blob([u8arr], { type: 'image/jpeg' })
-  }
-
-  // 修复批量上传显示问题
-  const handleUpload = async (files, folder) => {
-    setIsUploading(true)
-    setUploadResults([])
-    
-    const fileArray = Array.from(files)
-    const allResults = []  // 用普通数组存储所有结果
-    
-    for (let i = 0; i < fileArray.length; i++) {
-      let file = fileArray[i]
-      const ext = file.name.split('.').pop().toLowerCase()
-      
-      if (!['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(ext)) {
-        allResults.push({ 
-          success: false, 
-          filename: file.name, 
-          error: '格式不支持', 
-          folder 
-        })
-        setUploadResults([...allResults])
-        continue
-      }
-      
-      if (convertToWebp && !['gif', 'avif'].includes(ext)) {
-        try {
-          file = await convertToWebP(file)
-          console.log(`✅ 已转换 ${file.name} 为 WebP`)
-        } catch (err) {
-          console.error('WebP 转换失败:', err)
-        }
-      }
-      
-      if (file.size > 3 * 1024 * 1024 && file.type !== 'image/webp') {
-        try {
-          file = await compressImage(file)
-        } catch (e) {}
-      }
-      
-      let retry = 3
-      let uploaded = false
-      
-      while (retry > 0 && !uploaded) {
-        try {
-          const data = await uploadImage(file, folder)
-          if (data.success) {
-            allResults.push({ 
-              success: true, 
-              filename: data.filename, 
-              url: data.url, 
-              folder 
-            })
-            setUploadResults([...allResults])
-            uploaded = true
-          } else {
-            throw new Error(data.error || '上传失败')
-          }
-        } catch (err) {
-          retry--
-          if (retry === 0) {
-            allResults.push({ 
-              success: false, 
-              filename: file.name, 
-              error: err.message, 
-              folder 
-            })
-            setUploadResults([...allResults])
-          } else {
-            await new Promise(r => setTimeout(r, 1000))
-          }
-        }
-      }
-      
-      if (i < fileArray.length - 1) await new Promise(r => setTimeout(r, 500))
-    }
-    
-    setIsUploading(false)
-    loadStats()
-  }
+  if (results.length === 0) return null
 
   return (
-    <div className="min-h-screen py-6 px-4 relative">
-      <a 
-        href="https://github.com/chnbsdan/pcbed" 
-        target="_blank" 
-        rel="noopener noreferrer"
-        className="fixed top-1 left-1 z-50"
-        title="GitHub 仓库"
-      >
-        <img src="/favicon.ico" alt="Logo" className="w-12 h-12 hover:opacity-80 transition-opacity" />
-      </a>
-
-      <div className="max-w-4xl mx-auto">
-        <Header />
-        
-        <div className="space-y-4 backdrop-blur-md bg-white/5 rounded-xl p-4 shadow-xl border border-white/30">
-          <StatsCard stats={stats} />
-          <ApiSection />
-          <UploadArea 
-            onUpload={handleUpload} 
-            isLoading={isUploading} 
-            onRefreshBg={setRandomBackground}
-            convertToWebp={convertToWebp}
-            onConvertChange={setConvertToWebp}
-          />
-          <UploadResult results={uploadResults} />
+    <div className="space-y-3 mt-4 animate-slide-up">
+      <h4 className="text-sm font-medium text-green-500">上传结果 ({results.length})</h4>
+      {results.map((result, idx) => (
+        <div 
+          key={idx} 
+          className={`rounded-xl p-3 ${result.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-sm font-medium ${result.success ? 'text-green-700' : 'text-red-700'}`}>
+                  {result.success ? '✓' : '✗'} {result.filename}
+                </span>
+                <span className="text-xs text-gray-500">{result.folder === 'wallpaper' ? '横屏' : '竖屏'}</span>
+              </div>
+              {result.success && result.url && (
+                <>
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    <code className="text-xs bg-white px-2 py-1 rounded flex-1 truncate">{result.url}</code>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleCopy(result.url, `url-${idx}`)
+                      }}
+                      className="p-1.5 hover:bg-white rounded-lg transition"
+                    >
+                      {copied === `url-${idx}` ? <i className="fas fa-check text-green-500"></i> : <i className="fas fa-copy text-gray-400"></i>}
+                    </button>
+                    <a 
+                      href={result.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="p-1.5 hover:bg-white rounded-lg transition"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <i className="fas fa-external-link-alt text-gray-400"></i>
+                    </a>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handlePreview(result.url, idx)
+                      }}
+                      className="p-1.5 hover:bg-white rounded-lg transition"
+                    >
+                      <i className="fas fa-eye text-gray-400"></i>
+                    </button>
+                  </div>
+                  <div id={`preview-${idx}`} className="mt-2"></div>
+                </>
+              )}
+              {!result.success && <p className="text-xs text-red-500 mt-1">{result.error}</p>}
+            </div>
+          </div>
         </div>
-        
-        <Footer />
-      </div>
+      ))}
     </div>
   )
 }
-
-export default App
