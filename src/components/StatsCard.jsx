@@ -1,10 +1,10 @@
 import React from 'react'
 
 const statsConfig = [
-  { id: 'total', label: '总图片数', icon: 'fa-images', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/30' },
-  { id: 'wallpaper', label: '横屏图片', icon: 'fa-arrows-alt', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/30' },
-  { id: 'cover', label: '竖屏图片', icon: 'fa-mobile-alt', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/30' },
-  { id: 'external', label: '外部图源', icon: 'fa-globe', color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/30' },
+  { id: 'total', label: '总图片数', icon: 'fa-images', color: 'text-blue-600 dark:text-blue-300', bg: 'bg-blue-50 dark:bg-blue-900/30' },
+  { id: 'wallpaper', label: '横屏图片', icon: 'fa-arrows-alt', color: 'text-green-600 dark:text-green-300', bg: 'bg-green-50 dark:bg-green-900/30' },
+  { id: 'cover', label: '竖屏图片', icon: 'fa-mobile-alt', color: 'text-purple-600 dark:text-purple-300', bg: 'bg-purple-50 dark:bg-purple-900/30' },
+  { id: 'external', label: '外部图源', icon: 'fa-globe', color: 'text-orange-600 dark:text-orange-300', bg: 'bg-orange-50 dark:bg-orange-900/30' },
 ]
 
 export default function StatsCard({ stats }) {
@@ -24,7 +24,7 @@ export default function StatsCard({ stats }) {
               <i className={`fas ${item.icon} text-lg ${item.color}`}></i>
             </div>
             <div>
-              <div className="text-xl font-bold text-gray-800 dark:text-gray-200">{item.value}</div>
+              <div className="text-xl font-bold text-gray-800 dark:text-white">{item.value}</div>
               <div className="text-xs text-gray-500 dark:text-gray-400">{item.label}</div>
             </div>
           </div>
