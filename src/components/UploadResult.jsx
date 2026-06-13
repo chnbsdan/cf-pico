@@ -23,7 +23,7 @@ export default function UploadResult({ results }) {
       img.className = 'max-w-full max-h-24 rounded-lg mt-2'
     }
     img.onerror = () => {
-      container.innerHTML = '<span class="text-xs text-red-500">加载失败</span>'
+      container.innerHTML = '<span class="text-xs text-red-500">加载失败</span>' 
     }
     img.src = url + '?t=' + Date.now()
   }
