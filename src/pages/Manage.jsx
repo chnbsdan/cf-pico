@@ -41,7 +41,7 @@ export default function Manage() {
 
   const handleLogin = (e) => {
     e.preventDefault()
-    if (password === 'your-password') {
+    if (password === 'admin123') {
       setIsAuthenticated(true)
       setPasswordError(false)
       loadImages()
@@ -337,53 +337,54 @@ export default function Manage() {
           </div>
         </div>
 
-        {/* 批量操作栏 */}
-        {selectedImages.size > 0 && (
-          <div className="bg-blue-600/30 backdrop-blur-sm rounded-lg p-3 mb-4 flex items-center justify-between flex-wrap gap-2">
-            <span className="text-white text-sm flex items-center gap-2">
-              <i className="fas fa-check-circle"></i>
-              已选择 {selectedImages.size} 张图片
-              <button
-                onClick={selectAll}
-                className="text-xs text-white/70 hover:text-white underline ml-2"
-              >
-                {selectedImages.size === paginatedImages.length ? '取消全选' : '全选'}
-              </button>
-            </span>
-            <div className="relative">
-              <button
-                onClick={() => setShowBatchMenu(!showBatchMenu)}
-                className="px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-sm flex items-center gap-2 transition"
-              >
-                <i className="fas fa-copy"></i>
-                批量复制
-                <i className="fas fa-chevron-down text-xs"></i>
-              </button>
-              {showBatchMenu && (
-                <div className="absolute right-0 mt-2 w-44 bg-gray-800 rounded-lg shadow-lg overflow-hidden z-20 border border-gray-700">
-                  <button
-                    onClick={() => handleBatchCopy('url')}
-                    className="w-full px-4 py-2 text-left text-white hover:bg-gray-700 text-sm flex items-center gap-2 transition"
-                  >
-                    <i className="fas fa-link"></i> 复制链接 (URL)
-                  </button>
-                  <button
-                    onClick={() => handleBatchCopy('markdown')}
-                    className="w-full px-4 py-2 text-left text-white hover:bg-gray-700 text-sm flex items-center gap-2 transition"
-                  >
-                    <i className="fab fa-markdown"></i> 复制 Markdown
-                  </button>
-                  <button
-                    onClick={() => handleBatchCopy('html')}
-                    className="w-full px-4 py-2 text-left text-white hover:bg-gray-700 text-sm flex items-center gap-2 transition"
-                  >
-                    <i className="fab fa-html5"></i> 复制 HTML
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+       {/* 批量操作栏 */}
+{selectedImages.size > 0 && (
+  <div className="bg-blue-600/30 backdrop-blur-sm rounded-lg p-3 mb-4 flex items-center justify-between flex-wrap gap-2">
+    <span className="text-white text-sm flex items-center gap-2">
+      <i className="fas fa-check-circle"></i>
+      已选择 {selectedImages.size} 张图片
+      <button
+        onClick={selectAll}
+        className="text-xs text-white/70 hover:text-white underline ml-2"
+      >
+        {selectedImages.size === paginatedImages.length ? '取消全选' : '全选'}
+      </button>
+    </span>
+    <div className="relative">
+      <button
+        onClick={() => setShowBatchMenu(!showBatchMenu)}
+        className="px-3 py-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-sm flex items-center gap-2 transition"
+      >
+        <i className="fas fa-copy"></i>
+        批量复制
+        <i className="fas fa-chevron-down text-xs"></i>
+      </button>
+      {showBatchMenu && (
+        // 改成向上弹出，并提高 z-index
+        <div className="absolute bottom-full right-0 mb-2 w-44 bg-gray-800 rounded-lg shadow-xl overflow-hidden z-[200] border border-gray-700">
+          <button
+            onClick={() => handleBatchCopy('url')}
+            className="w-full px-4 py-2 text-left text-white hover:bg-gray-700 text-sm flex items-center gap-2 transition"
+          >
+            <i className="fas fa-link"></i> 复制链接 (URL)
+          </button>
+          <button
+            onClick={() => handleBatchCopy('markdown')}
+            className="w-full px-4 py-2 text-left text-white hover:bg-gray-700 text-sm flex items-center gap-2 transition"
+          >
+            <i className="fab fa-markdown"></i> 复制 Markdown
+          </button>
+          <button
+            onClick={() => handleBatchCopy('html')}
+            className="w-full px-4 py-2 text-left text-white hover:bg-gray-700 text-sm flex items-center gap-2 transition"
+          >
+            <i className="fab fa-html5"></i> 复制 HTML
+          </button>
+        </div>
+      )}
+    </div>
+  </div>
+)}
 
         {/* 图片网格 */}
         {loading ? (
