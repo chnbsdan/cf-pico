@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   
   const GITHUB_TOKEN = process.env.GITHUB_TOKEN
   const GITHUB_USER = process.env.GITHUB_USER || 'chnbsdan'
-  const GITHUB_REPO = process.env.GITHUB_REPO || 'imgbed'
+  const GITHUB_REPO = process.env.GITHUB_REPO || 'pcbed'
   
   if (!GITHUB_TOKEN) return res.status(500).json({ error: 'GITHUB_TOKEN missing' })
   
@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     const boundary = getBoundary(contentType)
     if (!boundary) return res.status(400).json({ error: 'Cannot parse boundary' })
     
-    const formData = parseMultipart(buffer, boundary)  // 不需要 await
+    const formData = parseMultipart(buffer, boundary)
     const file = formData.file
     const targetFolder = formData.folder || 'wallpaper'
     
@@ -57,7 +57,8 @@ export default async function handler(req, res) {
     
     const host = req.headers.host
     const protocol = req.headers['x-forwarded-proto'] || 'https'
-    const fullUrl = `${protocol}://${host}/${targetFolder}/${filename}`
+    // 🔧 修改：使用代理 API 格式
+    const fullUrl = `${protocol}://${host}/api/image?path=${targetFolder}/${filename}`
     
     res.status(200).json({ success: true, filename, folder: targetFolder, url: fullUrl })
   } catch (error) {
@@ -83,7 +84,6 @@ function parseMultipart(buffer, boundary) {
     let nextBoundary = buffer.indexOf(boundaryBuffer, start)
     let partEnd = nextBoundary !== -1 ? nextBoundary : buffer.length
     
-    // 跳过开头的 \r\n
     if (buffer[start] === 13 && buffer[start+1] === 10) {
       start += 2
     }
@@ -94,7 +94,6 @@ function parseMultipart(buffer, boundary) {
       continue
     }
     
-    // 查找 headers 结束位置 (\r\n\r\n)
     let headerEnd = -1
     for (let i = 0; i < part.length - 3; i++) {
       if (part[i] === 13 && part[i+1] === 10 && part[i+2] === 13 && part[i+3] === 10) {
@@ -121,7 +120,6 @@ function parseMultipart(buffer, boundary) {
     
     if (headers.includes('filename')) {
       const filenameMatch = headers.match(/filename="([^"]+)"/)
-      // 移除末尾的 \r\n
       const contentEnd = content.length >= 2 && content[content.length-2] === 13 && content[content.length-1] === 10 
         ? content.length - 2 
         : content.length
@@ -133,7 +131,6 @@ function parseMultipart(buffer, boundary) {
         size: fileData.length
       }
     } else {
-      // 移除末尾的 \r\n
       const textEnd = content.length >= 2 && content[content.length-2] === 13 && content[content.length-1] === 10
         ? content.length - 2
         : content.length
