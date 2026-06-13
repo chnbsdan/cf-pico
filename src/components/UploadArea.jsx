@@ -124,6 +124,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         </div>
       </div>
 
+      {/* WebP 转换复选框 */}
       <div className="flex justify-center items-center mb-4">
         <label className="flex items-center gap-2 cursor-pointer group">
           <input
@@ -145,6 +146,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         </label>
       </div>
 
+      {/* 上传区域 */}
       <div
         className={`upload-area rounded-xl border-2 border-dashed p-8 text-center transition-all duration-200 cursor-pointer ${
           dragOver
@@ -169,6 +171,31 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             已开启 WebP 转换，上传后将自动转换格式
           </p>
         )}
+        
+        {/* 压缩质量选择 */}
+        <div className="flex justify-center items-center mt-3">
+          <div className="flex items-center gap-3 bg-white/10 backdrop-blur-sm rounded-lg px-3 py-2">
+            <span className="text-white/70 text-sm">
+              <i className="fas fa-compress-alt mr-1"></i>
+              压缩质量：
+            </span>
+            <select
+              id="compressQuality"
+              defaultValue="85"
+              onChange={(e) => {
+                const quality = parseInt(e.target.value)
+                localStorage.setItem('compressQuality', quality)
+              }}
+              className="bg-white/20 text-white text-sm rounded-lg px-3 py-1.5 border border-white/30 
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer
+                         hover:bg-white/30 transition"
+            >
+              <option value="70" className="text-gray-800">📦 高压缩 (70%) - 体积更小</option>
+              <option value="85" className="text-gray-800">⚖️ 推荐 (85%) - 平衡</option>
+              <option value="100" className="text-gray-800">✨ 最佳质量 (100%) - 文件较大</option>
+            </select>
+          </div>
+        </div>
         
         <p className="text-xs text-blue-500 mt-3">
           当前上传到: {folder === 'wallpaper' ? '📁 横屏 (wallpaper)' : '📁 竖屏 (cover)'}
