@@ -19,32 +19,33 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     img.src = url
   }
 
-  // 直接传递所有文件给父组件，并显示进度
-  const handleFiles = async (files) => {
+  // ✅ 正确：只调用一次 onUpload，传递所有文件
+  const handleFiles = (files) => {
     if (!files || files.length === 0) return
     console.log('UploadArea 收到文件数量:', files.length)
     
-    // 显示进度条
-    const fileArray = Array.from(files)
-    let completed = 0
-    setUploadProgress({ current: 0, total: fileArray.length })
+    // 显示进度条（初始状态）
+    setUploadProgress({ current: 0, total: files.length })
     
-    // 逐张上传，更新进度
-    for (let i = 0; i < fileArray.length; i++) {
-      await onUpload([fileArray[i]], folder)
-      completed++
-      setUploadProgress({ current: completed, total: fileArray.length })
-    }
-    
-    // 2秒后隐藏进度条
-    setTimeout(() => setUploadProgress(null), 2000)
+    // 只调用一次，传递所有文件
+    onUpload(files, folder)
   }
+
+  // 更新进度的函数（由 App.jsx 回调）
+  const updateProgress = (current, total) => {
+    setUploadProgress({ current, total })
+    if (current === total) {
+      setTimeout(() => setUploadProgress(null), 2000)
+    }
+  }
+
+  // 暴露更新进度的方法给父组件（可选）
+  React.useImperativeHandle(useRef(), () => ({ updateProgress }))
 
   const handleFileSelect = (e) => {
     const files = e.target.files
     console.log('选择文件数量:', files.length)
     handleFiles(files)
-    // 清空 input 的值，以便再次选择相同文件时能触发 onChange
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
