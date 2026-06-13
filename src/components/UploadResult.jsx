@@ -1,8 +1,17 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { copyToClipboard } from '../lib/api'
 
 export default function UploadResult({ results }) {
   const [copied, setCopied] = useState(null)
+
+  // 添加调试日志
+  useEffect(() => {
+    console.log('=== UploadResult 组件渲染 ===')
+    console.log('接收到的 results 长度:', results.length)
+    if (results.length > 0) {
+      console.log('结果详情:', results.map(r => ({ filename: r.filename, success: r.success })))
+    }
+  }, [results])
 
   const handleCopy = (url, id) => {
     copyToClipboard(url)
@@ -35,7 +44,7 @@ export default function UploadResult({ results }) {
       <h4 className="text-sm font-medium text-green-500">上传结果 ({results.length})</h4>
       {results.map((result, idx) => (
         <div 
-          key={idx} 
+          key={`${idx}-${result.filename}`}
           className={`rounded-xl p-3 ${result.success ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800'}`}
           onClick={(e) => e.stopPropagation()}
         >
