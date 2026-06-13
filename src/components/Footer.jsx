@@ -55,6 +55,11 @@ export default function Footer() {
           <i className="fas fa-cog"></i>
           管理登录
         </a>
+        <span className="text-white/30">|</span>
+  <a href="/docs" className="text-white/60 hover:text-white transition text-xs flex items-center gap-1">
+    <i className="fas fa-book"></i>
+    API 文档
+  </a>
       </p>
       
       <p className="mt-2 text-white/60 dark:text-white/40 text-xs flex items-center justify-center gap-1 flex-wrap">
