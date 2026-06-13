@@ -130,14 +130,13 @@ function App() {
     return new Blob([u8arr], { type: 'image/jpeg' })
   }
 
-  // 批量上传 - 修复版
+  // 批量上传 - 接收所有文件，循环处理，累积结果
   const handleUpload = async (files, folder) => {
     console.log('===== App.jsx handleUpload =====')
     console.log('收到文件数量:', files.length)
-    console.log('文件列表:', Array.from(files).map(f => f.name))
     
     setIsUploading(true)
-    setUploadResults([])
+    setUploadResults([])  // 只在开始时清空一次
     
     const fileArray = Array.from(files)
     const allResults = []
@@ -175,8 +174,7 @@ function App() {
           const data = await uploadImage(file, folder)
           if (data.success) {
             allResults.push({ success: true, filename: data.filename, url: data.url, folder })
-            console.log(`✅ 上传成功: ${data.filename}`)
-            console.log(`当前已完成 ${allResults.length}/${fileArray.length}`)
+            console.log(`✅ 上传成功: ${data.filename} (${i+1}/${fileArray.length})`)
             setUploadResults([...allResults])
             uploaded = true
           } else {
