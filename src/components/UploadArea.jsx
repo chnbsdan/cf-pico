@@ -198,7 +198,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         </div>
         
         <p className="text-xs text-blue-500 mt-3">
-          当前上传到: {folder === 'wallpaper' ? '📁 横屏 (wallpaper)' : '📁 竖屏 (cover)'}
+        <i className="fas fa-folder-open mr-1"></i>
+             当前上传到: {folder === 'wallpaper' ? '横屏 (wallpaper)' : '竖屏 (cover)'}
         </p>
       </div>
 
@@ -210,6 +211,16 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         className="hidden"
         onChange={handleFileSelect}
       />
+
+      {/* 只保留上传中转圈提示，没有进度条 */}
+      {isLoading && (
+        <div className="mt-3 text-center">
+          <div className="inline-flex items-center gap-2 text-sm text-orange-600">
+            <div className="w-3 h-3 border-2 border-orange-600 border-t-transparent rounded-full animate-spin" />
+            上传中，请稍候...
+          </div>
+        </div>
+      )}
     </div>
   )
 }
