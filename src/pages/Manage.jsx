@@ -1,6 +1,7 @@
 // src/pages/Manage.jsx - 图片管理页面（完整版，含批量复制）
 import React, { useState, useEffect } from 'react'
 import { fetchImageList, copyToClipboard, batchCopyLinks } from '../lib/api'
+import ThemeToggle from '../components/ThemeToggle'
 
 export default function Manage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -211,6 +212,8 @@ export default function Manage() {
       backgroundImage: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
       backgroundAttachment: 'fixed'
     }}>
+     <ThemeToggle /> 
+      
       {/* 移动端菜单按钮 */}
       <button
         onClick={() => setMobileMenuOpen(true)}
