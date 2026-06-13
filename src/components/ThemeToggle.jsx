@@ -1,3 +1,4 @@
+// src/components/ThemeToggle.jsx - 主题切换按钮组件（优化版）
 import React, { useState, useEffect } from 'react'
 
 export default function ThemeToggle() {
@@ -31,13 +32,13 @@ export default function ThemeToggle() {
   return (
     <button
       onClick={toggleTheme}
-      className="fixed bottom-4 right-4 z-50 bg-white/20 backdrop-blur-sm hover:bg-white/30 transition p-3 rounded-full shadow-lg"
+      className="fixed bottom-4 right-4 z-50 bg-white/30 dark:bg-gray-800/50 backdrop-blur-sm hover:bg-white/50 dark:hover:bg-gray-700/50 transition p-2 rounded-full shadow-md"
       title={isDark ? '切换到亮色模式' : '切换到暗色模式'}
     >
       {isDark ? (
-        <i className="fas fa-sun text-yellow-400 text-xl"></i>
+        <i className="fas fa-sun text-yellow-500 text-base"></i>
       ) : (
-        <i className="fas fa-moon text-gray-700 text-xl"></i>
+        <i className="fas fa-moon text-gray-800 text-base"></i>
       )}
     </button>
   )
