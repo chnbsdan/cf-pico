@@ -240,13 +240,14 @@ export default function Manage() {
                 密码错误，请重试
               </p>
             )}
+
             <button
   type="submit"
-  className="w-full py-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-medium transition flex items-center justify-center gap-2"
+  className="w-full py-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-medium transition"
 >
-  <i className="fas fa-sign-in-alt"></i>
   验证
 </button>
+            
           </form>
           
           <div className="text-center mt-6">
