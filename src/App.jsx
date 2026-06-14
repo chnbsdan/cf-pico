@@ -5,7 +5,7 @@ import ApiSection from './components/ApiSection'
 import UploadArea from './components/UploadArea'
 import UploadResult from './components/UploadResult'
 import Footer from './components/Footer'
-import { fetchStats, uploadImage } from './lib/api'
+import { fetchStats, uploadImage, addHistoryRecord } from './lib/api'
 import Manage from './pages/Manage'
 import ApiDocs from './pages/ApiDocs'
 import ThemeToggle from './components/ThemeToggle'
@@ -173,8 +173,16 @@ function App() {
           const data = await uploadImage(file, folder)
           if (data.success) {
             allResults.push({ success: true, filename: data.filename, url: data.url, folder })
-            console.log(`✅ 上传成功: ${data.filename}`)
             setUploadResults([...allResults])
+            
+            // 保存到历史记录
+            try {
+              await addHistoryRecord(data.filename, data.url, folder)
+              console.log(`📝 已保存历史记录: ${data.filename}`)
+            } catch (err) {
+              console.error('保存历史记录失败:', err)
+            }
+            
             uploaded = true
           } else {
             throw new Error(data.error || '上传失败')
@@ -204,27 +212,22 @@ function App() {
     <div className="min-h-screen py-6 px-4 relative">
       {/* 右上角导航栏 */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-       {/* 管理后台入口 */}
-<a 
-  href="/manage" 
-  className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-1200 dark:text-white text-sm flex items-center gap-2"
-  title="管理后台"
->
-  <i className="fas fa-cog"></i>
-  <span className="hidden sm:inline">管理</span>
-</a>
-
-{/* API 文档入口 */}
-<a 
-  href="/docs" 
-  className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-1200 dark:text-white text-sm flex items-center gap-2"
-  title="API 文档"
->
-  <i className="fas fa-book"></i>
-  <span className="hidden sm:inline">文档</span>
-</a>
-        
-        {/* 主题切换按钮 */}
+        <a 
+          href="/manage" 
+          className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-700 dark:text-white text-sm flex items-center gap-2"
+          title="管理后台"
+        >
+          <i className="fas fa-cog"></i>
+          <span className="hidden sm:inline">管理</span>
+        </a>
+        <a 
+          href="/docs" 
+          className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-700 dark:text-white text-sm flex items-center gap-2"
+          title="API 文档"
+        >
+          <i className="fas fa-book"></i>
+          <span className="hidden sm:inline">文档</span>
+        </a>
         <ThemeToggle />
       </div>
       
