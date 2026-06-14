@@ -204,25 +204,25 @@ function App() {
     <div className="min-h-screen py-6 px-4 relative">
       {/* 右上角导航栏 */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-        {/* 管理后台入口 */}
-        <a 
-          href="/manage" 
-          className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-white text-sm flex items-center gap-2"
-          title="管理后台"
-        >
-          <i className="fas fa-cog"></i>
-          <span className="hidden sm:inline">管理</span>
-        </a>
-        
-        {/* API 文档入口 */}
-        <a 
-          href="/docs" 
-          className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-white text-sm flex items-center gap-2"
-          title="API 文档"
-        >
-          <i className="fas fa-book"></i>
-          <span className="hidden sm:inline">文档</span>
-        </a>
+       {/* 管理后台入口 */}
+<a 
+  href="/manage" 
+  className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-800 dark:text-white text-sm flex items-center gap-2"
+  title="管理后台"
+>
+  <i className="fas fa-cog"></i>
+  <span className="hidden sm:inline">管理</span>
+</a>
+
+{/* API 文档入口 */}
+<a 
+  href="/docs" 
+  className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-800 dark:text-white text-sm flex items-center gap-2"
+  title="API 文档"
+>
+  <i className="fas fa-book"></i>
+  <span className="hidden sm:inline">文档</span>
+</a>
         
         {/* 主题切换按钮 */}
         <ThemeToggle />
