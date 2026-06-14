@@ -285,9 +285,9 @@ export default function Manage() {
       )}
       
       <div className={`
-        fixed top-0 left-0 h-full z-50 w-72 bg-black/90 backdrop-blur-md shadow-xl transition-transform duration-300 ease-in-out
+        fixed top-0 left-0 h-full z-50 w-56 bg-black/90 backdrop-blur-md shadow-xl transition-transform duration-300 ease-in-out
         ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-        lg:translate-x-0 lg:left-4 lg:top-1/2 lg:-translate-y-1/2 lg:w-64 lg:h-auto lg:rounded-xl lg:bg-white/10 lg:backdrop-blur-md lg:border lg:border-white/20
+        lg:translate-x-0 lg:left-4 lg:top-1/2 lg:-translate-y-1/2 lg:w-52 lg:h-auto lg:rounded-xl lg:bg-white/10 lg:backdrop-blur-md lg:border lg:border-white/20
       `}>
         <div className="p-4 border-b border-white/20 flex justify-between items-center lg:block">
           <div className="flex items-center gap-2 text-white font-medium">
