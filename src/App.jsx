@@ -207,7 +207,7 @@ function App() {
        {/* 管理后台入口 */}
 <a 
   href="/manage" 
-  className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-800 dark:text-white text-sm flex items-center gap-2"
+  className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-1200 dark:text-white text-sm flex items-center gap-2"
   title="管理后台"
 >
   <i className="fas fa-cog"></i>
@@ -217,7 +217,7 @@ function App() {
 {/* API 文档入口 */}
 <a 
   href="/docs" 
-  className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-800 dark:text-white text-sm flex items-center gap-2"
+  className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-1200 dark:text-white text-sm flex items-center gap-2"
   title="API 文档"
 >
   <i className="fas fa-book"></i>
