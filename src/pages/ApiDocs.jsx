@@ -108,18 +108,16 @@ export default function ApiDocs() {
   ]
 
   return (
-    <div className="min-h-screen py-6 px-4 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+    <div className="min-h-screen py-6 px-4 bg-gray-50 dark:bg-gray-950 transition-colors duration-300">
       {/* 右上角导航栏 */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
         <a 
           href="/" 
-          className="bg-white dark:bg-gray-800 shadow-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition px-3 py-2 rounded-lg text-gray-700 dark:text-white text-sm flex items-center gap-2 border border-gray-200 dark:border-gray-700"
-          title="返回首页"
+          className="bg-white dark:bg-gray-800 shadow-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition px-3 py-2 rounded-lg text-gray-700 dark:text-white text-sm"
         >
-          <i className="fas fa-arrow-left"></i>
-          <span className="hidden sm:inline">返回</span>
+          返回
         </a>
-        <div className="bg-white dark:bg-gray-800 shadow-sm rounded-lg border border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 shadow-sm rounded-lg">
           <ThemeToggle />
         </div>
       </div>
@@ -128,10 +126,10 @@ export default function ApiDocs() {
         {/* 头部 */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-2">
-            <i className="fas fa-book text-3xl text-gray-600 dark:text-white/70"></i>
+            <i className="fas fa-book text-3xl text-gray-600 dark:text-white/80"></i>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-white">API 接口文档</h1>
           </div>
-          <p className="text-gray-500 dark:text-white/60 text-sm">所有接口均支持 GET 请求（上传除外）</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">所有接口均支持 GET 请求（上传除外）</p>
         </div>
 
         {/* API 列表 */}
@@ -139,8 +137,8 @@ export default function ApiDocs() {
           {apis.map((api) => {
             const fullUrl = `${baseUrl}${api.path}${api.id === 'image' ? '?path=wallpaper/example.jpg' : ''}`
             return (
-              <div key={api.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
-                <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700">
+              <div key={api.id} className="bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
+                <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className={`px-2 py-1 rounded text-xs font-mono text-white ${
                       api.method === 'GET' ? 'bg-green-500' : 'bg-orange-500'
@@ -154,14 +152,14 @@ export default function ApiDocs() {
                       href={fullUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                      className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
                       title="打开链接"
                     >
                       <i className="fas fa-external-link-alt"></i>
                     </a>
                     <button
                       onClick={() => handleCopy(fullUrl, api.id)}
-                      className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+                      className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
                       title="复制接口地址"
                     >
                       {copiedApi === api.id ? <i className="fas fa-check text-green-500"></i> : <i className="fas fa-copy"></i>}
@@ -170,11 +168,13 @@ export default function ApiDocs() {
                 </div>
                 
                 <div className="p-4 space-y-3">
-                  <p className="text-gray-600 dark:text-gray-400 text-sm">{api.description}</p>
+                  <p className="text-gray-700 dark:text-gray-300 text-sm">{api.description}</p>
                   
                   <div>
-                    <p className="text-gray-500 dark:text-gray-500 text-xs mb-1">📝 示例</p>
-                    <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3 overflow-x-auto">
+                    <p className="text-gray-500 dark:text-gray-400 text-xs mb-1 flex items-center gap-1">
+                    <i className="fas fa-code text-xs"></i> 示例
+                    </p>
+                    <div className="bg-white dark:bg-gray-900 rounded-lg p-3 overflow-x-auto">
                       <code className="text-gray-700 dark:text-gray-300 text-xs font-mono break-all">{api.example}</code>
                       <button
                         onClick={() => handleCopy(api.example, `example-${api.id}`)}
@@ -187,8 +187,10 @@ export default function ApiDocs() {
                   </div>
                   
                   <div>
-                    <p className="text-gray-500 dark:text-gray-500 text-xs mb-1">📤 返回示例</p>
-                    <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-3 overflow-x-auto">
+                     <p className="text-gray-500 dark:text-gray-400 text-xs mb-1 flex items-center gap-1">
+                     <i className="fas fa-arrow-right text-xs"></i> 返回示例
+                     </p>
+                    <div className="bg-white dark:bg-gray-900 rounded-lg p-3 overflow-x-auto">
                       <pre className="text-gray-700 dark:text-gray-300 text-xs font-mono whitespace-pre-wrap break-all">{api.response}</pre>
                     </div>
                   </div>
