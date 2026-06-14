@@ -537,64 +537,64 @@ export default function Manage() {
 
         {/* 图片网格或历史记录 */}
         {activeTab === 'history' ? (
-          // 历史记录列表
-          historyLoading ? (
-            <div className="flex justify-center items-center py-20">
-              <i className="fas fa-spinner fa-pulse text-3xl text-white/50"></i>
+  // 历史记录列表 - 一行两条
+  historyLoading ? (
+    <div className="flex justify-center items-center py-20">
+      <i className="fas fa-spinner fa-pulse text-3xl text-white/50"></i>
+    </div>
+  ) : historyList.length === 0 ? (
+    <div className="text-center py-20 bg-white/5 rounded-xl">
+      <i className="fas fa-inbox text-5xl text-white/30 mb-3"></i>
+      <p className="text-white/50">暂无上传记录</p>
+    </div>
+  ) : (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {historyList.map((record) => (
+        <div key={record.id} className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-medium text-white truncate">{record.filename}</span>
+                <span className="text-xs px-2 py-0.5 rounded bg-white/20 text-white/70">
+                  {record.folder === 'wallpaper' ? '横屏' : '竖屏'}
+                </span>
+              </div>
+              <div className="text-xs text-white/40 mt-1">{formatTime(record.time)}</div>
+              <code className="text-xs text-white/50 mt-1 block truncate">{record.url}</code>
             </div>
-          ) : historyList.length === 0 ? (
-            <div className="text-center py-20 bg-white/5 rounded-xl">
-              <i className="fas fa-inbox text-5xl text-white/30 mb-3"></i>
-              <p className="text-white/50">暂无上传记录</p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleCopy(record.url, record.id)}
+                className="p-2 rounded-lg hover:bg-white/10 transition"
+                title="复制链接"
+              >
+                {copiedId === record.id ? (
+                  <i className="fas fa-check text-green-400"></i>
+                ) : (
+                  <i className="fas fa-copy text-white/60"></i>
+                )}
+              </button>
+              <a
+                href={record.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-lg hover:bg-white/10 transition"
+                title="打开图片"
+              >
+                <i className="fas fa-external-link-alt text-white/60"></i>
+              </a>
+              <button
+                onClick={() => handleDeleteHistory(record.id)}
+                className="p-2 rounded-lg hover:bg-red-500/20 transition"
+                title="删除记录"
+              >
+                <i className="fas fa-trash-alt text-red-400"></i>
+              </button>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {historyList.map((record) => (
-                <div key={record.id} className="bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/20">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-white truncate">{record.filename}</span>
-                        <span className="text-xs px-2 py-0.5 rounded bg-white/20 text-white/70">
-                          {record.folder === 'wallpaper' ? '横屏' : '竖屏'}
-                        </span>
-                      </div>
-                      <div className="text-xs text-white/40 mt-1">{formatTime(record.time)}</div>
-                      <code className="text-xs text-white/50 mt-1 block truncate">{record.url}</code>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleCopy(record.url, record.id)}
-                        className="p-2 rounded-lg hover:bg-white/10 transition"
-                        title="复制链接"
-                      >
-                        {copiedId === record.id ? (
-                          <i className="fas fa-check text-green-400"></i>
-                        ) : (
-                          <i className="fas fa-copy text-white/60"></i>
-                        )}
-                      </button>
-                      <a
-                        href={record.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 rounded-lg hover:bg-white/10 transition"
-                        title="打开图片"
-                      >
-                        <i className="fas fa-external-link-alt text-white/60"></i>
-                      </a>
-                      <button
-                        onClick={() => handleDeleteHistory(record.id)}
-                        className="p-2 rounded-lg hover:bg-red-500/20 transition"
-                        title="删除记录"
-                      >
-                        <i className="fas fa-trash-alt text-red-400"></i>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          </div>
+        </div>
+      ))}
+    </div>
           )
         ) : loading ? (
           <div className="flex justify-center items-center py-20 bg-white/5 rounded-xl">
