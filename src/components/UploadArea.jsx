@@ -6,12 +6,13 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const [bgRefresh, setBgRefresh] = useState(false)
   const fileInputRef = useRef(null)
 
-  // 文件夹显示名称（与实际存储文件夹名分开）
-  // 实际存储名由后端环境变量决定，前端仍用 wallpaper/cover 作为标识
-  const folderDisplayNames = {
-    wallpaper: '横屏',
-    cover: '竖屏'
-  }
+  // 文件夹配置：key 是实际存储名，label 是显示名称，icon 是图标
+  const folderOptions = [
+    { key: 'wallpaper', label: '横屏图片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
+    { key: 'sh', label: '横屏图片 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'sd', label: '竖屏图片 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
+  ]
 
   const refreshBackground = () => {
     setBgRefresh(true)
@@ -80,6 +81,9 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     return () => window.removeEventListener('paste', handlePaste)
   }, [folder])
 
+  // 获取当前选中的文件夹配置
+  const currentFolder = folderOptions.find(opt => opt.key === folder) || folderOptions[0]
+
   return (
     <div className="mb-4">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -87,7 +91,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           <i className="fas fa-upload text-orange-600 text-sm"></i>
           上传图片
         </h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* 换背景按钮 */}
           <button
             onClick={refreshBackground}
             className={`text-xs transition flex items-center gap-1 px-2 py-1 rounded-lg ${
@@ -100,28 +105,22 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             <i className="fas fa-sync-alt text-xs"></i>
             换背景
           </button>
-          <button
-            onClick={() => setFolder('wallpaper')}
-            className={`px-3 py-1 rounded-lg text-xs flex items-center gap-1 transition-all ${
-              folder === 'wallpaper'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700'
-            }`}
-          >
-            <i className="fas fa-arrows-alt text-xs"></i>
-            {folderDisplayNames.wallpaper}
-          </button>
-          <button
-            onClick={() => setFolder('cover')}
-            className={`px-3 py-1 rounded-lg text-xs flex items-center gap-1 transition-all ${
-              folder === 'cover'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700'
-            }`}
-          >
-            <i className="fas fa-mobile-alt text-xs"></i>
-            {folderDisplayNames.cover}
-          </button>
+          
+          {/* 动态渲染四个文件夹按钮 */}
+          {folderOptions.map((opt) => (
+            <button
+              key={opt.key}
+              onClick={() => setFolder(opt.key)}
+              className={`px-3 py-1 rounded-lg text-xs flex items-center gap-1 transition-all ${
+                folder === opt.key
+                  ? `bg-${opt.color}-600 text-white shadow-md`
+                  : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700'
+              }`}
+            >
+              <i className={`fas ${opt.icon} text-xs`}></i>
+              {opt.label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -206,7 +205,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         
         <p className="text-xs text-blue-500 mt-3">
           <i className="fas fa-folder-open mr-1"></i>
-          当前上传到: {folder === 'wallpaper' ? folderDisplayNames.wallpaper : folderDisplayNames.cover}
+          当前上传到: {currentFolder.label}
         </p>
       </div>
 
