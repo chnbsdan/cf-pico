@@ -26,7 +26,6 @@ export default function Manage() {
   const [historyList, setHistoryList] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
 
-  // 检查本地存储的登录状态
   useEffect(() => {
     const savedAuth = localStorage.getItem('manage_auth')
     if (savedAuth === 'true') {
@@ -149,7 +148,9 @@ export default function Manage() {
         })
         const result = await response.json()
         result.success ? successCount++ : failCount++
-      } catch { failCount++ }
+      } catch {
+        failCount++
+      }
     }
     alert(`✅ 删除完成\n成功: ${successCount} 张\n失败: ${failCount} 张`)
     setSelectedImages(new Set())
@@ -168,7 +169,11 @@ export default function Manage() {
   const toggleSelect = (imgName, e) => {
     if (e) e.stopPropagation()
     const newSelected = new Set(selectedImages)
-    newSelected.has(imgName) ? newSelected.delete(imgName) : newSelected.add(imgName)
+    if (newSelected.has(imgName)) {
+      newSelected.delete(imgName)
+    } else {
+      newSelected.add(imgName)
+    }
     setSelectedImages(newSelected)
   }
 
@@ -228,13 +233,12 @@ export default function Manage() {
     )
   }
 
-  // ========== 已登录界面（美化暗色模式） ==========
+  // 已登录界面
   return (
-    // 🔧 美化1：页面背景改为渐变，亮色浅灰，暗色深灰
-    <div className="min-h-screen py-6 px-4 bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950 transition-colors duration-300">
+    <div className="min-h-screen py-6 px-4 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
       <ThemeToggle />
       
-      {/* 移动端菜单按钮 - 美化 */}
+      {/* 移动端菜单按钮 */}
       <button
         onClick={() => setMobileMenuOpen(true)}
         className="fixed top-4 left-4 z-50 lg:hidden bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:bg-white dark:hover:bg-gray-700 transition p-2.5 rounded-lg text-gray-700 dark:text-white shadow-md"
@@ -242,7 +246,7 @@ export default function Manage() {
         <i className="fas fa-bars text-lg"></i>
       </button>
 
-      {/* 左侧悬浮目录 - 美化：白色/深灰卡片，圆角更大 */}
+      {/* 左侧悬浮目录 */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 bg-black/50 dark:bg-black/70 z-40 lg:hidden" onClick={() => setMobileMenuOpen(false)} />
       )}
@@ -258,12 +262,7 @@ export default function Manage() {
               <i className="fas fa-folder-tree text-blue-500"></i>
               <span>图片库</span>
             </div>
-            {/* 刷新按钮 - 美化 */}
-            <button
-              onClick={refreshCurrent}
-              className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-              title="刷新"
-            >
+            <button onClick={refreshCurrent} className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" title="刷新">
               <i className="fas fa-sync-alt"></i>
             </button>
           </div>
@@ -304,7 +303,7 @@ export default function Manage() {
 
       {/* 右侧内容区 */}
       <div className="lg:pl-[250px]">
-        {/* 🔧 美化2：标题栏改为毛玻璃效果，圆角更大 */}
+        {/* 标题栏 */}
         <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-gray-200 dark:border-gray-700 p-4 mb-6 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
@@ -325,7 +324,7 @@ export default function Manage() {
           </div>
         </div>
 
-        {/* 🔧 美化3：搜索框圆角更大，焦点效果更好 */}
+        {/* 搜索框 */}
         {activeTab !== 'history' && (
           <div className="mb-4">
             <div className="relative">
@@ -336,7 +335,7 @@ export default function Manage() {
           </div>
         )}
 
-        {/* 🔧 美化4：批量操作栏改为更柔和的配色 */}
+        {/* 批量操作栏 */}
         {activeTab !== 'history' && selectedImages.size > 0 && (
           <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-blue-200 dark:border-blue-800">
             <span className="text-blue-700 dark:text-blue-300 text-sm flex items-center gap-2"><i className="fas fa-check-circle"></i>已选择 {selectedImages.size} 张图片<button onClick={selectAll} className="text-xs text-blue-600 dark:text-blue-400 hover:underline ml-2">{selectedImages.size === paginatedImages.length ? '取消全选' : '全选'}</button></span>
@@ -358,9 +357,12 @@ export default function Manage() {
 
         {/* 图片网格或历史记录 */}
         {activeTab === 'history' ? (
-          historyLoading ? <div className="flex justify-center items-center py-20"><i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i></div>
-          : historyList.length === 0 ? <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 rounded-xl"><i className="fas fa-inbox text-5xl text-gray-400 mb-3"></i><p className="text-gray-500">暂无上传记录</p></div>
-          : <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          historyLoading ? (
+            <div className="flex justify-center items-center py-20"><i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i></div>
+          ) : historyList.length === 0 ? (
+            <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 rounded-xl"><i className="fas fa-inbox text-5xl text-gray-400 mb-3"></i><p className="text-gray-500">暂无上传记录</p></div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {historyList.map((record) => (
                 <div key={record.id} className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm">
                   <div className="flex items-center justify-between flex-wrap gap-2">
@@ -370,17 +372,25 @@ export default function Manage() {
                       <code className="text-xs text-gray-500 dark:text-gray-400 mt-1 block truncate">{record.url}</code>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => handleCopy(record.url, record.id)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition" title="复制链接">{copiedId === record.id ? <i className="fas fa-check text-green-500"></i> : <i className="fas fa-copy text-gray-500"></i>}</button>
-                      <a href={record.url} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition" title="打开图片"><i className="fas fa-external-link-alt text-gray-500"></i></a>
-                      <button onClick={() => handleDeleteHistory(record.id)} className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition" title="删除记录"><i className="fas fa-trash-alt text-red-400"></i></button>
+                      <button onClick={() => handleCopy(record.url, record.id)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"><i className={copiedId === record.id ? "fas fa-check text-green-500" : "fas fa-copy text-gray-500"}></i></button>
+                      <a href={record.url} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"><i className="fas fa-external-link-alt text-gray-500"></i></a>
+                      <button onClick={() => handleDeleteHistory(record.id)} className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition"><i className="fas fa-trash-alt text-red-400"></i></button>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-        ) : loading ? <div className="flex justify-center items-center py-20"><i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i></div>
-        : paginatedImages.length === 0 ? <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 rounded-xl"><i className="fas fa-folder-open text-5xl text-gray-400 mb-3"></i><p className="text-gray-500">{searchKeyword ? `没有找到 "${searchKeyword}" 相关的图片` : '暂无图片'}</p>{searchKeyword && <button onClick={() => setSearchKeyword('')} className="inline-block mt-4 text-blue-500 hover:text-blue-600"><i className="fas fa-undo mr-1"></i>清除搜索</button>}</div>
-        : <>
+          )
+        ) : loading ? (
+          <div className="flex justify-center items-center py-20"><i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i></div>
+        ) : paginatedImages.length === 0 ? (
+          <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 rounded-xl">
+            <i className="fas fa-folder-open text-5xl text-gray-400 mb-3"></i>
+            <p className="text-gray-500">{searchKeyword ? `没有找到 "${searchKeyword}" 相关的图片` : '暂无图片'}</p>
+            {searchKeyword && <button onClick={() => setSearchKeyword('')} className="inline-block mt-4 text-blue-500 hover:text-blue-600"><i className="fas fa-undo mr-1"></i>清除搜索</button>}
+          </div>
+        ) : (
+          <>
             <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 sm:gap-3">
               {paginatedImages.map((img, idx) => {
                 const proxyUrl = getProxyUrl(img)
@@ -397,8 +407,8 @@ export default function Manage() {
                       <div className="flex items-center justify-between mt-1">
                         <span className="text-[8px] text-gray-400">{img.source === 'external' ? '🌐' : '📦'}</span>
                         <div className="flex gap-0.5">
-                          <button onClick={(e) => handleCopy(proxyUrl, img.name, e)} className="text-gray-400 hover:text-green-500 transition text-[9px] px-1 py-0.5 rounded" title="复制链接">{copiedId === img.name ? <i className="fas fa-check"></i> : <i className="fas fa-copy"></i>}</button>
-                          <button onClick={(e) => handleDelete(img, activeTab, e)} disabled={deletingId === img.name} className="text-gray-400 hover:text-red-500 transition text-[9px] px-1 py-0.5 rounded disabled:opacity-30" title="删除">{deletingId === img.name ? <i className="fas fa-spinner fa-pulse"></i> : <i className="fas fa-trash-alt"></i>}</button>
+                          <button onClick={(e) => handleCopy(proxyUrl, img.name, e)} className="text-gray-400 hover:text-green-500 transition text-[9px] px-1 py-0.5 rounded"><i className={copiedId === img.name ? "fas fa-check" : "fas fa-copy"}></i></button>
+                          <button onClick={(e) => handleDelete(img, activeTab, e)} disabled={deletingId === img.name} className="text-gray-400 hover:text-red-500 transition text-[9px] px-1 py-0.5 rounded disabled:opacity-30"><i className={deletingId === img.name ? "fas fa-spinner fa-pulse" : "fas fa-trash-alt"}></i></button>
                         </div>
                       </div>
                     </div>
@@ -429,7 +439,7 @@ export default function Manage() {
               <p className="text-white text-sm truncate"><i className="fas fa-image mr-2"></i>{previewImage.name}</p>
               <div className="flex justify-end gap-3 mt-2">
                 <a href={getProxyUrl(previewImage)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-white/70 hover:text-blue-400 text-sm flex items-center gap-1"><i className="fas fa-external-link-alt"></i>打开</a>
-                <button onClick={(e) => { e.stopPropagation(); const proxyUrl = getProxyUrl(previewImage); copyToClipboard(proxyUrl); setCopiedId(previewImage.name); setTimeout(() => setCopiedId(null), 2000) }} className="text-white/70 hover:text-green-400 text-sm flex items-center gap-1"><i className="fas fa-copy"></i>复制链接</button>
+                <button onClick={(e) => { e.stopPropagation(); copyToClipboard(getProxyUrl(previewImage)); setCopiedId(previewImage.name); setTimeout(() => setCopiedId(null), 2000) }} className="text-white/70 hover:text-green-400 text-sm flex items-center gap-1"><i className="fas fa-copy"></i>复制链接</button>
                 <button onClick={(e) => { e.stopPropagation(); handleDelete(previewImage, activeTab, e); setPreviewImage(null) }} className="text-white/70 hover:text-red-400 text-sm flex items-center gap-1"><i className="fas fa-trash-alt"></i>删除</button>
               </div>
             </div>
