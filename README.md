@@ -1,4 +1,4 @@
-# PCBed v2.0 - 现代化个人图床
+# PCBed v2.0 - 现代化个人图床服务
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black)](https://vercel.com)
@@ -15,10 +15,11 @@
 
 ### 核心功能
 - 🖼️ **随机图片 API** - `/api/random` 接口，每次返回随机图片（支持 `?format=json` 参数）
-- 📂 **分类管理** - 支持横屏（wallpaper）和竖屏（cover）两种分类
+- 📂 **分类管理** - 支持横屏（wallpaper）和竖屏（cover）两种分类，文件夹名可自定义
 - 📤 **批量上传** - 多文件选择、拖拽上传、粘贴上传（Ctrl+V），自动压缩大图
 - 🔒 **私有仓库** - 图片存储在 GitHub 私有仓库中，安全可控
 - 🌐 **代理访问** - 通过 `/api/image?path=` 统一代理访问图片
+- 🚀 **大文件直传** - 绕过 Vercel 4.5MB 限制，最大支持 25MB
 
 ### 管理后台功能
 - 🔐 **密码保护** - 管理页面需要密码登录，安全可控
@@ -35,7 +36,7 @@
 ### 图片格式转换
 - 🔄 **WebP 转换** - 上传时可选择自动转换为 WebP 格式
 - 📷 **原格式保留** - 不转换时保持原格式上传
-- ⚡ **自动压缩** - 超过 3MB 的图片自动压缩（压缩质量可选 70%/85%/100%）
+- ⚡ **自动压缩** - 超过 5MB 的图片自动压缩（压缩质量可选 70%/85%/100%）
 
 ### 界面特性
 - 🎲 **随机背景** - 每次刷新页面背景随机变化（仅横屏图片）
@@ -63,7 +64,7 @@ pcbed/
 │   ├── cover.js               # 竖屏图片接口
 │   ├── list.js                # 图片列表接口
 │   ├── stats.js               # 统计信息接口
-│   └── upload.js              # 图片上传接口
+│   └── upload.js              # 图片上传接口（支持直传）
 ├── src/
 │   ├── components/            # UI 组件
 │   │   ├── Header.jsx
@@ -83,6 +84,7 @@ pcbed/
 │   └── index.css
 ├── public/
 ├── index.html
+├── upload_history.json        # 上传图片后系统自动生成
 ├── package.json
 ├── vercel.json
 └── README.md
@@ -165,11 +167,13 @@ https://pcbed.vercel.app/api/image?path=wallpaper/20260612_image.jpg
 
 在 Vercel 项目设置中添加以下环境变量：
 
-| 变量名 | 说明 | 必填 |
-|--------|------|------|
-| `GITHUB_TOKEN` | GitHub Personal Access Token（需 `repo` 权限） | ✅ 是 |
-| `GITHUB_USER` | GitHub 用户名 | 可选（默认 chnbsdan） |
-| `GITHUB_REPO` | 存储图片的仓库名 | 可选（默认 pcbed） |
+| 变量名 | 必填 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `GITHUB_TOKEN` | ✅ 是 | 无 | GitHub Personal Access Token（需 `repo` 权限） |
+| `GITHUB_USER` | ❌ 否 | `chnbsdan` | GitHub 用户名 |
+| `GITHUB_REPO` | ❌ 否 | `pcbed` | 存储图片的仓库名 |
+| `FOLDER_WALLPAPER` | ❌ 否 | `wallpaper` | 横屏图片存储文件夹名 |
+| `FOLDER_COVER` | ❌ 否 | `cover` | 竖屏图片存储文件夹名 |
 
 ### 获取 GitHub Token
 
@@ -177,6 +181,17 @@ https://pcbed.vercel.app/api/image?path=wallpaper/20260612_image.jpg
 2. 点击 **Generate new token (classic)**
 3. 勾选 `repo` 权限（完整控制私有仓库）
 4. 生成并复制 Token（以 `ghp_` 开头）
+
+### 自定义文件夹名示例
+
+如果你想使用自己的文件夹名，在 Vercel 环境变量中设置：
+
+```bash
+FOLDER_WALLPAPER=landscape   # 横屏图片存储到 landscape 文件夹
+FOLDER_COVER=portrait        # 竖屏图片存储到 portrait 文件夹
+```
+
+> **注意**：修改文件夹名后，需要在 GitHub 仓库中手动创建对应的文件夹。
 
 ---
 
@@ -188,9 +203,8 @@ https://pcbed.vercel.app/api/image?path=wallpaper/20260612_image.jpg
 
 ```
 pcbed/
-├── wallpaper/   # 横屏图片存放目录
-├── cover/       # 竖屏图片存放目录
-└── upload_history.json  # 上传历史记录（自动生成）
+├── wallpaper/   # 横屏图片存放目录（可通过环境变量修改）
+└── cover/       # 竖屏图片存放目录（可通过环境变量修改）
 ```
 
 ### 2. Fork 或克隆本项目
@@ -226,13 +240,13 @@ vercel --prod
 1. 访问 [Vercel](https://vercel.com)
 2. 点击 **Add New** → **Project**
 3. 导入你的 GitHub 仓库 `chnbsdan/pcbed`
-4. 在 **Environment Variables** 中添加 `GITHUB_TOKEN`
+4. 在 **Environment Variables** 中添加环境变量
 5. 点击 **Deploy**
 
 ### 6. 绑定自定义域名（可选）
 
 1. 在 Vercel 项目设置中进入 **Domains**
-2. 添加你的域名（如 `pcbed.xxx.com`）
+2. 添加你的域名（如 `pcbed.xxxx.com`）
 3. 在你的 DNS 服务商添加 CNAME 记录：
    - 类型：`CNAME`
    - 名称：你的子域名
@@ -275,14 +289,6 @@ vercel --prod
 - 🌙 **暗色/亮色主题** - 一键切换，支持系统跟随
 - 📱 **移动端适配** - 完美适配 PC、平板、手机
 
-### 按钮颜色
-| 按钮 | 默认颜色 | 悬停效果 |
-|------|----------|----------|
-| 换背景 | 绿色 (`bg-green-500`) | 变亮 (`hover:bg-green-400`) |
-| 横屏 | 蓝色 (`bg-blue-600`) | 变亮 (`hover:bg-gray-300`) |
-| 竖屏 | 紫色 (`bg-purple-600`) | 变亮 (`hover:bg-gray-300`) |
-| 上传区域 | 浅灰 (`bg-gray-50`) | 天蓝色 (`hover:bg-sky-100`) |
-
 ---
 
 ## 📝 图片命名规则
@@ -306,9 +312,10 @@ vercel --prod
 
 1. **私有仓库** - 图片存储在私有仓库中，需要通过代理接口访问
 2. **Token 安全** - 不要将 `GITHUB_TOKEN` 暴露在客户端代码中
-3. **文件大小** - 单张图片限制 10MB，超过 3MB 会自动压缩
+3. **文件大小** - 单张图片限制 25MB（GitHub 限制），超过 5MB 会自动压缩
 4. **支持格式** - JPG、JPEG、PNG、WebP、GIF、AVIF
 5. **API 限制** - GitHub API 限制 5000 次/小时（已认证）
+6. **文件夹名** - 可通过环境变量自定义，修改后需在github仓库中手动创建对应文件夹
 
 ---
 
@@ -327,7 +334,9 @@ vercel --prod
 
 ## 🔄 更新日志
 
-### v2.1 (2026-06-14)
+### v2.1 (2026-06-15)
+- ✨ 新增大文件直传功能，突破 Vercel 4.5MB 限制，最大支持 25MB
+- ✨ 新增自定义文件夹名（通过环境变量配置）
 - ✨ 新增上传历史记录功能（跨设备同步）
 - ✨ 新增暗色/亮色主题切换
 - ✨ 新增图片搜索功能
@@ -335,10 +344,8 @@ vercel --prod
 - ✨ 新增批量删除图片
 - ✨ 新增粘贴上传（Ctrl+V）
 - ✨ 新增压缩质量选择（70%/85%/100%）
-- 🔧 合并 JSON 接口到 `/api/random?format=json`
 - 🎨 优化管理后台布局（左侧目录树）
 - 🎨 优化移动端体验（汉堡菜单）
-- 🎨 优化按钮样式和交互反馈
 
 ### v2.0 (2026-06-12)
 - ✨ 新增图片管理后台（预览、复制、删除）
@@ -393,4 +400,3 @@ vercel --prod
 </a>
 
 
----
