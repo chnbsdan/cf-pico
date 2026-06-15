@@ -1,7 +1,6 @@
 name: 同步上传历史记录
 
 on:
-  # 每当 main 分支有 push 时触发
   push:
     branches: [main]
     paths:
@@ -9,10 +8,8 @@ on:
       - 'sd/**'
       - 'wallpaper/**'
       - 'cover/**'
-  # 每天凌晨 2 点定时执行
   schedule:
     - cron: '0 2 * * *'
-  # 允许手动触发
   workflow_dispatch:
 
 jobs:
@@ -30,13 +27,9 @@ jobs:
       - name: 设置 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '18'
 
-      - name: 安装依赖
-        run: npm install -g moment
-
-      - name: 同步上传历史
+      - name: 同步上传历史 (使用原生 JS 脚本)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          node .github/scripts/sync-history.js
+        run: node .github/scripts/sync-history.js
