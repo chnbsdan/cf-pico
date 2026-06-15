@@ -180,7 +180,7 @@ function App() {
             
             // 保存到历史记录
             try {
-              await addHistoryRecord(data.filename, data.url, folder)
+              await addHistoryRecord(data.filename, proxyUrl, data.folder)
               console.log(`📝 已保存历史记录: ${data.filename}`)
             } catch (err) {
               console.error('保存历史记录失败:', err)
