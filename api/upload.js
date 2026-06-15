@@ -1,11 +1,14 @@
-// api/upload.js - 合并版（支持预签名 URL 和传统上传）
+// api/upload.js - 完整版（支持预签名 URL + 自定义文件夹名）
 const GITHUB_USER = process.env.GITHUB_USER || 'chnbsdan'
 const GITHUB_REPO = process.env.GITHUB_REPO || 'pcbed'
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN
+const FOLDER_WALLPAPER = process.env.FOLDER_WALLPAPER || 'wallpaper'
+const FOLDER_COVER = process.env.FOLDER_COVER || 'cover'
+
+const validFolders = [FOLDER_WALLPAPER, FOLDER_COVER]
 
 // 获取预签名 URL（用于前端直传大文件）
 async function getPresignedUrl(filename, folder) {
-  // 生成文件名
   const now = new Date()
   const datePrefix = now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0')
   const originalName = filename.replace(/\.[^/.]+$/, '')
@@ -115,7 +118,7 @@ export default async function handler(req, res) {
   
   const { action } = req.query
   
-  // 动作1: 获取预签名 URL（用于前端直传大文件）
+  // ========== 动作1: 获取预签名 URL（用于前端直传大文件）==========
   if (action === 'presign') {
     const { filename, folder } = req.body
     if (!filename || !folder) {
@@ -123,18 +126,22 @@ export default async function handler(req, res) {
     }
     
     // 验证文件夹
-    if (!['wallpaper', 'cover'].includes(folder)) {
-      return res.status(400).json({ error: 'Invalid folder' })
+    let targetFolder = folder
+    if (targetFolder === 'wallpaper') targetFolder = FOLDER_WALLPAPER
+    if (targetFolder === 'cover') targetFolder = FOLDER_COVER
+    
+    if (!validFolders.includes(targetFolder)) {
+      return res.status(400).json({ error: `Invalid folder. Use: ${validFolders.join(', ')}` })
     }
     
-    const presigned = await getPresignedUrl(filename, folder)
+    const presigned = await getPresignedUrl(filename, targetFolder)
     return res.status(200).json({
       success: true,
       ...presigned
     })
   }
   
-  // 动作2: 传统上传（通过 Vercel 中转，用于小文件）
+  // ========== 动作2: 传统上传（通过 Vercel 中转）==========
   try {
     const chunks = []
     for await (const chunk of req) chunks.push(chunk)
@@ -145,10 +152,18 @@ export default async function handler(req, res) {
     
     const formData = parseMultipart(buffer, boundary)
     const file = formData.file
-    const targetFolder = formData.folder || 'wallpaper'
+    let targetFolder = formData.folder || FOLDER_WALLPAPER
+    
+    // 兼容前端的 'wallpaper'/'cover' 映射到自定义文件夹名
+    if (targetFolder === 'wallpaper') targetFolder = FOLDER_WALLPAPER
+    if (targetFolder === 'cover') targetFolder = FOLDER_COVER
+    
+    if (!validFolders.includes(targetFolder)) {
+      return res.status(400).json({ error: `Invalid folder. Use: ${validFolders.join(', ')}` })
+    }
     
     if (!file || !file.data) return res.status(400).json({ error: 'No file uploaded' })
-    if (file.size > 10 * 1024 * 1024) return res.status(400).json({ error: 'File too large' })
+    if (file.size > 25 * 1024 * 1024) return res.status(400).json({ error: 'File too large (max 25MB)' })
     
     const ext = file.filename.split('.').pop().toLowerCase()
     if (!['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(ext)) {
