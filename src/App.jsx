@@ -175,19 +175,22 @@ function App() {
           // 使用直传，不经过 Vercel
           const data = await uploadDirect(file, folder)
           if (data.success) {
-            allResults.push({ success: true, filename: data.filename, url: data.url, folder })
-            setUploadResults([...allResults])
-            
-            // 保存到历史记录
-            try {
-              await addHistoryRecord(data.filename, proxyUrl, data.folder)
-              console.log(`📝 已保存历史记录: ${data.filename}`)
-            } catch (err) {
-              console.error('保存历史记录失败:', err)
-            }
-            
-            uploaded = true
-          } else {
+  // 生成代理 URL
+  const proxyUrl = `${window.location.origin}/api/image?path=${data.folder}/${data.filename}`
+  
+  allResults.push({ success: true, filename: data.filename, url: proxyUrl, folder: data.folder })
+  setUploadResults([...allResults])
+  
+  // 保存到历史记录（使用代理 URL）
+  try {
+    await addHistoryRecord(data.filename, proxyUrl, data.folder)
+    console.log(`📝 已保存历史记录: ${data.filename}`)
+  } catch (err) {
+    console.error('保存历史记录失败:', err)
+  }
+  
+  uploaded = true
+} else {
             throw new Error(data.error || '上传失败')
           }
         } catch (err) {
