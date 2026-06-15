@@ -29,7 +29,7 @@ jobs:
         with:
           node-version: '18'
 
-      - name: 同步上传历史 (使用原生 JS 脚本)
+      - name: 同步上传历史
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node .github/scripts/sync-history.js
