@@ -1,8 +1,11 @@
 {
+  "functions": {
+    "api/upload.js": {
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
-    { "source": "/wallpaper/(.*)", "destination": "/api/img/$1" },
-    { "source": "/cover/(.*)", "destination": "/api/img/$1" },
     { "source": "/manage", "destination": "/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
