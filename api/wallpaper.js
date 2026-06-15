@@ -2,7 +2,7 @@
 const GITHUB_USER = process.env.GITHUB_USER || 'chnbsdan'
 const GITHUB_REPO = process.env.GITHUB_REPO || 'imgbed-storage'
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN
-const FOLDER = 'wallpaper'
+const FOLDER = 'sh'
 
 // 🆕 记录上一次返回的图片 URL（使用内存缓存，注意 Vercel 无状态特性）
 let lastReturnedUrl = null
