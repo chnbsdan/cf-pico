@@ -2,7 +2,7 @@
 const GITHUB_USER = process.env.GITHUB_USER || 'chnbsdan'
 const GITHUB_REPO = process.env.GITHUB_REPO || 'imgbed-storage'
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN
-const FOLDER = 'cover'
+const FOLDER = 'sd'
 
 // 从 GitHub 存储仓库读取 cover 分类的外部图片
 async function getExternalImages() {
