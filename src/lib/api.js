@@ -116,7 +116,8 @@ export async function uploadDirect(file, folder) {
       throw new Error(presignResult.error || 'Failed to get upload URL')
     }
     
-    const { uploadUrl, filename, headers } = presignResult
+    // 使用后端返回的映射后文件夹名
+    const { uploadUrl, filename, folder: mappedFolder, headers } = presignResult
     
     // 2. 读取文件内容并转 Base64
     const fileContent = await file.arrayBuffer()
@@ -152,11 +153,12 @@ export async function uploadDirect(file, folder) {
     
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://pcbed.vercel.app'
     
+    // 使用后端映射后的文件夹名 mappedFolder
     return {
       success: true,
       filename: filename,
-      folder: folder,
-      url: `${baseUrl}/api/image?path=${folder}/${filename}`
+      folder: mappedFolder,
+      url: `${baseUrl}/api/image?path=${mappedFolder}/${filename}`
     }
   } catch (error) {
     console.error('UploadDirect error:', error)
