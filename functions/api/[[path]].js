@@ -73,16 +73,44 @@ async function handleStats(env) {
   const folders = ['wallpaper', 'cover', 'sh', 'sd']
   const githubFolders = {}
   let githubTotal = 0
+  let externalTotal = 0
+
+  // 1. 获取 GitHub 图片数量
   for (const folder of folders) {
     const images = await getFolderImages(folder, env)
     githubFolders[folder] = images.length
     githubTotal += images.length
   }
+
+  // 2. 获取外部图片数量（从 external.json）
+  const token = env.GITHUB_TOKEN
+  if (token) {
+    try {
+      const extUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/external.json`
+      const response = await fetch(extUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'User-Agent': 'Cloudflare-Pages'
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const content = atob(data.content)
+        const external = JSON.parse(content)
+        for (const folder of folders) {
+          externalTotal += (external[folder] || []).length
+        }
+      }
+    } catch (e) {
+      console.error('Failed to fetch external.json:', e)
+    }
+  }
+
   return new Response(JSON.stringify({
     github_folders: githubFolders,
     github_total: githubTotal,
-    external_total: 0,
-    grand_total: githubTotal
+    external_total: externalTotal,
+    grand_total: githubTotal + externalTotal
   }), {
     headers: { 'Content-Type': 'application/json' }
   })
@@ -140,6 +168,27 @@ async function handleList(env) {
   const results = {}
   let total = 0
 
+  // 先获取外部图片配置
+  let externalImages = {}
+  if (token) {
+    try {
+      const extUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/external.json`
+      const response = await fetch(extUrl, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'User-Agent': 'Cloudflare-Pages'
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        const content = atob(data.content)
+        externalImages = JSON.parse(content)
+      }
+    } catch (e) {
+      console.error('Failed to fetch external.json:', e)
+    }
+  }
+
   for (const folder of folders) {
     const images = []
     const seen = new Set()
@@ -172,7 +221,6 @@ async function handleList(env) {
     if (bucket) {
       try {
         const objects = await bucket.list({ prefix: `${folder}/` })
-        console.log(`R2 list for ${folder}:`, objects.objects.length)
         for (const obj of objects.objects) {
           const key = obj.key
           const name = key.split('/').pop()
@@ -194,6 +242,25 @@ async function handleList(env) {
         }
       } catch (e) {
         console.error(`R2 list error for ${folder}:`, e)
+      }
+    }
+
+    // 3. 从外部图片获取
+    const extList = externalImages[folder] || []
+    for (const url of extList) {
+      const name = url.split('/').pop()
+      const key = `${folder}/${name}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        images.push({
+          name: name,
+          url: url,
+          path: key,
+          sha: '',
+          size: 0,
+          folder: folder,
+          source: 'external'
+        })
       }
     }
 
