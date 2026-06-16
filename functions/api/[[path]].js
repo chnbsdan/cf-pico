@@ -1,5 +1,6 @@
 // functions/api/[[path]].js - Cloudflare Pages API 完整入口
 // 支持：stats, random, wallpaper, cover, list, image, upload, history
+// 上传支持 GitHub 和 R2 两种存储方式
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
@@ -156,13 +157,33 @@ async function handleList(env) {
   })
 }
 
-// GET /api/image
+// GET /api/image - 从 GitHub 或 R2 读取图片（优先 R2）
 async function handleImage(request, env) {
   const url = new URL(request.url)
   const path = url.searchParams.get('path')
   if (!path) {
     return new Response('Missing path parameter', { status: 400 })
   }
+
+  const bucket = env.IMAGES_BUCKET
+  const token = env.GITHUB_TOKEN
+
+  // 先尝试从 R2 读取
+  if (bucket) {
+    try {
+      const object = await bucket.get(path)
+      if (object) {
+        const headers = new Headers()
+        headers.set('Content-Type', object.httpMetadata?.contentType || 'image/jpeg')
+        headers.set('Cache-Control', 'public, max-age=86400')
+        return new Response(object.body, { headers })
+      }
+    } catch (e) {
+      console.log('R2 read failed, fallback to GitHub:', e.message)
+    }
+  }
+
+  // R2 没有，从 GitHub 读取
   const parts = path.split('/')
   const folder = parts[0]
   const filename = parts.slice(1).join('/')
@@ -170,7 +191,6 @@ async function handleImage(request, env) {
   if (!allowedFolders.includes(folder)) {
     return new Response('Invalid folder', { status: 403 })
   }
-  const token = env.GITHUB_TOKEN
   if (!token) {
     return new Response('GITHUB_TOKEN not configured', { status: 500 })
   }
@@ -199,20 +219,16 @@ async function handleImage(request, env) {
   }
 }
 
-// POST /api/upload - 大文件直传 GitHub
+// POST /api/upload - 根据用户选择上传到 GitHub 或 R2
 async function handleUpload(request, env) {
+  const bucket = env.IMAGES_BUCKET
   const token = env.GITHUB_TOKEN
-  if (!token) {
-    return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    })
-  }
 
   try {
     const formData = await request.formData()
     const file = formData.get('file')
     const folder = formData.get('folder') || 'wallpaper'
+    const storageType = formData.get('storage') || 'github'
 
     if (!file) {
       return new Response(JSON.stringify({ error: 'No file uploaded' }), {
@@ -221,7 +237,6 @@ async function handleUpload(request, env) {
       })
     }
 
-    // 检查文件大小（25MB 限制）
     if (file.size > 25 * 1024 * 1024) {
       return new Response(JSON.stringify({ error: 'File too large (max 25MB)' }), {
         status: 400,
@@ -229,10 +244,7 @@ async function handleUpload(request, env) {
       })
     }
 
-    // 生成文件名
     const filename = generateFilename(file.name)
-
-    // 读取文件内容转 Base64
     const arrayBuffer = await file.arrayBuffer()
     const uint8Array = new Uint8Array(arrayBuffer)
     let binary = ''
@@ -241,39 +253,65 @@ async function handleUpload(request, env) {
     }
     const base64Content = btoa(binary)
 
-    // 上传到 GitHub
-    const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}/${filename}`
-    const response = await fetch(apiUrl, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'User-Agent': 'Cloudflare-Pages'
-      },
-      body: JSON.stringify({
-        message: `Upload ${filename}`,
-        content: base64Content,
-        branch: 'main'
-      })
-    })
+    let uploadedUrl = ''
+    let usedStorage = storageType
+    let proxyUrl = `https://cf-pico.pages.dev/api/image?path=${folder}/${filename}`
 
-    if (!response.ok) {
-      const error = await response.text()
-      console.error('GitHub upload error:', error)
-      return new Response(JSON.stringify({ error: 'GitHub upload failed' }), {
-        status: response.status,
-        headers: { 'Content-Type': 'application/json' }
+    // === 根据用户选择上传 ===
+    if (storageType === 'r2') {
+      // 上传到 R2
+      if (!bucket) {
+        return new Response(JSON.stringify({ error: 'R2 bucket not configured' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      const key = `${folder}/${filename}`
+      await bucket.put(key, arrayBuffer, {
+        httpMetadata: { contentType: file.type || 'image/jpeg' }
       })
+      uploadedUrl = `https://${bucket.name}.r2.dev/${key}`
+    } else {
+      // 上传到 GitHub
+      if (!token) {
+        return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}/${filename}`
+      const response = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'Cloudflare-Pages'
+        },
+        body: JSON.stringify({
+          message: `Upload ${filename}`,
+          content: base64Content,
+          branch: 'main'
+        })
+      })
+      if (!response.ok) {
+        const error = await response.text()
+        console.error('GitHub upload error:', error)
+        return new Response(JSON.stringify({ error: 'GitHub upload failed' }), {
+          status: response.status,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      const data = await response.json()
+      uploadedUrl = data.content.download_url
     }
-
-    const data = await response.json()
-    const fullUrl = `https://cf-pico.pages.dev/api/image?path=${folder}/${filename}`
 
     return new Response(JSON.stringify({
       success: true,
       filename: filename,
       folder: folder,
-      url: fullUrl
+      url: proxyUrl,
+      storage: usedStorage,
+      rawUrl: uploadedUrl
     }), {
       headers: { 'Content-Type': 'application/json' }
     })
@@ -350,7 +388,6 @@ async function addHistory(request, env) {
       })
     }
 
-    // 获取现有历史
     const historyUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/upload_history.json`
     let existingHistory = []
     let sha = null
@@ -369,7 +406,6 @@ async function addHistory(request, env) {
       existingHistory = JSON.parse(content) || []
     }
 
-    // 添加新记录
     const newRecord = {
       id: Date.now(),
       filename,
@@ -380,7 +416,6 @@ async function addHistory(request, env) {
     existingHistory.unshift(newRecord)
     const trimmedHistory = existingHistory.slice(0, 1000)
 
-    // 保存
     const putResponse = await fetch(historyUrl, {
       method: 'PUT',
       headers: {
@@ -502,7 +537,6 @@ export async function onRequest(context) {
   const { request, env, params } = context
   const method = request.method
 
-  // 处理路径参数（[[path]] 可能是数组）
   let path = ''
   if (Array.isArray(params.path)) {
     path = params.path.join('/')
