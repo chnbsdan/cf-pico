@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "include": ["/*"],
+  "exclude": ["/assets/*", "/api/*"],
+  "routes": [
+    {
+      "pattern": "/manage",
+      "path": "/index.html"
+    },
+    {
+      "pattern": "/docs",
+      "path": "/index.html"
+    }
+  ]
+}
