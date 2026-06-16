@@ -1,3 +1,2 @@
-# 确认文件存在
-cat public/_redirects
-# 应该输出: /*    /index.html   200
+/api/*    /api/$1    200
+/*        /index.html 200
