@@ -1,5 +1,0 @@
-# 这告诉 Cloudflare Pages 这是一个静态站点，不要寻找 Functions
-pages_build_output_dir = "dist"
-
-[build]
-command = "npm run build"
