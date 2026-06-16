@@ -5,10 +5,11 @@ export async function fetchStats() {
   return res.json()
 }
 
-export async function uploadImage(file, folder) {
+export async function uploadImage(file, folder, storage = 'github') {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('folder', folder)
+  formData.append('storage', storage)
   const res = await fetch(`/api/upload`, {
     method: 'POST',
     body: formData,
@@ -50,7 +51,6 @@ export async function batchCopyLinks(urls, format = 'url') {
   setTimeout(() => toast.remove(), 2000)
 }
 
-// 历史记录
 export async function fetchHistory() {
   const res = await fetch(`/api/history`)
   if (!res.ok) throw new Error('Failed to fetch history')
