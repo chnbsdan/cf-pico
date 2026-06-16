@@ -1,14 +1,16 @@
-// api/wallpaper.js - 仅返回 wallpaper 文件夹的随机图片 + wallpaper 分类的外部图片
+// api/wallpaper.js - 支持 folder 参数，保留去重和外部图片功能
 const GITHUB_USER = process.env.GITHUB_USER || 'chnbsdan'
-const GITHUB_REPO = process.env.GITHUB_REPO || 'imgbed-storage'
+const GITHUB_REPO = process.env.GITHUB_REPO || 'Pico'
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN
-const FOLDER = 'sh'
 
-// 🆕 记录上一次返回的图片 URL（使用内存缓存，注意 Vercel 无状态特性）
+// 默认文件夹
+const DEFAULT_FOLDER = 'wallpaper'
+
+// 记录上一次返回的图片 URL
 let lastReturnedUrl = null
 
-// 从 GitHub 存储仓库读取 wallpaper 分类的外部图片
-async function getExternalImages() {
+// 获取外部图片（根据文件夹分类）
+async function getExternalImages(folder) {
   try {
     const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/external.json`
     const response = await fetch(apiUrl, {
@@ -20,7 +22,12 @@ async function getExternalImages() {
     })
     if (response.ok) {
       const data = await response.json()
-      return data.wallpaper || []
+      // 根据请求的文件夹返回对应的外部图片
+      if (folder === 'wallpaper') return data.wallpaper || []
+      if (folder === 'cover') return data.cover || []
+      if (folder === 'sh') return data.sh || []
+      if (folder === 'sd') return data.sd || []
+      return []
     }
   } catch (error) {
     console.error('Failed to fetch external images:', error)
@@ -49,11 +56,23 @@ export default async function handler(req, res) {
     return res.status(200).end()
   }
   
+  // 通过 folder 参数选择文件夹
+  // 用法：
+  //   /api/wallpaper           → 从 wallpaper 读取
+  //   /api/wallpaper?folder=sh → 从 sh 读取
+  //   /api/wallpaper?folder=sd → 从 sd 读取
+  const { folder } = req.query
+  let targetFolder = DEFAULT_FOLDER
+  
+  if (folder === 'sh') targetFolder = 'sh'
+  if (folder === 'sd') targetFolder = 'sd'
+  if (folder === 'cover') targetFolder = 'cover'
+  
   try {
     let allImages = []
     
-    // 1. 获取 wallpaper 文件夹的图片
-    const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${FOLDER}`
+    // 1. 获取目标文件夹的图片
+    const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${targetFolder}`
     const response = await fetch(apiUrl, {
       headers: {
         'Authorization': `Bearer ${GITHUB_TOKEN}`,
@@ -65,14 +84,14 @@ export default async function handler(req, res) {
       const files = await response.json()
       if (Array.isArray(files)) {
         const images = files
-          .filter(f => f.name && f.name.match(/\.(jpg|jpeg|png|webp|gif|avif)$/i))
+          .filter(f => f.name && f.name.match(/\.(jpg|jpeg|png|webp|gif|avif)$/i) && f.name !== '.keep')
           .map(f => f.download_url)
         allImages.push(...images)
       }
     }
     
-    // 2. 获取 wallpaper 分类的外部图片
-    const externalImages = await getExternalImages()
+    // 2. 获取对应分类的外部图片
+    const externalImages = await getExternalImages(targetFolder)
     for (const url of externalImages) {
       if (await isImageValid(url)) {
         allImages.push(url)
@@ -80,10 +99,10 @@ export default async function handler(req, res) {
     }
     
     if (allImages.length === 0) {
-      return res.status(404).send('No images found')
+      return res.status(404).send(`No images found in ${targetFolder} folder`)
     }
     
-    // 🆕 去重逻辑：如果只有一张图片，直接返回
+    // 去重逻辑：如果只有一张图片，直接返回
     if (allImages.length === 1) {
       lastReturnedUrl = allImages[0]
       const imgRes = await fetch(allImages[0])
@@ -94,23 +113,20 @@ export default async function handler(req, res) {
       return res.send(Buffer.from(body))
     }
     
-    // 🆕 去重逻辑：过滤掉上一次返回的图片
+    // 去重逻辑：过滤掉上一次返回的图片
     let availableImages = allImages
     if (lastReturnedUrl) {
       availableImages = allImages.filter(url => url !== lastReturnedUrl)
     }
     
-    // 如果过滤后为空（理论上不会，但兜底），使用全部图片
     if (availableImages.length === 0) {
       availableImages = allImages
     }
     
-    // 从剩余图片中随机选择
     const randomUrl = availableImages[Math.floor(Math.random() * availableImages.length)]
-    lastReturnedUrl = randomUrl  // 记录本次返回的图片
+    lastReturnedUrl = randomUrl
     
     const imgRes = await fetch(randomUrl)
-    
     if (!imgRes.ok) {
       return res.status(500).send('Failed to fetch image')
     }
