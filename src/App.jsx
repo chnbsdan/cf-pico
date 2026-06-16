@@ -16,7 +16,6 @@ function App() {
   const [isUploading, setIsUploading] = useState(false)
   const [convertToWebp, setConvertToWebp] = useState(false)
 
-  // 路由判断
   const isManagePage = typeof window !== 'undefined' && window.location.pathname === '/manage'
   if (isManagePage) {
     return <Manage />
@@ -150,7 +149,6 @@ function App() {
         continue
       }
 
-      // WebP 转换（前端处理）
       if (convertToWebp && !['gif', 'avif'].includes(ext)) {
         try {
           file = await convertToWebP(file)
@@ -160,7 +158,6 @@ function App() {
         }
       }
 
-      // 压缩处理（前端处理）
       if (file.size > 5 * 1024 * 1024 && file.type !== 'image/webp') {
         try {
           file = await compressImage(file)
@@ -224,7 +221,6 @@ function App() {
 
   return (
     <div className="min-h-screen py-6 px-4 relative">
-      {/* 右上角导航栏 */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
         <a
           href="/manage"
@@ -245,7 +241,6 @@ function App() {
         <ThemeToggle />
       </div>
 
-      {/* 左上角 LOGO */}
       <a
         href="https://github.com/chnbsdan/cf-pico"
         target="_blank"
