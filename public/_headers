@@ -8,25 +8,4 @@ cat > public/_headers << 'EOF'
 
 /*.css
   Content-Type: text/css
-
-/*.html
-  Content-Type: text/html
-
-/*.json
-  Content-Type: application/json
-
-/*.ico
-  Content-Type: image/x-icon
-
-/*.svg
-  Content-Type: image/svg+xml
-
-/*.png
-  Content-Type: image/png
-
-/*.jpg
-  Content-Type: image/jpeg
-
-/*.webp
-  Content-Type: image/webp
 EOF
