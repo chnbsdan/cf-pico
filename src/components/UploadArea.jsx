@@ -5,10 +5,9 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const [dragOver, setDragOver] = useState(false)
   const [folder, setFolder] = useState('wallpaper')
   const [bgRefresh, setBgRefresh] = useState(false)
-  const [storageType, setStorageType] = useState('github') // 'github' 或 'r2'
+  const [storageType, setStorageType] = useState('github')
   const fileInputRef = useRef(null)
 
-  // 文件夹选项
   const folderOptions = [
     { key: 'wallpaper', label: '横屏图片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
     { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
@@ -19,7 +18,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const refreshBackground = () => {
     setBgRefresh(true)
     setTimeout(() => setBgRefresh(false), 200)
-
     const img = new Image()
     const url = '/api/wallpaper?t=' + Date.now() + '&r=' + Math.random()
     img.onload = () => {
@@ -55,7 +53,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     const handlePaste = (e) => {
       const items = e.clipboardData?.items
       if (!items) return
-
       const imageFiles = []
       for (let i = 0; i < items.length; i++) {
         const item = items[i]
@@ -66,11 +63,9 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           }
         }
       }
-
       if (imageFiles.length > 0) {
         e.preventDefault()
         handleFiles(imageFiles)
-
         const toast = document.createElement('div')
         toast.innerHTML = '<i class="fas fa-paste mr-1"></i> 检测到粘贴的图片，开始上传'
         toast.className = 'fixed bottom-20 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm z-50 shadow-lg animate-fade-in-up'
@@ -78,7 +73,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         setTimeout(() => toast.remove(), 2000)
       }
     }
-
     window.addEventListener('paste', handlePaste)
     return () => window.removeEventListener('paste', handlePaste)
   }, [folder])
@@ -93,7 +87,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           上传图片
         </h3>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* 换背景按钮 */}
           <button
             onClick={refreshBackground}
             className={`text-xs transition flex items-center gap-1 px-2 py-1 rounded-lg ${
@@ -106,8 +99,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             <i className="fas fa-sync-alt text-xs"></i>
             换背景
           </button>
-
-          {/* 文件夹按钮 */}
           {folderOptions.map((opt) => (
             <button
               key={opt.key}
@@ -207,7 +198,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           <i className="fas fa-paste mr-1"></i>也可直接 Ctrl+V 粘贴截图上传
         </p>
 
-        {/* 当前存储方式提示 */}
         <p className="text-xs mt-2 flex items-center justify-center gap-1">
           {storageType === 'github' ? (
             <span className="text-blue-400">
@@ -229,7 +219,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           </p>
         )}
 
-        {/* 压缩质量选择 */}
         <div
           className="flex justify-center items-center mt-3"
           onClick={(e) => e.stopPropagation()}
@@ -272,7 +261,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         onChange={handleFileSelect}
       />
 
-      {/* 上传中转圈提示 */}
       {isLoading && (
         <div className="mt-3 text-center">
           <div className="inline-flex items-center gap-2 text-sm text-orange-600">
