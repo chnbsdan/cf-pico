@@ -29,6 +29,7 @@ export default function Manage() {
   // 历史记录批量选择状态
   const [selectedHistoryIds, setSelectedHistoryIds] = useState(new Set())
 
+  // 检查本地存储的登录状态
   useEffect(() => {
     const savedAuth = localStorage.getItem('manage_auth')
     if (savedAuth === 'true') {
@@ -47,6 +48,7 @@ export default function Manage() {
     return (img.folder === 'wallpaper' || img.folder === 'sh') ? 'aspect-video' : 'aspect-9/16'
   }
 
+  // ========== 历史记录相关函数 ==========
   const loadHistory = async () => {
     setHistoryLoading(true)
     try {
@@ -73,7 +75,7 @@ export default function Manage() {
     }
   }
 
-  // 历史记录批量操作
+  // 切换历史记录选择
   const toggleSelectHistory = (id, e) => {
     if (e) e.stopPropagation()
     const newSelected = new Set(selectedHistoryIds)
@@ -85,6 +87,7 @@ export default function Manage() {
     setSelectedHistoryIds(newSelected)
   }
 
+  // 全选/取消全选历史记录
   const selectAllHistory = () => {
     if (selectedHistoryIds.size === historyList.length) {
       setSelectedHistoryIds(new Set())
@@ -94,6 +97,7 @@ export default function Manage() {
     }
   }
 
+  // 批量删除历史记录
   const handleBatchDeleteHistory = async () => {
     const selectedCount = selectedHistoryIds.size
     if (selectedCount === 0) {
@@ -102,7 +106,9 @@ export default function Manage() {
     }
     if (!confirm(`确定要删除选中的 ${selectedCount} 条记录吗？\n\n⚠️ 此操作不可恢复！`)) return
     
-    let successCount = 0, failCount = 0
+    let successCount = 0
+    let failCount = 0
+    
     for (const id of selectedHistoryIds) {
       try {
         const res = await fetch(`/api/history?id=${id}`, { method: 'DELETE' })
@@ -112,11 +118,13 @@ export default function Manage() {
         failCount++
       }
     }
+    
     alert(`✅ 删除完成\n成功: ${successCount} 条\n失败: ${failCount} 条`)
     setSelectedHistoryIds(new Set())
     await loadHistory()
   }
 
+  // ========== 登录相关 ==========
   const handleLogin = (e) => {
     e.preventDefault()
     if (password === 'admin123') {
@@ -130,6 +138,7 @@ export default function Manage() {
     }
   }
 
+  // ========== 图片相关函数 ==========
   const loadImages = async () => {
     setLoading(true)
     try {
@@ -163,7 +172,12 @@ export default function Manage() {
       const response = await fetch(`/api/admin/delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: img.name, folder, sha: img.sha, source: img.source })
+        body: JSON.stringify({
+          filename: img.name,
+          folder: folder,
+          sha: img.sha,
+          source: img.source
+        })
       })
       const result = await response.json()
       if (result.success) {
@@ -181,20 +195,27 @@ export default function Manage() {
     }
   }
 
+  // 批量删除图片
   const handleBatchDelete = async () => {
     const selectedCount = selectedImages.size
     if (selectedCount === 0) return alert('请先选择图片')
     if (!confirm(`确定要删除选中的 ${selectedCount} 张图片吗？\n\n⚠️ 此操作不可恢复！`)) return
     
     const selectedImgList = paginatedImages.filter(img => selectedImages.has(img.name))
-    let successCount = 0, failCount = 0
+    let successCount = 0
+    let failCount = 0
     
     for (const img of selectedImgList) {
       try {
         const response = await fetch(`/api/admin/delete`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: img.name, folder: activeTab, sha: img.sha, source: img.source })
+          body: JSON.stringify({
+            filename: img.name,
+            folder: activeTab,
+            sha: img.sha,
+            source: img.source
+          })
         })
         const result = await response.json()
         result.success ? successCount++ : failCount++
@@ -202,11 +223,13 @@ export default function Manage() {
         failCount++
       }
     }
+    
     alert(`✅ 删除完成\n成功: ${successCount} 张\n失败: ${failCount} 张`)
     setSelectedImages(new Set())
     await loadImages()
   }
 
+  // ========== 标签页切换 ==========
   const handleTabChange = (tab) => {
     setActiveTab(tab)
     setCurrentPage(1)
@@ -217,6 +240,7 @@ export default function Manage() {
     if (tab === 'history') loadHistory()
   }
 
+  // ========== 批量选择图片 ==========
   const toggleSelect = (imgName, e) => {
     if (e) e.stopPropagation()
     const newSelected = new Set(selectedImages)
@@ -236,15 +260,21 @@ export default function Manage() {
     }
   }
 
+  // ========== 批量复制 ==========
   const handleBatchCopy = async (format) => {
-    const selectedUrls = paginatedImages.filter(img => selectedImages.has(img.name)).map(img => getProxyUrl(img))
+    const selectedUrls = paginatedImages
+      .filter(img => selectedImages.has(img.name))
+      .map(img => getProxyUrl(img))
     if (selectedUrls.length === 0) return alert('请先选择图片')
     await batchCopyLinks(selectedUrls, format)
     setShowBatchMenu(false)
   }
 
+  // ========== 分页和搜索过滤 ==========
   const allImages = images[activeTab] || []
-  const filteredImages = searchKeyword.trim() === '' ? allImages : allImages.filter(img => img.name.toLowerCase().includes(searchKeyword.toLowerCase()))
+  const filteredImages = searchKeyword.trim() === ''
+    ? allImages
+    : allImages.filter(img => img.name.toLowerCase().includes(searchKeyword.toLowerCase()))
   const totalCount = filteredImages.length
   const totalPages = Math.ceil(totalCount / pageSize)
   const startIndex = (currentPage - 1) * pageSize
@@ -252,13 +282,16 @@ export default function Manage() {
 
   const formatTime = (isoString) => new Date(isoString).toLocaleString('zh-CN')
 
-  // 未登录界面
+  // ========== 未登录界面 ==========
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-4" style={{ 
-        backgroundImage: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        backgroundAttachment: 'fixed'
-      }}>
+      <div
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{
+          backgroundImage: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          backgroundAttachment: 'fixed'
+        }}
+      >
         <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 sm:p-8 w-full max-w-md border border-white/30">
           <div className="text-center mb-6">
             <i className="fas fa-lock text-5xl text-white/70 mb-3"></i>
@@ -266,10 +299,26 @@ export default function Manage() {
             <p className="text-white/50 text-sm mt-1">请输入密码进入</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="请输入管理密码" className="w-full px-4 py-2 rounded-lg bg-white/20 text-white placeholder-white/50 border border-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500" autoFocus />
-            {passwordError && <p className="text-red-400 text-sm text-center"><i className="fas fa-exclamation-circle mr-1"></i>密码错误，请重试</p>}
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="请输入管理密码"
+              className="w-full px-4 py-2 rounded-lg bg-white/20 text-white placeholder-white/50 border border-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              autoFocus
+            />
+            {passwordError && (
+              <p className="text-red-400 text-sm text-center">
+                <i className="fas fa-exclamation-circle mr-1"></i>密码错误，请重试
+              </p>
+            )}
             <div className="flex justify-center">
-              <button type="submit" className="px-6 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-medium transition">验证</button>
+              <button
+                type="submit"
+                className="px-6 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-medium transition"
+              >
+                验证
+              </button>
             </div>
           </form>
         </div>
@@ -277,45 +326,136 @@ export default function Manage() {
     )
   }
 
-  // 已登录界面
+  // ========== 已登录界面 ==========
   return (
     <div className="min-h-screen py-6 px-4 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
       <ThemeToggle />
-      
+
       {/* 移动端菜单按钮 */}
-      <button onClick={() => setMobileMenuOpen(true)} className="fixed top-4 left-4 z-50 lg:hidden bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:bg-white dark:hover:bg-gray-700 transition p-2.5 rounded-lg text-gray-700 dark:text-white shadow-md"><i className="fas fa-bars text-lg"></i></button>
+      <button
+        onClick={() => setMobileMenuOpen(true)}
+        className="fixed top-4 left-4 z-50 lg:hidden bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:bg-white dark:hover:bg-gray-700 transition p-2.5 rounded-lg text-gray-700 dark:text-white shadow-md"
+      >
+        <i className="fas fa-bars text-lg"></i>
+      </button>
 
       {/* 左侧悬浮目录 */}
-      {mobileMenuOpen && (<div className="fixed inset-0 bg-black/50 dark:bg-black/70 z-40 lg:hidden" onClick={() => setMobileMenuOpen(false)} />)}
-      
-      <div className={`fixed top-0 left-0 h-full z-50 w-64 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md shadow-2xl transition-transform duration-300 ease-in-out ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:left-4 lg:top-1/2 lg:-translate-y-1/2 lg:w-56 lg:h-auto lg:rounded-2xl lg:bg-white/90 dark:lg:bg-gray-900/90 lg:backdrop-blur-md lg:border lg:border-gray-200 dark:lg:border-gray-700`}>
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 dark:bg-black/70 z-40 lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      <div
+        className={`
+          fixed top-0 left-0 h-full z-50 w-64 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md shadow-2xl transition-transform duration-300 ease-in-out
+          ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+          lg:translate-x-0 lg:left-4 lg:top-1/2 lg:-translate-y-1/2 lg:w-56 lg:h-auto lg:rounded-2xl
+          lg:bg-white/90 dark:lg:bg-gray-900/90 lg:backdrop-blur-md lg:border lg:border-gray-200 dark:lg:border-gray-700
+        `}
+      >
         <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center lg:block">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200 font-medium"><i className="fas fa-folder-tree text-blue-500"></i><span>图片库</span></div>
-            <button onClick={refreshCurrent} className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800" title="刷新"><i className="fas fa-sync-alt"></i></button>
+            <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200 font-medium">
+              <i className="fas fa-folder-tree text-blue-500"></i>
+              <span>图片库</span>
+            </div>
+            <button
+              onClick={refreshCurrent}
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+              title="刷新"
+            >
+              <i className="fas fa-sync-alt"></i>
+            </button>
           </div>
-          <button onClick={() => setMobileMenuOpen(false)} className="lg:hidden text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white text-xl mt-2"><i className="fas fa-times"></i></button>
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            className="lg:hidden text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white text-xl mt-2"
+          >
+            <i className="fas fa-times"></i>
+          </button>
         </div>
-        
+
         <div className="p-3 border-b border-gray-200 dark:border-gray-800">
-          <a href="/" className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"><i className="fas fa-home w-4 text-blue-500"></i><span className="text-sm">返回首页</span></a>
-          <button onClick={() => { setIsAuthenticated(false); localStorage.removeItem('manage_auth') }} className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition mt-1"><i className="fas fa-sign-out-alt w-4 text-red-500"></i><span className="text-sm">退出登录</span></button>
+          <a
+            href="/"
+            className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+          >
+            <i className="fas fa-home w-4 text-blue-500"></i>
+            <span className="text-sm">返回首页</span>
+          </a>
+          <button
+            onClick={() => {
+              setIsAuthenticated(false)
+              localStorage.removeItem('manage_auth')
+            }}
+            className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition mt-1"
+          >
+            <i className="fas fa-sign-out-alt w-4 text-red-500"></i>
+            <span className="text-sm">退出登录</span>
+          </button>
         </div>
-        
+
         <div className="p-2">
+          {/* 四个文件夹目录 */}
           {['wallpaper', 'cover', 'sh', 'sd'].map((folderName) => {
-            const displayName = { wallpaper: '横屏图片', cover: '竖屏图片', sh: '横屏图片 (sh)', sd: '竖屏图片 (sd)' }[folderName]
-            const activeColor = { wallpaper: 'bg-blue-500/10 text-blue-600 dark:text-blue-400', cover: 'bg-purple-500/10 text-purple-600 dark:text-purple-400', sh: 'bg-blue-500/10 text-blue-600 dark:text-blue-400', sd: 'bg-purple-500/10 text-purple-600 dark:text-purple-400' }[folderName]
+            const displayName = {
+              wallpaper: '横屏图片',
+              cover: '竖屏图片',
+              sh: '横屏图片 (sh)',
+              sd: '竖屏图片 (sd)'
+            }[folderName]
+
+            const activeColor = {
+              wallpaper: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+              cover: 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
+              sh: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+              sd: 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+            }[folderName]
+
             return (
-              <div key={folderName} onClick={() => handleTabChange(folderName)} className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 ${folderName !== 'wallpaper' ? 'mt-1' : ''} ${activeTab === folderName ? `${activeColor} bg-gradient-to-r` : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
-                <div className="flex items-center gap-2"><i className={`fas ${activeTab === folderName ? 'fa-folder-open' : 'fa-folder'} text-sm`}></i><span className="text-sm font-medium">{displayName}</span></div>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">{images[folderName]?.length || 0}</span>
+              <div
+                key={folderName}
+                onClick={() => handleTabChange(folderName)}
+                className={`
+                  flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200
+                  ${folderName !== 'wallpaper' ? 'mt-1' : ''}
+                  ${activeTab === folderName
+                    ? `${activeColor} bg-gradient-to-r`
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  }
+                `}
+              >
+                <div className="flex items-center gap-2">
+                  <i className={`fas ${activeTab === folderName ? 'fa-folder-open' : 'fa-folder'} text-sm`}></i>
+                  <span className="text-sm font-medium">{displayName}</span>
+                </div>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                  {images[folderName]?.length || 0}
+                </span>
               </div>
             )
           })}
-          <div onClick={() => handleTabChange('history')} className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 mt-2 ${activeTab === 'history' ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
-            <div className="flex items-center gap-2"><i className="fas fa-history text-sm"></i><span className="text-sm font-medium">上传历史</span></div>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">{historyList.length}</span>
+
+          {/* 历史记录目录 */}
+          <div
+            onClick={() => handleTabChange('history')}
+            className={`
+              flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 mt-2
+              ${activeTab === 'history'
+                ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }
+            `}
+          >
+            <div className="flex items-center gap-2">
+              <i className="fas fa-history text-sm"></i>
+              <span className="text-sm font-medium">上传历史</span>
+            </div>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+              {historyList.length}
+            </span>
           </div>
         </div>
       </div>
@@ -327,29 +467,83 @@ export default function Manage() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h2 className="text-gray-800 dark:text-white font-semibold flex items-center gap-2 text-base sm:text-lg">
-                <i className={`fas ${activeTab === 'wallpaper' || activeTab === 'sh' ? 'fa-arrows-alt text-blue-500' : activeTab === 'cover' || activeTab === 'sd' ? 'fa-mobile-alt text-purple-500' : 'fa-history text-teal-500'}`}></i>
-                {activeTab === 'wallpaper' ? '横屏图片 (wallpaper)' : activeTab === 'cover' ? '竖屏图片 (cover)' : activeTab === 'sh' ? '横屏图片 (sh)' : activeTab === 'sd' ? '竖屏图片 (sd)' : '上传历史'}
+                <i className={`
+                  fas
+                  ${activeTab === 'wallpaper' || activeTab === 'sh'
+                    ? 'fa-arrows-alt text-blue-500'
+                    : activeTab === 'cover' || activeTab === 'sd'
+                    ? 'fa-mobile-alt text-purple-500'
+                    : 'fa-history text-teal-500'
+                  }
+                `}></i>
+                {activeTab === 'wallpaper'
+                  ? '横屏图片 (wallpaper)'
+                  : activeTab === 'cover'
+                  ? '竖屏图片 (cover)'
+                  : activeTab === 'sh'
+                  ? '横屏图片 (sh)'
+                  : activeTab === 'sd'
+                  ? '竖屏图片 (sd)'
+                  : '上传历史'}
               </h2>
-              {activeTab !== 'history' && <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">共 {totalCount} 张图片 · 第 {currentPage}/{totalPages || 1} 页</p>}
-              {activeTab === 'history' && <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">共 {historyList.length} 条记录</p>}
+              {activeTab !== 'history' && (
+                <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
+                  共 {totalCount} 张图片 · 第 {currentPage}/{totalPages || 1} 页
+                </p>
+              )}
+              {activeTab === 'history' && (
+                <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
+                  共 {historyList.length} 条记录
+                </p>
+              )}
             </div>
             {activeTab !== 'history' && totalPages > 1 && (
               <div className="flex gap-1">
-                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm"><i className="fas fa-chevron-left"></i></button>
-                <span className="px-4 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-white text-sm font-medium">{currentPage} / {totalPages}</span>
-                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm"><i className="fas fa-chevron-right"></i></button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm"
+                >
+                  <i className="fas fa-chevron-left"></i>
+                </button>
+                <span className="px-4 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-white text-sm font-medium">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm"
+                >
+                  <i className="fas fa-chevron-right"></i>
+                </button>
               </div>
             )}
           </div>
         </div>
 
-        {/* 搜索框 */}
+        {/* 搜索框（仅在图片标签页显示） */}
         {activeTab !== 'history' && (
           <div className="mb-4">
             <div className="relative">
               <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm"></i>
-              <input type="text" placeholder="按文件名搜索图片..." value={searchKeyword} onChange={(e) => { setSearchKeyword(e.target.value); setCurrentPage(1) }} className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" />
-              {searchKeyword && <button onClick={() => setSearchKeyword('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"><i className="fas fa-times-circle"></i></button>}
+              <input
+                type="text"
+                placeholder="按文件名搜索图片..."
+                value={searchKeyword}
+                onChange={(e) => {
+                  setSearchKeyword(e.target.value)
+                  setCurrentPage(1)
+                }}
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              />
+              {searchKeyword && (
+                <button
+                  onClick={() => setSearchKeyword('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                >
+                  <i className="fas fa-times-circle"></i>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -357,16 +551,53 @@ export default function Manage() {
         {/* 批量操作栏（图片） */}
         {activeTab !== 'history' && selectedImages.size > 0 && (
           <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-blue-200 dark:border-blue-800">
-            <span className="text-blue-700 dark:text-blue-300 text-sm flex items-center gap-2"><i className="fas fa-check-circle"></i>已选择 {selectedImages.size} 张图片<button onClick={selectAll} className="text-xs text-blue-600 dark:text-blue-400 hover:underline ml-2">{selectedImages.size === paginatedImages.length ? '取消全选' : '全选'}</button></span>
+            <span className="text-blue-700 dark:text-blue-300 text-sm flex items-center gap-2">
+              <i className="fas fa-check-circle"></i>
+              已选择 {selectedImages.size} 张图片
+              <button
+                onClick={selectAll}
+                className="text-xs text-blue-600 dark:text-blue-400 hover:underline ml-2"
+              >
+                {selectedImages.size === paginatedImages.length ? '取消全选' : '全选'}
+              </button>
+            </span>
             <div className="flex gap-2">
-              <button onClick={handleBatchDelete} className="px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm flex items-center gap-2 transition"><i className="fas fa-trash-alt"></i>批量删除 ({selectedImages.size})</button>
+              <button
+                onClick={handleBatchDelete}
+                className="px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm flex items-center gap-2 transition"
+              >
+                <i className="fas fa-trash-alt"></i>
+                批量删除 ({selectedImages.size})
+              </button>
               <div className="relative">
-                <button onClick={() => setShowBatchMenu(!showBatchMenu)} className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-white text-sm flex items-center gap-2 transition"><i className="fas fa-copy"></i>批量复制<i className="fas fa-chevron-down text-xs"></i></button>
+                <button
+                  onClick={() => setShowBatchMenu(!showBatchMenu)}
+                  className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-white text-sm flex items-center gap-2 transition"
+                >
+                  <i className="fas fa-copy"></i>
+                  批量复制
+                  <i className="fas fa-chevron-down text-xs"></i>
+                </button>
                 {showBatchMenu && (
                   <div className="absolute right-0 bottom-full mb-2 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden z-[200] border border-gray-200 dark:border-gray-700">
-                    <button onClick={() => handleBatchCopy('url')} className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm flex items-center gap-2"><i className="fas fa-link"></i>复制链接 (URL)</button>
-                    <button onClick={() => handleBatchCopy('markdown')} className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm flex items-center gap-2"><i className="fab fa-markdown"></i>复制 Markdown</button>
-                    <button onClick={() => handleBatchCopy('html')} className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm flex items-center gap-2"><i className="fab fa-html5"></i>复制 HTML</button>
+                    <button
+                      onClick={() => handleBatchCopy('url')}
+                      className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm flex items-center gap-2"
+                    >
+                      <i className="fas fa-link"></i> 复制链接 (URL)
+                    </button>
+                    <button
+                      onClick={() => handleBatchCopy('markdown')}
+                      className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm flex items-center gap-2"
+                    >
+                      <i className="fab fa-markdown"></i> 复制 Markdown
+                    </button>
+                    <button
+                      onClick={() => handleBatchCopy('html')}
+                      className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm flex items-center gap-2"
+                    >
+                      <i className="fab fa-html5"></i> 复制 HTML
+                    </button>
                   </div>
                 )}
               </div>
@@ -378,34 +609,95 @@ export default function Manage() {
         {activeTab === 'history' && selectedHistoryIds.size > 0 && (
           <div className="bg-teal-50 dark:bg-teal-900/30 rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-teal-200 dark:border-teal-800">
             <span className="text-teal-700 dark:text-teal-300 text-sm flex items-center gap-2">
-              <i className="fas fa-check-circle"></i>已选择 {selectedHistoryIds.size} 条记录
-              <button onClick={selectAllHistory} className="text-xs text-teal-600 dark:text-teal-400 hover:underline ml-2">{selectedHistoryIds.size === historyList.length ? '取消全选' : '全选'}</button>
+              <i className="fas fa-check-circle"></i>
+              已选择 {selectedHistoryIds.size} 条记录
+              <button
+                onClick={selectAllHistory}
+                className="text-xs text-teal-600 dark:text-teal-400 hover:underline ml-2"
+              >
+                {selectedHistoryIds.size === historyList.length ? '取消全选' : '全选'}
+              </button>
             </span>
-            <button onClick={handleBatchDeleteHistory} className="px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm flex items-center gap-2 transition"><i className="fas fa-trash-alt"></i>批量删除 ({selectedHistoryIds.size})</button>
+            <button
+              onClick={handleBatchDeleteHistory}
+              className="px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm flex items-center gap-2 transition"
+            >
+              <i className="fas fa-trash-alt"></i>
+              批量删除 ({selectedHistoryIds.size})
+            </button>
           </div>
         )}
 
-        {/* 图片网格或历史记录 */}
+        {/* 图片网格或历史记录列表 */}
         {activeTab === 'history' ? (
           historyLoading ? (
-            <div className="flex justify-center items-center py-20"><i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i></div>
+            <div className="flex justify-center items-center py-20">
+              <i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i>
+            </div>
           ) : historyList.length === 0 ? (
-            <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 rounded-xl"><i className="fas fa-inbox text-5xl text-gray-400 mb-3"></i><p className="text-gray-500">暂无上传记录</p></div>
+            <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 rounded-xl">
+              <i className="fas fa-inbox text-5xl text-gray-400 mb-3"></i>
+              <p className="text-gray-500">暂无上传记录</p>
+            </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {historyList.map((record) => (
-                <div key={record.id} className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm relative group">
-                  <input type="checkbox" checked={selectedHistoryIds.has(record.id)} onChange={(e) => toggleSelectHistory(record.id, e)} onClick={(e) => e.stopPropagation()} className="absolute top-3 left-3 z-10 w-4 h-4 rounded border-gray-300 bg-white/80 checked:bg-teal-500 cursor-pointer" />
+                <div
+                  key={record.id}
+                  className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm relative group"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedHistoryIds.has(record.id)}
+                    onChange={(e) => toggleSelectHistory(record.id, e)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute top-3 left-3 z-10 w-4 h-4 rounded border-gray-300 bg-white/80 checked:bg-teal-500 cursor-pointer"
+                  />
                   <div className="flex items-center justify-between flex-wrap gap-2 ml-6">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-medium text-gray-800 dark:text-white truncate">{record.filename}</span><span className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">{record.folder === 'wallpaper' || record.folder === 'sh' ? '横屏' : '竖屏'}</span></div>
-                      <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">{formatTime(record.time)}</div>
-                      <code className="text-xs text-gray-500 dark:text-gray-400 mt-1 block truncate">{record.url}</code>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-gray-800 dark:text-white truncate">
+                          {record.filename}
+                        </span>
+                        <span className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                          {record.folder === 'wallpaper' || record.folder === 'sh' ? '横屏' : '竖屏'}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        {formatTime(record.time)}
+                      </div>
+                      <code className="text-xs text-gray-500 dark:text-gray-400 mt-1 block truncate">
+                        {record.url}
+                      </code>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => handleCopy(record.url, record.id)} className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"><i className={copiedId === record.id ? "fas fa-check text-green-500" : "fas fa-copy text-gray-500"}></i></button>
-                      <a href={record.url} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"><i className="fas fa-external-link-alt text-gray-500"></i></a>
-                      <button onClick={() => handleDeleteHistory(record.id)} className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition"><i className="fas fa-trash-alt text-red-400"></i></button>
+                      <button
+                        onClick={() => handleCopy(record.url, record.id)}
+                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                        title="复制链接"
+                      >
+                        {copiedId === record.id ? (
+                          <i className="fas fa-check text-green-500"></i>
+                        ) : (
+                          <i className="fas fa-copy text-gray-500"></i>
+                        )}
+                      </button>
+                      <a
+                        href={record.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                        title="打开图片"
+                      >
+                        <i className="fas fa-external-link-alt text-gray-500"></i>
+                      </a>
+                      <button
+                        onClick={() => handleDeleteHistory(record.id)}
+                        className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition"
+                        title="删除记录"
+                      >
+                        <i className="fas fa-trash-alt text-red-400"></i>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -413,12 +705,23 @@ export default function Manage() {
             </div>
           )
         ) : loading ? (
-          <div className="flex justify-center items-center py-20"><i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i></div>
+          <div className="flex justify-center items-center py-20">
+            <i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i>
+          </div>
         ) : paginatedImages.length === 0 ? (
           <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 rounded-xl">
             <i className="fas fa-folder-open text-5xl text-gray-400 mb-3"></i>
-            <p className="text-gray-500">{searchKeyword ? `没有找到 "${searchKeyword}" 相关的图片` : '暂无图片'}</p>
-            {searchKeyword && <button onClick={() => setSearchKeyword('')} className="inline-block mt-4 text-blue-500 hover:text-blue-600"><i className="fas fa-undo mr-1"></i>清除搜索</button>}
+            <p className="text-gray-500">
+              {searchKeyword ? `没有找到 "${searchKeyword}" 相关的图片` : '暂无图片'}
+            </p>
+            {searchKeyword && (
+              <button
+                onClick={() => setSearchKeyword('')}
+                className="inline-block mt-4 text-blue-500 hover:text-blue-600"
+              >
+                <i className="fas fa-undo mr-1"></i>清除搜索
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -427,19 +730,64 @@ export default function Manage() {
                 const proxyUrl = getProxyUrl(img)
                 const aspectClass = getImageAspect(img)
                 return (
-                  <div key={img.sha || idx} className="group bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-600 transition-all hover:scale-105 hover:shadow-xl relative">
-                    <input type="checkbox" checked={selectedImages.has(img.name)} onChange={(e) => toggleSelect(img.name, e)} onClick={(e) => e.stopPropagation()} className="absolute top-2 left-2 z-10 w-3.5 h-3.5 rounded border-gray-300 bg-white/80 checked:bg-blue-500 cursor-pointer" />
-                    <div className={`${aspectClass} bg-gray-100 dark:bg-gray-900 overflow-hidden cursor-pointer relative`} onClick={() => setPreviewImage(img)}>
-                      <img src={img.url} alt={img.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" loading="lazy" onError={(e) => { e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x="50" y="50" text-anchor="middle" dy=".3em" fill="%23ccc">?</text></svg>' }} />
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center"><i className="fas fa-search-plus text-white text-sm"></i></div>
+                  <div
+                    key={img.sha || idx}
+                    className="group bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-600 transition-all hover:scale-105 hover:shadow-xl relative"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedImages.has(img.name)}
+                      onChange={(e) => toggleSelect(img.name, e)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute top-2 left-2 z-10 w-3.5 h-3.5 rounded border-gray-300 bg-white/80 checked:bg-blue-500 cursor-pointer"
+                    />
+                    <div
+                      className={`${aspectClass} bg-gray-100 dark:bg-gray-900 overflow-hidden cursor-pointer relative`}
+                      onClick={() => setPreviewImage(img)}
+                    >
+                      <img
+                        src={img.url}
+                        alt={img.name}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                        loading="lazy"
+                        onError={(e) => {
+                          e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x="50" y="50" text-anchor="middle" dy=".3em" fill="%23ccc">?</text></svg>'
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                        <i className="fas fa-search-plus text-white text-sm"></i>
+                      </div>
                     </div>
                     <div className="p-1.5">
-                      <p className="text-gray-600 dark:text-gray-300 text-[9px] lg:text-[10px] truncate" title={img.name}>{img.name}</p>
+                      <p className="text-gray-600 dark:text-gray-300 text-[9px] lg:text-[10px] truncate" title={img.name}>
+                        {img.name}
+                      </p>
                       <div className="flex items-center justify-between mt-1">
-                        <span className="text-[8px] text-gray-400">{img.source === 'external' ? '🌐' : '📦'}</span>
+                        <span className="text-[8px] text-gray-400">
+                          {img.source === 'external' ? '🌐' : '📦'}
+                        </span>
                         <div className="flex gap-0.5">
-                          <button onClick={(e) => handleCopy(proxyUrl, img.name, e)} className="text-gray-400 hover:text-green-500 transition text-[9px] px-1 py-0.5 rounded"><i className={copiedId === img.name ? "fas fa-check" : "fas fa-copy"}></i></button>
-                          <button onClick={(e) => handleDelete(img, activeTab, e)} disabled={deletingId === img.name} className="text-gray-400 hover:text-red-500 transition text-[9px] px-1 py-0.5 rounded disabled:opacity-30"><i className={deletingId === img.name ? "fas fa-spinner fa-pulse" : "fas fa-trash-alt"}></i></button>
+                          <button
+                            onClick={(e) => handleCopy(proxyUrl, img.name, e)}
+                            className="text-gray-400 hover:text-green-500 transition text-[9px] px-1 py-0.5 rounded"
+                          >
+                            {copiedId === img.name ? (
+                              <i className="fas fa-check"></i>
+                            ) : (
+                              <i className="fas fa-copy"></i>
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => handleDelete(img, activeTab, e)}
+                            disabled={deletingId === img.name}
+                            className="text-gray-400 hover:text-red-500 transition text-[9px] px-1 py-0.5 rounded disabled:opacity-30"
+                          >
+                            {deletingId === img.name ? (
+                              <i className="fas fa-spinner fa-pulse"></i>
+                            ) : (
+                              <i className="fas fa-trash-alt"></i>
+                            )}
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -447,13 +795,41 @@ export default function Manage() {
                 )
               })}
             </div>
+
+            {/* 底部分页 */}
             {totalPages > 1 && (
               <div className="flex justify-center gap-1 sm:gap-2 mt-6">
-                <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm">首页</button>
-                <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm">上一页</button>
-                <span className="px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-white text-sm">{currentPage} / {totalPages}</span>
-                <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm">下一页</button>
-                <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm">末页</button>
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm"
+                >
+                  首页
+                </button>
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm"
+                >
+                  上一页
+                </button>
+                <span className="px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-white text-sm">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm"
+                >
+                  下一页
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm"
+                >
+                  末页
+                </button>
               </div>
             )}
           </>
@@ -462,16 +838,67 @@ export default function Manage() {
 
       {/* 图片预览弹窗 */}
       {previewImage && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={() => setPreviewImage(null)}>
-          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
-            <img src={previewImage.url} alt={previewImage.name} className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl" />
-            <button onClick={(e) => { e.stopPropagation(); setPreviewImage(null) }} className="absolute -top-12 right-0 text-white/70 hover:text-white text-2xl"><i className="fas fa-times-circle"></i></button>
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="relative max-w-[90vw] max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={previewImage.url}
+              alt={previewImage.name}
+              className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl"
+            />
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setPreviewImage(null)
+              }}
+              className="absolute -top-12 right-0 text-white/70 hover:text-white text-2xl"
+            >
+              <i className="fas fa-times-circle"></i>
+            </button>
             <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-3 rounded-b-2xl">
-              <p className="text-white text-sm truncate"><i className="fas fa-image mr-2"></i>{previewImage.name}</p>
+              <p className="text-white text-sm truncate">
+                <i className="fas fa-image mr-2"></i>
+                {previewImage.name}
+              </p>
               <div className="flex justify-end gap-3 mt-2">
-                <a href={getProxyUrl(previewImage)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-white/70 hover:text-blue-400 text-sm flex items-center gap-1"><i className="fas fa-external-link-alt"></i>打开</a>
-                <button onClick={(e) => { e.stopPropagation(); copyToClipboard(getProxyUrl(previewImage)); setCopiedId(previewImage.name); setTimeout(() => setCopiedId(null), 2000) }} className="text-white/70 hover:text-green-400 text-sm flex items-center gap-1"><i className="fas fa-copy"></i>复制链接</button>
-                <button onClick={(e) => { e.stopPropagation(); handleDelete(previewImage, activeTab, e); setPreviewImage(null) }} className="text-white/70 hover:text-red-400 text-sm flex items-center gap-1"><i className="fas fa-trash-alt"></i>删除</button>
+                <a
+                  href={getProxyUrl(previewImage)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-white/70 hover:text-blue-400 text-sm flex items-center gap-1"
+                >
+                  <i className="fas fa-external-link-alt"></i>
+                  打开
+                </a>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    copyToClipboard(getProxyUrl(previewImage))
+                    setCopiedId(previewImage.name)
+                    setTimeout(() => setCopiedId(null), 2000)
+                  }}
+                  className="text-white/70 hover:text-green-400 text-sm flex items-center gap-1"
+                >
+                  <i className="fas fa-copy"></i>
+                  复制链接
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleDelete(previewImage, activeTab, e)
+                    setPreviewImage(null)
+                  }}
+                  className="text-white/70 hover:text-red-400 text-sm flex items-center gap-1"
+                >
+                  <i className="fas fa-trash-alt"></i>
+                  删除
+                </button>
               </div>
             </div>
           </div>
