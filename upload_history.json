@@ -1,5 +1,12 @@
 [
   {
+    "id": 1781618513358,
+    "filename": "20260616_sh1.jpg",
+    "url": "https://cf-pico.pages.dev/api/image?path=wallpaper/20260616_sh1.jpg",
+    "folder": "wallpaper",
+    "time": "2026-06-16T14:01:53.358Z"
+  },
+  {
     "id": "1781572983000-random2.webp",
     "filename": "random2.webp",
     "url": "https://pico-beige.vercel.app/api/image?path=cover/random2.webp",
