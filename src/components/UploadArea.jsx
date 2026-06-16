@@ -1,12 +1,14 @@
+// src/components/UploadArea.jsx - 添加存储方式选择
 import React, { useRef, useState, useEffect } from 'react'
 
 export default function UploadArea({ onUpload, isLoading, convertToWebp, onConvertChange }) {
   const [dragOver, setDragOver] = useState(false)
   const [folder, setFolder] = useState('wallpaper')
   const [bgRefresh, setBgRefresh] = useState(false)
+  const [storageType, setStorageType] = useState('github') // 'github' 或 'r2'
   const fileInputRef = useRef(null)
 
-  // 文件夹配置：key 是实际存储名，label 是显示名称，icon 是图标
+  // 文件夹选项
   const folderOptions = [
     { key: 'wallpaper', label: '横屏图片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
     { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
@@ -17,7 +19,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const refreshBackground = () => {
     setBgRefresh(true)
     setTimeout(() => setBgRefresh(false), 200)
-    
+
     const img = new Image()
     const url = '/api/wallpaper?t=' + Date.now() + '&r=' + Math.random()
     img.onload = () => {
@@ -29,7 +31,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const handleFiles = (files) => {
     if (!files || files.length === 0) return
     console.log('UploadArea 收到文件数量:', files.length)
-    onUpload(files, folder)
+    onUpload(files, folder, storageType)
   }
 
   const handleFileSelect = (e) => {
@@ -53,7 +55,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     const handlePaste = (e) => {
       const items = e.clipboardData?.items
       if (!items) return
-      
+
       const imageFiles = []
       for (let i = 0; i < items.length; i++) {
         const item = items[i]
@@ -64,11 +66,11 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           }
         }
       }
-      
+
       if (imageFiles.length > 0) {
         e.preventDefault()
         handleFiles(imageFiles)
-        
+
         const toast = document.createElement('div')
         toast.innerHTML = '<i class="fas fa-paste mr-1"></i> 检测到粘贴的图片，开始上传'
         toast.className = 'fixed bottom-20 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm z-50 shadow-lg animate-fade-in-up'
@@ -76,12 +78,11 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         setTimeout(() => toast.remove(), 2000)
       }
     }
-    
+
     window.addEventListener('paste', handlePaste)
     return () => window.removeEventListener('paste', handlePaste)
   }, [folder])
 
-  // 获取当前选中的文件夹配置
   const currentFolder = folderOptions.find(opt => opt.key === folder) || folderOptions[0]
 
   return (
@@ -105,8 +106,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             <i className="fas fa-sync-alt text-xs"></i>
             换背景
           </button>
-          
-          {/* 动态渲染四个文件夹按钮 */}
+
+          {/* 文件夹按钮 */}
           {folderOptions.map((opt) => (
             <button
               key={opt.key}
@@ -124,9 +125,47 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         </div>
       </div>
 
+      {/* 存储方式选择 */}
+      <div className="flex justify-center items-center mb-4">
+        <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm rounded-lg px-4 py-2">
+          <span className="text-white/70 text-sm">
+            <i className="fas fa-database mr-1"></i>
+            存储方式：
+          </span>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="storageType"
+              value="github"
+              checked={storageType === 'github'}
+              onChange={(e) => setStorageType(e.target.value)}
+              className="w-3.5 h-3.5 accent-blue-500"
+            />
+            <span className="text-white/80 text-sm">
+              <i className="fab fa-github mr-1"></i>
+              GitHub
+            </span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="storageType"
+              value="r2"
+              checked={storageType === 'r2'}
+              onChange={(e) => setStorageType(e.target.value)}
+              className="w-3.5 h-3.5 accent-orange-500"
+            />
+            <span className="text-white/80 text-sm">
+              <i className="fas fa-cloud-upload-alt mr-1"></i>
+              Cloudflare R2
+            </span>
+          </label>
+        </div>
+      </div>
+
       {/* WebP 转换复选框 */}
       <div className="flex justify-center items-center mb-4">
-        <label 
+        <label
           className="flex items-center gap-2 cursor-pointer group"
           onClick={(e) => e.stopPropagation()}
         >
@@ -134,8 +173,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             type="checkbox"
             checked={convertToWebp || false}
             onChange={(e) => onConvertChange?.(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 bg-white/80 
-                       checked:bg-blue-500 checked:border-blue-500 
+            className="w-4 h-4 rounded border-gray-300 bg-white/80
+                       checked:bg-blue-500 checked:border-blue-500
                        focus:ring-2 focus:ring-blue-400 focus:ring-offset-0
                        cursor-pointer"
           />
@@ -167,16 +206,31 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
           <i className="fas fa-paste mr-1"></i>也可直接 Ctrl+V 粘贴截图上传
         </p>
-        
+
+        {/* 当前存储方式提示 */}
+        <p className="text-xs mt-2 flex items-center justify-center gap-1">
+          {storageType === 'github' ? (
+            <span className="text-blue-400">
+              <i className="fab fa-github mr-1"></i>
+              将存储到 GitHub 私有仓库
+            </span>
+          ) : (
+            <span className="text-orange-400">
+              <i className="fas fa-cloud-upload-alt mr-1"></i>
+              将存储到 Cloudflare R2（CDN 加速）
+            </span>
+          )}
+        </p>
+
         {convertToWebp && (
           <p className="text-xs text-green-600 dark:text-green-400 mt-2">
             <i className="fas fa-exchange-alt mr-1"></i>
             已开启 WebP 转换，上传后将自动转换格式
           </p>
         )}
-        
+
         {/* 压缩质量选择 */}
-        <div 
+        <div
           className="flex justify-center items-center mt-3"
           onClick={(e) => e.stopPropagation()}
         >
@@ -192,7 +246,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
                 const quality = parseInt(e.target.value)
                 localStorage.setItem('compressQuality', quality)
               }}
-              className="bg-white text-gray-800 dark:bg-white/20 dark:text-white text-sm rounded-lg px-3 py-1.5 border border-gray-300 dark:border-white/30 
+              className="bg-white text-gray-800 dark:bg-white/20 dark:text-white text-sm rounded-lg px-3 py-1.5 border border-gray-300 dark:border-white/30
                          focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer
                          hover:bg-gray-100 dark:hover:bg-white/30 transition"
             >
@@ -202,7 +256,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             </select>
           </div>
         </div>
-        
+
         <p className="text-xs text-blue-500 mt-3">
           <i className="fas fa-folder-open mr-1"></i>
           当前上传到: {currentFolder.label}
