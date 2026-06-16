@@ -1,5 +1,5 @@
 // functions/api/[[path]].js - Cloudflare Pages API 完整入口
-// 支持：stats, random, wallpaper, cover, list, image, upload
+// 支持：stats, random, wallpaper, cover, list, image, upload, history
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
@@ -500,9 +500,15 @@ async function deleteHistory(request, env) {
 
 export async function onRequest(context) {
   const { request, env, params } = context
-  const url = new URL(request.url)
-  const path = params.path || ''
   const method = request.method
+
+  // 处理路径参数（[[path]] 可能是数组）
+  let path = ''
+  if (Array.isArray(params.path)) {
+    path = params.path.join('/')
+  } else {
+    path = params.path || ''
+  }
 
   console.log(`API 请求: ${method} ${path}`)
 
