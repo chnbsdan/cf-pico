@@ -172,6 +172,7 @@ async function handleList(env) {
     if (bucket) {
       try {
         const objects = await bucket.list({ prefix: `${folder}/` })
+        console.log(`R2 list for ${folder}:`, objects.objects.length)
         for (const obj of objects.objects) {
           const key = obj.key
           const name = key.split('/').pop()
