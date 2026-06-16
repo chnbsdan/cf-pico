@@ -1,10 +1,9 @@
-# wrangler.toml - Cloudflare Pages 配置（修复版）
+# wrangler.toml - 适用于 Cloudflare Pages 的正确格式
 
 name = "cf-pico"
 pages_build_output_dir = "dist"
-node_compat = true
+compatibility_date = "2024-06-01"
 
-# 构建命令
 [build]
 command = "npm run build"
 
