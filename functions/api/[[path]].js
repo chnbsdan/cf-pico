@@ -1,6 +1,6 @@
 // functions/api/[[path]].js - Cloudflare Pages API 完整入口
-// 支持：stats, random, wallpaper, cover, list, image, upload, history
-// 上传支持 GitHub 和 R2 两种存储方式
+// 支持：stats, random, wallpaper, cover, list, image, upload, history, admin/delete
+// 支持 GitHub 和 R2 双存储
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
@@ -9,7 +9,7 @@ const GITHUB_REPO = 'cf-pico'
 // 工具函数
 // ============================================================
 
-// 获取文件夹图片列表
+// 获取文件夹图片列表（从 GitHub）
 async function getFolderImages(folder, env) {
   const token = env.GITHUB_TOKEN
   if (!token) {
@@ -40,7 +40,7 @@ async function getFolderImages(folder, env) {
   }
 }
 
-// 获取所有文件夹的图片
+// 获取所有文件夹的图片（从 GitHub）
 async function getAllImages(env) {
   const folders = ['wallpaper', 'cover', 'sh', 'sd']
   let allImages = []
@@ -131,24 +131,75 @@ async function handleCover(request, env) {
   })
 }
 
-// GET /api/list
+// GET /api/list - 从 GitHub 和 R2 同时获取图片列表
 async function handleList(env) {
   const folders = ['wallpaper', 'cover', 'sh', 'sd']
+  const bucket = env.IMAGES_BUCKET
+  const token = env.GITHUB_TOKEN
+
   const results = {}
   let total = 0
+
   for (const folder of folders) {
-    const images = await getFolderImages(folder, env)
-    results[folder] = images.map(f => ({
-      name: f.name,
-      url: f.download_url,
-      path: f.path,
-      sha: f.sha,
-      size: f.size,
-      folder: folder,
-      source: 'github'
-    }))
+    const images = []
+    const seen = new Set()
+
+    // 1. 从 GitHub 获取
+    if (token) {
+      try {
+        const githubImages = await getFolderImages(folder, env)
+        for (const img of githubImages) {
+          const key = `${folder}/${img.name}`
+          if (!seen.has(key)) {
+            seen.add(key)
+            images.push({
+              name: img.name,
+              url: `https://cf-pico.pages.dev/api/image?path=${key}`,
+              path: key,
+              sha: img.sha,
+              size: img.size,
+              folder: folder,
+              source: 'github'
+            })
+          }
+        }
+      } catch (e) {
+        console.error(`GitHub list error for ${folder}:`, e)
+      }
+    }
+
+    // 2. 从 R2 获取
+    if (bucket) {
+      try {
+        const objects = await bucket.list({ prefix: `${folder}/` })
+        for (const obj of objects.objects) {
+          const key = obj.key
+          const name = key.split('/').pop()
+          const ext = name.split('.').pop().toLowerCase()
+          if (!['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(ext)) continue
+          if (name === '.keep') continue
+          if (!seen.has(key)) {
+            seen.add(key)
+            images.push({
+              name: name,
+              url: `https://cf-pico.pages.dev/api/image?path=${key}`,
+              path: key,
+              sha: obj.etag || '',
+              size: obj.size || 0,
+              folder: folder,
+              source: 'r2'
+            })
+          }
+        }
+      } catch (e) {
+        console.error(`R2 list error for ${folder}:`, e)
+      }
+    }
+
+    results[folder] = images
     total += images.length
   }
+
   return new Response(JSON.stringify({
     total: total,
     folders: results
@@ -529,6 +580,85 @@ async function deleteHistory(request, env) {
   }
 }
 
+// POST /api/admin/delete - 删除图片（支持 GitHub 和 R2）
+async function handleDelete(request, env) {
+  const bucket = env.IMAGES_BUCKET
+  const token = env.GITHUB_TOKEN
+
+  try {
+    const body = await request.json()
+    const { filename, folder, sha, source } = body
+
+    if (!filename || !folder) {
+      return new Response(JSON.stringify({ error: 'Missing filename or folder' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    let deleted = false
+
+    // 如果指定了 source 为 r2，或者同时删除 R2
+    if (source === 'r2' || !source) {
+      if (bucket) {
+        try {
+          const key = `${folder}/${filename}`
+          await bucket.delete(key)
+          deleted = true
+          console.log(`R2 deleted: ${key}`)
+        } catch (e) {
+          console.error('R2 delete error:', e)
+        }
+      }
+    }
+
+    // 如果指定了 source 为 github，或者同时删除 GitHub
+    if (source === 'github' || !source) {
+      if (token && sha) {
+        try {
+          const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}/${filename}`
+          const response = await fetch(apiUrl, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+              'User-Agent': 'Cloudflare-Pages'
+            },
+            body: JSON.stringify({
+              message: `Delete ${filename}`,
+              sha: sha,
+              branch: 'main'
+            })
+          })
+          if (response.ok) {
+            deleted = true
+            console.log(`GitHub deleted: ${folder}/${filename}`)
+          }
+        } catch (e) {
+          console.error('GitHub delete error:', e)
+        }
+      }
+    }
+
+    if (deleted) {
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    } else {
+      return new Response(JSON.stringify({ error: 'Delete failed' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+  } catch (error) {
+    console.error('Delete error:', error)
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+}
+
 // ============================================================
 // 主入口
 // ============================================================
@@ -564,6 +694,11 @@ export async function onRequest(context) {
   // GET /api/history
   if (path === 'history' && method === 'GET') {
     return handleHistory(request, env)
+  }
+
+  // POST /api/admin/delete
+  if (path === 'admin/delete' && method === 'POST') {
+    return handleDelete(request, env)
   }
 
   // GET 其他接口
