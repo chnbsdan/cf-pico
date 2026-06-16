@@ -5,7 +5,7 @@ import ApiSection from './components/ApiSection'
 import UploadArea from './components/UploadArea'
 import UploadResult from './components/UploadResult'
 import Footer from './components/Footer'
-import { fetchStats, uploadDirect, addHistoryRecord } from './lib/api'
+import { fetchStats, uploadImage, addHistoryRecord } from './lib/api'
 import Manage from './pages/Manage'
 import ApiDocs from './pages/ApiDocs'
 import ThemeToggle from './components/ThemeToggle'
@@ -130,11 +130,9 @@ function App() {
     return new Blob([u8arr], { type: 'image/jpeg' })
   }
 
-  // 修改 handleUpload 函数签名，添加 storage 参数
-  const handleUpload = async (files, folder, storage = 'github') => {
+  const handleUpload = async (files, folder) => {
     console.log('===== App.jsx handleUpload =====')
     console.log('收到文件数量:', files.length)
-    console.log('存储方式:', storage)
 
     setIsUploading(true)
     setUploadResults([])
@@ -174,8 +172,7 @@ function App() {
 
       while (retry > 0 && !uploaded) {
         try {
-          // 传递存储方式参数
-          const data = await uploadDirect(file, folder, storage)
+          const data = await uploadImage(file, folder)
 
           if (data.success) {
             const proxyUrl = `${window.location.origin}/api/image?path=${data.folder}/${data.filename}`
@@ -188,7 +185,6 @@ function App() {
             })
             setUploadResults([...allResults])
 
-            // 保存到历史记录
             try {
               await addHistoryRecord(data.filename, proxyUrl, data.folder)
               console.log(`📝 已保存历史记录: ${data.filename}`)
