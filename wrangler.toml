@@ -1,0 +1,9 @@
+cat > wrangler.toml << 'EOF'
+name = "cf-pico3"
+compatibility_date = "2026-06-16"
+
+[vars]
+GITHUB_TOKEN = "你的GitHub_Token"
+GITHUB_USER = "chnbsdan"
+GITHUB_REPO = "cf-pico"
+EOF
