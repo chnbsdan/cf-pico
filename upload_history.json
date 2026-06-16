@@ -1,5 +1,12 @@
 [
   {
+    "id": "1781572983000-random2.webp",
+    "filename": "random2.webp",
+    "url": "https://pico-beige.vercel.app/api/image?path=cover/random2.webp",
+    "folder": "cover",
+    "time": "2026-06-16T09:23:03+08:00"
+  },
+  {
     "id": 1781572832327,
     "filename": "20260616_bb02.jpg",
     "url": "https://pico.hangdn.com/api/image?path=sd/20260616_bb02.jpg",
