@@ -1,0 +1,30 @@
+# wrangler.toml - Cloudflare Pages 配置文件
+# 此文件用于在 Cloudflare Pages 上部署时配置构建选项和环境变量
+
+name = "cf-pico"
+main = "src/index.html"
+node_compat = true
+
+# 构建配置
+[build]
+command = "npm run build"
+cwd = "/"
+watch_dir = "src"
+
+# 生产环境配置
+[env.production]
+routes = [
+  { pattern = "cf-pico.pages.dev", custom_domain = false }
+]
+
+# 环境变量（敏感信息请在 Cloudflare Dashboard 中配置，不要提交到仓库）
+[env.production.vars]
+GITHUB_USER = "chnbsdan"
+GITHUB_REPO = "cf-pico"
+R2_BUCKET = "pcbed-images"
+# GITHUB_TOKEN 请在 Dashboard 中配置
+# R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY 请在 Dashboard 中配置
+
+# 预览环境配置
+[env.preview]
+vars = { GITHUB_USER = "chnbsdan", GITHUB_REPO = "cf-pico", R2_BUCKET = "pcbed-images-preview" }
