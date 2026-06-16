@@ -1,11 +1,13 @@
-// api/cover.js - 仅返回 cover 文件夹的随机图片 + cover 分类的外部图片
+// api/cover.js - 支持 folder 参数，保留外部图片功能
 const GITHUB_USER = process.env.GITHUB_USER || 'chnbsdan'
-const GITHUB_REPO = process.env.GITHUB_REPO || 'imgbed-storage'
+const GITHUB_REPO = process.env.GITHUB_REPO || 'Pico'
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN
-const FOLDER = 'sd'
 
-// 从 GitHub 存储仓库读取 cover 分类的外部图片
-async function getExternalImages() {
+// 默认文件夹
+const DEFAULT_FOLDER = 'cover'
+
+// 获取外部图片（根据文件夹分类）
+async function getExternalImages(folder) {
   try {
     const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/external.json`
     const response = await fetch(apiUrl, {
@@ -17,8 +19,11 @@ async function getExternalImages() {
     })
     if (response.ok) {
       const data = await response.json()
-      // 只返回 cover 分类的外部图片
-      return data.cover || []
+      if (folder === 'wallpaper') return data.wallpaper || []
+      if (folder === 'cover') return data.cover || []
+      if (folder === 'sh') return data.sh || []
+      if (folder === 'sd') return data.sd || []
+      return []
     }
   } catch (error) {
     console.error('Failed to fetch external images:', error)
@@ -47,11 +52,19 @@ export default async function handler(req, res) {
     return res.status(200).end()
   }
   
+  // 通过 folder 参数选择文件夹
+  const { folder } = req.query
+  let targetFolder = DEFAULT_FOLDER
+  
+  if (folder === 'sh') targetFolder = 'sh'
+  if (folder === 'sd') targetFolder = 'sd'
+  if (folder === 'wallpaper') targetFolder = 'wallpaper'
+  
   try {
     let allImages = []
     
-    // 1. 获取 cover 文件夹的图片
-    const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${FOLDER}`
+    // 1. 获取目标文件夹的图片
+    const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${targetFolder}`
     const response = await fetch(apiUrl, {
       headers: {
         'Authorization': `Bearer ${GITHUB_TOKEN}`,
@@ -63,14 +76,14 @@ export default async function handler(req, res) {
       const files = await response.json()
       if (Array.isArray(files)) {
         const images = files
-          .filter(f => f.name && f.name.match(/\.(jpg|jpeg|png|webp|gif|avif)$/i))
+          .filter(f => f.name && f.name.match(/\.(jpg|jpeg|png|webp|gif|avif)$/i) && f.name !== '.keep')
           .map(f => f.download_url)
         allImages.push(...images)
       }
     }
     
-    // 2. 获取 cover 分类的外部图片
-    const externalImages = await getExternalImages()
+    // 2. 获取对应分类的外部图片
+    const externalImages = await getExternalImages(targetFolder)
     for (const url of externalImages) {
       if (await isImageValid(url)) {
         allImages.push(url)
@@ -78,7 +91,7 @@ export default async function handler(req, res) {
     }
     
     if (allImages.length === 0) {
-      return res.status(404).send('No images found')
+      return res.status(404).send(`No images found in ${targetFolder} folder`)
     }
     
     const randomUrl = allImages[Math.floor(Math.random() * allImages.length)]
