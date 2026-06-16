@@ -21,7 +21,7 @@ function App() {
   if (isManagePage) {
     return <Manage />
   }
-  
+
   const isApiDocsPage = typeof window !== 'undefined' && window.location.pathname === '/docs'
   if (isApiDocsPage) {
     return <ApiDocs />
@@ -65,19 +65,19 @@ function App() {
           canvas.height = img.height
           const ctx = canvas.getContext('2d')
           ctx.drawImage(img, 0, 0)
-          
+
           let savedQuality = localStorage.getItem('compressQuality')
           let quality = savedQuality ? parseInt(savedQuality) / 100 : 0.85
-          
+
           let dataUrl = canvas.toDataURL('image/jpeg', quality)
           let size = dataURLToBlob(dataUrl).size
-          
+
           while (size > 3 * 1024 * 1024 && quality > 0.6) {
             quality -= 0.05
             dataUrl = canvas.toDataURL('image/jpeg', quality)
             size = dataURLToBlob(dataUrl).size
           }
-          
+
           const name = file.name.replace(/\.[^/.]+$/, '')
           const compressed = new File([dataURLToBlob(dataUrl)], `${name}.jpg`, { type: 'image/jpeg' })
           resolve(compressed)
@@ -130,26 +130,28 @@ function App() {
     return new Blob([u8arr], { type: 'image/jpeg' })
   }
 
-  const handleUpload = async (files, folder) => {
+  // 修改 handleUpload 函数签名，添加 storage 参数
+  const handleUpload = async (files, folder, storage = 'github') => {
     console.log('===== App.jsx handleUpload =====')
     console.log('收到文件数量:', files.length)
-    
+    console.log('存储方式:', storage)
+
     setIsUploading(true)
     setUploadResults([])
-    
+
     const fileArray = Array.from(files)
     const allResults = []
-    
+
     for (let i = 0; i < fileArray.length; i++) {
       let file = fileArray[i]
       const ext = file.name.split('.').pop().toLowerCase()
-      
+
       if (!['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(ext)) {
         allResults.push({ success: false, filename: file.name, error: '格式不支持', folder })
         setUploadResults([...allResults])
         continue
       }
-      
+
       // WebP 转换（前端处理）
       if (convertToWebp && !['gif', 'avif'].includes(ext)) {
         try {
@@ -159,57 +161,67 @@ function App() {
           console.error('WebP 转换失败:', err)
         }
       }
-      
+
       // 压缩处理（前端处理）
       if (file.size > 5 * 1024 * 1024 && file.type !== 'image/webp') {
         try {
           file = await compressImage(file)
         } catch (e) {}
       }
-      
+
       let retry = 3
       let uploaded = false
-      
+
       while (retry > 0 && !uploaded) {
         try {
-          // 使用直传，不经过 Vercel
-          const data = await uploadDirect(file, folder)
+          // 传递存储方式参数
+          const data = await uploadDirect(file, folder, storage)
+
           if (data.success) {
-  // 生成代理 URL
-  const proxyUrl = `${window.location.origin}/api/image?path=${data.folder}/${data.filename}`
-  
-  allResults.push({ success: true, filename: data.filename, url: proxyUrl, folder: data.folder })
-  setUploadResults([...allResults])
-  
-  // 保存到历史记录（使用代理 URL）
-  try {
-    await addHistoryRecord(data.filename, proxyUrl, data.folder)
-    console.log(`📝 已保存历史记录: ${data.filename}`)
-  } catch (err) {
-    console.error('保存历史记录失败:', err)
-  }
-  
-  uploaded = true
-} else {
+            const proxyUrl = `${window.location.origin}/api/image?path=${data.folder}/${data.filename}`
+
+            allResults.push({
+              success: true,
+              filename: data.filename,
+              url: proxyUrl,
+              folder: data.folder
+            })
+            setUploadResults([...allResults])
+
+            // 保存到历史记录
+            try {
+              await addHistoryRecord(data.filename, proxyUrl, data.folder)
+              console.log(`📝 已保存历史记录: ${data.filename}`)
+            } catch (err) {
+              console.error('保存历史记录失败:', err)
+            }
+
+            uploaded = true
+          } else {
             throw new Error(data.error || '上传失败')
           }
         } catch (err) {
           retry--
           if (retry === 0) {
-            allResults.push({ success: false, filename: file.name, error: err.message, folder })
+            allResults.push({
+              success: false,
+              filename: file.name,
+              error: err.message,
+              folder
+            })
             setUploadResults([...allResults])
           } else {
             await new Promise(r => setTimeout(r, 1000))
           }
         }
       }
-      
+
       if (i < fileArray.length - 1) await new Promise(r => setTimeout(r, 500))
     }
-    
+
     console.log('===== 上传完成 =====')
     console.log('总共上传了', allResults.length, '张图片')
-    
+
     setIsUploading(false)
     loadStats()
   }
@@ -218,17 +230,17 @@ function App() {
     <div className="min-h-screen py-6 px-4 relative">
       {/* 右上角导航栏 */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-        <a 
-          href="/manage" 
-          className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-1200 dark:text-white text-sm flex items-center gap-2"
+        <a
+          href="/manage"
+          className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-700 dark:text-white text-sm flex items-center gap-2"
           title="管理后台"
         >
           <i className="fas fa-cog"></i>
           <span className="hidden sm:inline">管理</span>
         </a>
-        <a 
-          href="/docs" 
-          className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-1200 dark:text-white text-sm flex items-center gap-2"
+        <a
+          href="/docs"
+          className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-700 dark:text-white text-sm flex items-center gap-2"
           title="API 文档"
         >
           <i className="fas fa-book"></i>
@@ -236,11 +248,11 @@ function App() {
         </a>
         <ThemeToggle />
       </div>
-      
+
       {/* 左上角 LOGO */}
-      <a 
-        href="https://github.com/chnbsdan/pcbed" 
-        target="_blank" 
+      <a
+        href="https://github.com/chnbsdan/cf-pico"
+        target="_blank"
         rel="noopener noreferrer"
         className="fixed top-1 left-1 z-50"
         title="GitHub 仓库"
@@ -250,20 +262,20 @@ function App() {
 
       <div className="max-w-4xl mx-auto">
         <Header />
-        
+
         <div className="space-y-4 backdrop-blur-md bg-white/5 rounded-xl p-4 shadow-xl border border-white/30">
           <StatsCard stats={stats} />
           <ApiSection />
-          <UploadArea 
-            onUpload={handleUpload} 
-            isLoading={isUploading} 
+          <UploadArea
+            onUpload={handleUpload}
+            isLoading={isUploading}
             onRefreshBg={setRandomBackground}
             convertToWebp={convertToWebp}
             onConvertChange={setConvertToWebp}
           />
           <UploadResult results={uploadResults} />
         </div>
-        
+
         <Footer />
       </div>
     </div>
