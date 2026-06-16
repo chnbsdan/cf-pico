@@ -129,9 +129,10 @@ function App() {
     return new Blob([u8arr], { type: 'image/jpeg' })
   }
 
-  const handleUpload = async (files, folder) => {
+  const handleUpload = async (files, folder, storage = 'github') => {
     console.log('===== App.jsx handleUpload =====')
     console.log('收到文件数量:', files.length)
+    console.log('存储方式:', storage)
 
     setIsUploading(true)
     setUploadResults([])
@@ -169,7 +170,7 @@ function App() {
 
       while (retry > 0 && !uploaded) {
         try {
-          const data = await uploadImage(file, folder)
+          const data = await uploadImage(file, folder, storage)
 
           if (data.success) {
             const proxyUrl = `${window.location.origin}/api/image?path=${data.folder}/${data.filename}`
@@ -178,7 +179,8 @@ function App() {
               success: true,
               filename: data.filename,
               url: proxyUrl,
-              folder: data.folder
+              folder: data.folder,
+              storage: data.storage
             })
             setUploadResults([...allResults])
 
