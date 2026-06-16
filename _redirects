@@ -1,2 +1,0 @@
-/api/*    /api/$1    200
-/*        /index.html 200
