@@ -1,10 +1,8 @@
-// functions/api/[[path]].js - Cloudflare Pages API 入口
-// 这个文件处理所有 /api/* 请求
+// functions/api/[[path]].js - Cloudflare Pages API 完整入口
+// 支持：stats, random, wallpaper, cover, list, image, upload
 
-// 从环境变量读取配置
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
-// 注意：GITHUB_TOKEN 在 Dashboard 环境变量中设置，通过 context.env 读取
 
 // ============================================================
 // 工具函数
@@ -50,6 +48,19 @@ async function getAllImages(env) {
     allImages = allImages.concat(images.map(f => ({ ...f, folder })))
   }
   return allImages
+}
+
+// 生成文件名
+function generateFilename(originalName) {
+  const now = new Date()
+  const datePrefix = now.getFullYear() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0')
+  const safeName = originalName
+    .replace(/\.[^/.]+$/, '')
+    .replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+  const ext = originalName.split('.').pop().toLowerCase()
+  return `${datePrefix}_${safeName}.${ext}`
 }
 
 // ============================================================
@@ -188,6 +199,301 @@ async function handleImage(request, env) {
   }
 }
 
+// POST /api/upload - 大文件直传 GitHub
+async function handleUpload(request, env) {
+  const token = env.GITHUB_TOKEN
+  if (!token) {
+    return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
+  try {
+    const formData = await request.formData()
+    const file = formData.get('file')
+    const folder = formData.get('folder') || 'wallpaper'
+
+    if (!file) {
+      return new Response(JSON.stringify({ error: 'No file uploaded' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    // 检查文件大小（25MB 限制）
+    if (file.size > 25 * 1024 * 1024) {
+      return new Response(JSON.stringify({ error: 'File too large (max 25MB)' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    // 生成文件名
+    const filename = generateFilename(file.name)
+
+    // 读取文件内容转 Base64
+    const arrayBuffer = await file.arrayBuffer()
+    const uint8Array = new Uint8Array(arrayBuffer)
+    let binary = ''
+    for (let i = 0; i < uint8Array.length; i++) {
+      binary += String.fromCharCode(uint8Array[i])
+    }
+    const base64Content = btoa(binary)
+
+    // 上传到 GitHub
+    const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}/${filename}`
+    const response = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'Cloudflare-Pages'
+      },
+      body: JSON.stringify({
+        message: `Upload ${filename}`,
+        content: base64Content,
+        branch: 'main'
+      })
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      console.error('GitHub upload error:', error)
+      return new Response(JSON.stringify({ error: 'GitHub upload failed' }), {
+        status: response.status,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    const data = await response.json()
+    const fullUrl = `https://cf-pico.pages.dev/api/image?path=${folder}/${filename}`
+
+    return new Response(JSON.stringify({
+      success: true,
+      filename: filename,
+      folder: folder,
+      url: fullUrl
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+  } catch (error) {
+    console.error('Upload error:', error)
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+}
+
+// GET /api/history
+async function handleHistory(request, env) {
+  const token = env.GITHUB_TOKEN
+  if (!token) {
+    return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+  const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/upload_history.json`
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'User-Agent': 'Cloudflare-Pages'
+      }
+    })
+    if (response.status === 404) {
+      return new Response(JSON.stringify({ history: [] }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+    if (!response.ok) {
+      return new Response(JSON.stringify({ error: 'Failed to fetch history' }), {
+        status: response.status,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+    const data = await response.json()
+    const content = atob(data.content)
+    const history = JSON.parse(content)
+    return new Response(JSON.stringify({ history: history || [] }), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+  } catch (error) {
+    console.error('History error:', error)
+    return new Response(JSON.stringify({ error: 'Internal error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+}
+
+// POST /api/history - 添加上传记录
+async function addHistory(request, env) {
+  const token = env.GITHUB_TOKEN
+  if (!token) {
+    return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
+  try {
+    const body = await request.json()
+    const { filename, url, folder } = body
+
+    if (!filename) {
+      return new Response(JSON.stringify({ error: 'Missing filename' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    // 获取现有历史
+    const historyUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/upload_history.json`
+    let existingHistory = []
+    let sha = null
+
+    const getResponse = await fetch(historyUrl, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'User-Agent': 'Cloudflare-Pages'
+      }
+    })
+
+    if (getResponse.ok) {
+      const data = await getResponse.json()
+      sha = data.sha
+      const content = atob(data.content)
+      existingHistory = JSON.parse(content) || []
+    }
+
+    // 添加新记录
+    const newRecord = {
+      id: Date.now(),
+      filename,
+      url,
+      folder,
+      time: new Date().toISOString()
+    }
+    existingHistory.unshift(newRecord)
+    const trimmedHistory = existingHistory.slice(0, 1000)
+
+    // 保存
+    const putResponse = await fetch(historyUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'Cloudflare-Pages'
+      },
+      body: JSON.stringify({
+        message: 'Update upload history',
+        content: btoa(JSON.stringify(trimmedHistory, null, 2)),
+        sha: sha,
+        branch: 'main'
+      })
+    })
+
+    if (!putResponse.ok) {
+      return new Response(JSON.stringify({ error: 'Failed to save history' }), {
+        status: putResponse.status,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    return new Response(JSON.stringify({ success: true, history: trimmedHistory }), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+  } catch (error) {
+    console.error('Add history error:', error)
+    return new Response(JSON.stringify({ error: 'Internal error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+}
+
+// DELETE /api/history - 删除历史记录
+async function deleteHistory(request, env) {
+  const token = env.GITHUB_TOKEN
+  if (!token) {
+    return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+
+  try {
+    const url = new URL(request.url)
+    const id = url.searchParams.get('id')
+    if (!id) {
+      return new Response(JSON.stringify({ error: 'Missing id' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    const historyUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/upload_history.json`
+    let sha = null
+    let existingHistory = []
+
+    const getResponse = await fetch(historyUrl, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'User-Agent': 'Cloudflare-Pages'
+      }
+    })
+
+    if (!getResponse.ok) {
+      return new Response(JSON.stringify({ error: 'Failed to fetch history' }), {
+        status: getResponse.status,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    const data = await getResponse.json()
+    sha = data.sha
+    const content = atob(data.content)
+    existingHistory = JSON.parse(content) || []
+
+    const newHistory = existingHistory.filter(record => record.id !== parseInt(id))
+
+    const putResponse = await fetch(historyUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'Cloudflare-Pages'
+      },
+      body: JSON.stringify({
+        message: 'Delete history record',
+        content: btoa(JSON.stringify(newHistory, null, 2)),
+        sha: sha,
+        branch: 'main'
+      })
+    })
+
+    if (!putResponse.ok) {
+      return new Response(JSON.stringify({ error: 'Failed to delete' }), {
+        status: putResponse.status,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+  } catch (error) {
+    console.error('Delete history error:', error)
+    return new Response(JSON.stringify({ error: 'Internal error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+}
+
 // ============================================================
 // 主入口
 // ============================================================
@@ -196,10 +502,31 @@ export async function onRequest(context) {
   const { request, env, params } = context
   const url = new URL(request.url)
   const path = params.path || ''
+  const method = request.method
 
-  console.log(`API 请求: ${path}`)
+  console.log(`API 请求: ${method} ${path}`)
 
-  // 路由分发
+  // POST /api/upload
+  if (path === 'upload' && method === 'POST') {
+    return handleUpload(request, env)
+  }
+
+  // POST /api/history
+  if (path === 'history' && method === 'POST') {
+    return addHistory(request, env)
+  }
+
+  // DELETE /api/history
+  if (path === 'history' && method === 'DELETE') {
+    return deleteHistory(request, env)
+  }
+
+  // GET /api/history
+  if (path === 'history' && method === 'GET') {
+    return handleHistory(request, env)
+  }
+
+  // GET 其他接口
   if (path === 'stats') {
     return handleStats(env)
   }
@@ -219,7 +546,6 @@ export async function onRequest(context) {
     return handleImage(request, env)
   }
 
-  // 未匹配的 API 路径
   return new Response(JSON.stringify({ error: 'API not found', path }), {
     status: 404,
     headers: { 'Content-Type': 'application/json' }
