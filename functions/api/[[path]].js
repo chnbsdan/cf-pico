@@ -1,6 +1,6 @@
 // functions/api/[[path]].js - Cloudflare Pages API 完整入口
 // 支持：stats, random, wallpaper, cover, list, image, upload, history, admin/delete
-// 支持 GitHub 和 R2 双存储
+// 支持 GitHub 和 R2 双存储（纯代理模式，不暴露 R2 域名）
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
@@ -75,14 +75,12 @@ async function handleStats(env) {
   let githubTotal = 0
   let externalTotal = 0
 
-  // 1. 获取 GitHub 图片数量
   for (const folder of folders) {
     const images = await getFolderImages(folder, env)
     githubFolders[folder] = images.length
     githubTotal += images.length
   }
 
-  // 2. 获取外部图片数量（从 external.json）
   const token = env.GITHUB_TOKEN
   if (token) {
     try {
@@ -159,7 +157,7 @@ async function handleCover(request, env) {
   })
 }
 
-// GET /api/list - 从 GitHub 和 R2 同时获取图片列表
+// GET /api/list
 async function handleList(env) {
   const folders = ['wallpaper', 'cover', 'sh', 'sd']
   const bucket = env.IMAGES_BUCKET
@@ -168,7 +166,6 @@ async function handleList(env) {
   const results = {}
   let total = 0
 
-  // 先获取外部图片配置
   let externalImages = {}
   if (token) {
     try {
@@ -276,7 +273,9 @@ async function handleList(env) {
   })
 }
 
-// GET /api/image - 从 GitHub 或 R2 读取图片（优先 R2）
+// ============================================================
+// GET /api/image - 核心：纯代理模式（不暴露 R2 域名）
+// ============================================================
 async function handleImage(request, env) {
   const url = new URL(request.url)
   const path = url.searchParams.get('path')
@@ -296,24 +295,29 @@ async function handleImage(request, env) {
   }
 
   // ============================================================
-  // 1. R2：302 重定向（最快）
+  // 1. R2：纯代理模式（返回图片数据，不返回 302 重定向）
   // ============================================================
   if (bucket) {
     try {
-      const object = await bucket.head(path)
+      const object = await bucket.get(path)
       if (object) {
-        const r2Url = `https://${bucket.name}.r2.dev/${path}`
-        return new Response(null, {
-          status: 302,
+        const contentType = object.httpMetadata?.contentType || 'image/jpeg'
+        const body = await object.arrayBuffer()
+        
+        // 直接返回图片数据，状态码 200，地址栏保持自定义域名
+        return new Response(body, {
+          status: 200,
           headers: {
-            'Location': r2Url,
+            'Content-Type': contentType,
             'Cache-Control': 'public, max-age=86400',
             'Access-Control-Allow-Origin': '*'
+            // ✅ 没有 Location 头，没有 302 状态码
           }
         })
       }
     } catch (e) {
       // R2 没有该文件，继续尝试 GitHub
+      console.log('R2 miss, trying GitHub:', e.message)
     }
   }
 
@@ -359,7 +363,9 @@ async function handleImage(request, env) {
   }
 }
 
-// POST /api/upload - 根据用户选择上传到 GitHub 或 R2
+// ============================================================
+// POST /api/upload - 上传到 GitHub 或 R2
+// ============================================================
 async function handleUpload(request, env) {
   const bucket = env.IMAGES_BUCKET
   const token = env.GITHUB_TOKEN
@@ -395,11 +401,10 @@ async function handleUpload(request, env) {
 
     let uploadedUrl = ''
     let usedStorage = storageType
-    let proxyUrl = `https://cf-pico.pages.dev/api/image?path=${folder}/${filename}`
+    const proxyUrl = `https://cf-pico.pages.dev/api/image?path=${folder}/${filename}`
 
     // === 根据用户选择上传 ===
     if (storageType === 'r2') {
-      // 上传到 R2
       if (!bucket) {
         return new Response(JSON.stringify({ error: 'R2 bucket not configured' }), {
           status: 500,
@@ -410,7 +415,8 @@ async function handleUpload(request, env) {
       await bucket.put(key, arrayBuffer, {
         httpMetadata: { contentType: file.type || 'image/jpeg' }
       })
-      uploadedUrl = `https://${bucket.name}.r2.dev/${key}`
+      // ✅ 注意：这里返回的是代理 URL，不是 R2 直链
+      uploadedUrl = proxyUrl
     } else {
       // 上传到 GitHub
       if (!token) {
@@ -442,7 +448,7 @@ async function handleUpload(request, env) {
         })
       }
       const data = await response.json()
-      uploadedUrl = data.content.download_url
+      uploadedUrl = proxyUrl
     }
 
     return new Response(JSON.stringify({
@@ -463,6 +469,10 @@ async function handleUpload(request, env) {
     })
   }
 }
+
+// ============================================================
+// 历史记录相关
+// ============================================================
 
 // GET /api/history
 async function handleHistory(request, env) {
@@ -507,7 +517,7 @@ async function handleHistory(request, env) {
   }
 }
 
-// POST /api/history - 添加上传记录
+// POST /api/history
 async function addHistory(request, env) {
   const token = env.GITHUB_TOKEN
   if (!token) {
@@ -590,7 +600,7 @@ async function addHistory(request, env) {
   }
 }
 
-// DELETE /api/history - 删除历史记录
+// DELETE /api/history
 async function deleteHistory(request, env) {
   const token = env.GITHUB_TOKEN
   if (!token) {
@@ -669,7 +679,7 @@ async function deleteHistory(request, env) {
   }
 }
 
-// POST /api/admin/delete - 删除图片（支持 GitHub 和 R2）
+// POST /api/admin/delete
 async function handleDelete(request, env) {
   const bucket = env.IMAGES_BUCKET
   const token = env.GITHUB_TOKEN
@@ -687,7 +697,6 @@ async function handleDelete(request, env) {
 
     let deleted = false
 
-    // 如果指定了 source 为 r2，或者同时删除 R2
     if (source === 'r2' || !source) {
       if (bucket) {
         try {
@@ -701,7 +710,6 @@ async function handleDelete(request, env) {
       }
     }
 
-    // 如果指定了 source 为 github，或者同时删除 GitHub
     if (source === 'github' || !source) {
       if (token && sha) {
         try {
