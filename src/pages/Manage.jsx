@@ -1,7 +1,10 @@
-// src/pages/Manage.jsx - 图片管理页面（含历史记录批量删除）
-import React, { useState, useEffect } from 'react'
+// src/pages/Manage.jsx - 图片管理页面（密码从环境变量读取 + 历史记录搜索）
+import React, { useState, useEffect, useRef } from 'react'
 import { fetchImageList, copyToClipboard, batchCopyLinks } from '../lib/api'
 import ThemeToggle from '../components/ThemeToggle'
+
+// 占位图
+const PLACEHOLDER_SVG = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect fill="%23f0f0f0" width="100" height="100"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23ccc" font-size="20"%3E🖼%3C/text%3E%3C/svg%3E'
 
 export default function Manage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -14,7 +17,7 @@ export default function Manage() {
   const [copiedId, setCopiedId] = useState(null)
   
   const [currentPage, setCurrentPage] = useState(1)
-  const pageSize = 64
+  const pageSize = 48
   
   const [previewImage, setPreviewImage] = useState(null)
   const [deletingId, setDeletingId] = useState(null)
@@ -25,11 +28,30 @@ export default function Manage() {
   const [searchKeyword, setSearchKeyword] = useState('')
   const [historyList, setHistoryList] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
-  
-  // 历史记录批量选择状态
   const [selectedHistoryIds, setSelectedHistoryIds] = useState(new Set())
+  
+  // ✅ 新增：历史记录搜索关键词
+  const [historySearchKeyword, setHistorySearchKeyword] = useState('')
+  
+  const [loadedImages, setLoadedImages] = useState(new Set())
 
-  // 检查本地存储的登录状态
+  // ============================================================
+  // 自动获取域名生成代理链接
+  // ============================================================
+  const getProxyUrl = (img) => {
+    if (img.source === 'external') return img.url
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+    const encodedPath = encodeURIComponent(img.folder + '/' + img.name)
+    return `${baseUrl}/api/image?path=${encodedPath}`
+  }
+
+  const getImageAspect = (img) => {
+    return (img.folder === 'wallpaper' || img.folder === 'sh') ? 'aspect-video' : 'aspect-9/16'
+  }
+
+  // ============================================================
+  // 检查登录状态
+  // ============================================================
   useEffect(() => {
     const savedAuth = localStorage.getItem('manage_auth')
     if (savedAuth === 'true') {
@@ -38,17 +60,9 @@ export default function Manage() {
     }
   }, [])
 
-  const getProxyUrl = (img) => {
-    if (img.source === 'external') return img.url
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://pico.hangdn.com'
-    return `${baseUrl}/api/image?path=${img.folder}/${img.name}`
-  }
-
-  const getImageAspect = (img) => {
-    return (img.folder === 'wallpaper' || img.folder === 'sh') ? 'aspect-video' : 'aspect-9/16'
-  }
-
-  // ========== 历史记录相关函数 ==========
+  // ============================================================
+  // 历史记录相关
+  // ============================================================
   const loadHistory = async () => {
     setHistoryLoading(true)
     try {
@@ -75,7 +89,6 @@ export default function Manage() {
     }
   }
 
-  // 切换历史记录选择
   const toggleSelectHistory = (id, e) => {
     if (e) e.stopPropagation()
     const newSelected = new Set(selectedHistoryIds)
@@ -87,17 +100,17 @@ export default function Manage() {
     setSelectedHistoryIds(newSelected)
   }
 
-  // 全选/取消全选历史记录
   const selectAllHistory = () => {
-    if (selectedHistoryIds.size === historyList.length) {
+    // 只全选当前搜索过滤后的历史记录
+    const filteredHistory = getFilteredHistory()
+    if (selectedHistoryIds.size === filteredHistory.length && filteredHistory.length > 0) {
       setSelectedHistoryIds(new Set())
     } else {
-      const allIds = new Set(historyList.map(record => record.id))
+      const allIds = new Set(filteredHistory.map(record => record.id))
       setSelectedHistoryIds(allIds)
     }
   }
 
-  // 批量删除历史记录
   const handleBatchDeleteHistory = async () => {
     const selectedCount = selectedHistoryIds.size
     if (selectedCount === 0) {
@@ -124,10 +137,26 @@ export default function Manage() {
     await loadHistory()
   }
 
-  // ========== 登录相关 ==========
+  // ✅ 新增：过滤历史记录（按文件名搜索）
+  const getFilteredHistory = () => {
+    if (historySearchKeyword.trim() === '') {
+      return historyList
+    }
+    return historyList.filter(record => 
+      record.filename.toLowerCase().includes(historySearchKeyword.toLowerCase())
+    )
+  }
+
+  // ============================================================
+  // 登录相关（✅ 从环境变量读取密码）
+  // ============================================================
   const handleLogin = (e) => {
     e.preventDefault()
-    if (password === 'admin123') {
+    // ✅ 从 Vite 环境变量读取密码
+    // 在 Cloudflare Pages 中配置环境变量：VITE_ADMIN_PASSWORD = 你的密码
+    const correctPassword = import.meta.env.VITE_ADMIN_PASSWORD || 'admin123'
+    
+    if (password === correctPassword) {
       setIsAuthenticated(true)
       localStorage.setItem('manage_auth', 'true')
       setPasswordError(false)
@@ -138,9 +167,12 @@ export default function Manage() {
     }
   }
 
-  // ========== 图片相关函数 ==========
+  // ============================================================
+  // 图片相关
+  // ============================================================
   const loadImages = async () => {
     setLoading(true)
+    setLoadedImages(new Set())
     try {
       const data = await fetchImageList()
       setImages(data.folders || { wallpaper: [], cover: [], sh: [], sd: [] })
@@ -195,7 +227,6 @@ export default function Manage() {
     }
   }
 
-  // 批量删除图片
   const handleBatchDelete = async () => {
     const selectedCount = selectedImages.size
     if (selectedCount === 0) return alert('请先选择图片')
@@ -229,18 +260,21 @@ export default function Manage() {
     await loadImages()
   }
 
-  // ========== 标签页切换 ==========
+  // ============================================================
+  // 标签页切换
+  // ============================================================
   const handleTabChange = (tab) => {
     setActiveTab(tab)
     setCurrentPage(1)
     setSearchKeyword('')
+    setHistorySearchKeyword('') // ✅ 重置历史搜索
     setSelectedImages(new Set())
     setSelectedHistoryIds(new Set())
+    setLoadedImages(new Set())
     setMobileMenuOpen(false)
     if (tab === 'history') loadHistory()
   }
 
-  // ========== 批量选择图片 ==========
   const toggleSelect = (imgName, e) => {
     if (e) e.stopPropagation()
     const newSelected = new Set(selectedImages)
@@ -260,7 +294,6 @@ export default function Manage() {
     }
   }
 
-  // ========== 批量复制 ==========
   const handleBatchCopy = async (format) => {
     const selectedUrls = paginatedImages
       .filter(img => selectedImages.has(img.name))
@@ -270,7 +303,9 @@ export default function Manage() {
     setShowBatchMenu(false)
   }
 
-  // ========== 分页和搜索过滤 ==========
+  // ============================================================
+  // 分页和搜索
+  // ============================================================
   const allImages = images[activeTab] || []
   const filteredImages = searchKeyword.trim() === ''
     ? allImages
@@ -282,7 +317,25 @@ export default function Manage() {
 
   const formatTime = (isoString) => new Date(isoString).toLocaleString('zh-CN')
 
-  // ========== 未登录界面 ==========
+  // ✅ 过滤后的历史记录
+  const filteredHistory = getFilteredHistory()
+
+  // ============================================================
+  // 预加载首屏图片
+  // ============================================================
+  useEffect(() => {
+    if (activeTab !== 'history' && paginatedImages.length > 0) {
+      const preloadCount = Math.min(4, paginatedImages.length)
+      const imagesToPreload = paginatedImages.slice(0, preloadCount)
+      imagesToPreload.forEach(img => {
+        setLoadedImages(prev => new Set(prev).add(img.name))
+      })
+    }
+  }, [activeTab, currentPage, searchKeyword, paginatedImages])
+
+  // ============================================================
+  // 未登录界面
+  // ============================================================
   if (!isAuthenticated) {
     return (
       <div
@@ -326,7 +379,9 @@ export default function Manage() {
     )
   }
 
-  // ========== 已登录界面 ==========
+  // ============================================================
+  // 已登录界面
+  // ============================================================
   return (
     <div className="min-h-screen py-6 px-4 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
       <ThemeToggle />
@@ -339,7 +394,6 @@ export default function Manage() {
         <i className="fas fa-bars text-lg"></i>
       </button>
 
-      {/* 左侧悬浮目录 */}
       {mobileMenuOpen && (
         <div
           className="fixed inset-0 bg-black/50 dark:bg-black/70 z-40 lg:hidden"
@@ -398,7 +452,6 @@ export default function Manage() {
         </div>
 
         <div className="p-2">
-          {/* 四个文件夹目录 */}
           {['wallpaper', 'cover', 'sh', 'sd'].map((folderName) => {
             const displayName = {
               wallpaper: '横屏图片',
@@ -438,7 +491,6 @@ export default function Manage() {
             )
           })}
 
-          {/* 历史记录目录 */}
           <div
             onClick={() => handleTabChange('history')}
             className={`
@@ -460,9 +512,7 @@ export default function Manage() {
         </div>
       </div>
 
-      {/* 右侧内容区 */}
       <div className="lg:pl-[250px]">
-        {/* 标题栏 */}
         <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-gray-200 dark:border-gray-700 p-4 mb-6 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
@@ -493,7 +543,7 @@ export default function Manage() {
               )}
               {activeTab === 'history' && (
                 <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
-                  共 {historyList.length} 条记录
+                  共 {filteredHistory.length} 条记录
                 </p>
               )}
             </div>
@@ -521,7 +571,9 @@ export default function Manage() {
           </div>
         </div>
 
-        {/* 搜索框（仅在图片标签页显示） */}
+        {/* ============================================================
+            搜索框（图片列表）
+            ============================================================ */}
         {activeTab !== 'history' && (
           <div className="mb-4">
             <div className="relative">
@@ -548,7 +600,43 @@ export default function Manage() {
           </div>
         )}
 
-        {/* 批量操作栏（图片） */}
+        {/* ============================================================
+            ✅ 新增：历史记录搜索框
+            ============================================================ */}
+        {activeTab === 'history' && (
+          <div className="mb-4">
+            <div className="relative">
+              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm"></i>
+              <input
+                type="text"
+                placeholder="搜索历史记录中的文件名..."
+                value={historySearchKeyword}
+                onChange={(e) => {
+                  setHistorySearchKeyword(e.target.value)
+                  setSelectedHistoryIds(new Set())
+                }}
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
+              />
+              {historySearchKeyword && (
+                <button
+                  onClick={() => setHistorySearchKeyword('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                >
+                  <i className="fas fa-times-circle"></i>
+                </button>
+              )}
+            </div>
+            {historySearchKeyword && (
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                找到 {filteredHistory.length} 条匹配记录
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ============================================================
+            批量操作栏（图片）
+            ============================================================ */}
         {activeTab !== 'history' && selectedImages.size > 0 && (
           <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-blue-200 dark:border-blue-800">
             <span className="text-blue-700 dark:text-blue-300 text-sm flex items-center gap-2">
@@ -605,7 +693,9 @@ export default function Manage() {
           </div>
         )}
 
-        {/* 批量操作栏（历史记录） */}
+        {/* ============================================================
+            批量操作栏（历史记录）
+            ============================================================ */}
         {activeTab === 'history' && selectedHistoryIds.size > 0 && (
           <div className="bg-teal-50 dark:bg-teal-900/30 rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-teal-200 dark:border-teal-800">
             <span className="text-teal-700 dark:text-teal-300 text-sm flex items-center gap-2">
@@ -615,7 +705,7 @@ export default function Manage() {
                 onClick={selectAllHistory}
                 className="text-xs text-teal-600 dark:text-teal-400 hover:underline ml-2"
               >
-                {selectedHistoryIds.size === historyList.length ? '取消全选' : '全选'}
+                {selectedHistoryIds.size === filteredHistory.length ? '取消全选' : '全选'}
               </button>
             </span>
             <button
@@ -628,20 +718,24 @@ export default function Manage() {
           </div>
         )}
 
-        {/* 图片网格或历史记录列表 */}
+        {/* ============================================================
+            内容区域
+            ============================================================ */}
         {activeTab === 'history' ? (
           historyLoading ? (
             <div className="flex justify-center items-center py-20">
               <i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i>
             </div>
-          ) : historyList.length === 0 ? (
+          ) : filteredHistory.length === 0 ? (
             <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 rounded-xl">
               <i className="fas fa-inbox text-5xl text-gray-400 mb-3"></i>
-              <p className="text-gray-500">暂无上传记录</p>
+              <p className="text-gray-500">
+                {historySearchKeyword ? `没有找到 "${historySearchKeyword}" 相关的记录` : '暂无上传记录'}
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {historyList.map((record) => (
+              {filteredHistory.map((record) => (
                 <div
                   key={record.id}
                   className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm relative group"
@@ -729,6 +823,8 @@ export default function Manage() {
               {paginatedImages.map((img, idx) => {
                 const proxyUrl = getProxyUrl(img)
                 const aspectClass = getImageAspect(img)
+                const isLoaded = loadedImages.has(img.name)
+
                 return (
                   <div
                     key={img.sha || idx}
@@ -746,14 +842,25 @@ export default function Manage() {
                       onClick={() => setPreviewImage(img)}
                     >
                       <img
-                        src={img.url}
+                        src={isLoaded ? proxyUrl : PLACEHOLDER_SVG}
                         alt={img.name}
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
                         loading="lazy"
+                        decoding="async"
+                        className={`w-full h-full object-cover transition-opacity duration-300 ${
+                          isLoaded ? 'opacity-100' : 'opacity-50'
+                        } group-hover:scale-110 transition-transform duration-300`}
                         onError={(e) => {
-                          e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text x="50" y="50" text-anchor="middle" dy=".3em" fill="%23ccc">?</text></svg>'
+                          e.target.src = PLACEHOLDER_SVG
+                        }}
+                        onLoad={() => {
+                          setLoadedImages(prev => new Set(prev).add(img.name))
                         }}
                       />
+                      {!isLoaded && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+                        </div>
+                      )}
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                         <i className="fas fa-search-plus text-white text-sm"></i>
                       </div>
@@ -768,7 +875,10 @@ export default function Manage() {
                         </span>
                         <div className="flex gap-0.5">
                           <button
-                            onClick={(e) => handleCopy(proxyUrl, img.name, e)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleCopy(proxyUrl, img.name, e)
+                            }}
                             className="text-gray-400 hover:text-green-500 transition text-[9px] px-1 py-0.5 rounded"
                           >
                             {copiedId === img.name ? (
@@ -796,7 +906,6 @@ export default function Manage() {
               })}
             </div>
 
-            {/* 底部分页 */}
             {totalPages > 1 && (
               <div className="flex justify-center gap-1 sm:gap-2 mt-6">
                 <button
@@ -836,7 +945,9 @@ export default function Manage() {
         )}
       </div>
 
-      {/* 图片预览弹窗 */}
+      {/* ============================================================
+          预览弹窗
+           ============================================================ */}
       {previewImage && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
@@ -847,7 +958,7 @@ export default function Manage() {
             onClick={(e) => e.stopPropagation()}
           >
             <img
-              src={previewImage.url}
+              src={getProxyUrl(previewImage)}
               alt={previewImage.name}
               className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl"
             />
