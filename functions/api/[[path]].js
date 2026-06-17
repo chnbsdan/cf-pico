@@ -286,34 +286,46 @@ async function handleImage(request, env) {
 
   const bucket = env.IMAGES_BUCKET
   const token = env.GITHUB_TOKEN
-
-  // 先尝试从 R2 读取
-  if (bucket) {
-    try {
-      const object = await bucket.get(path)
-      if (object) {
-        const headers = new Headers()
-        headers.set('Content-Type', object.httpMetadata?.contentType || 'image/jpeg')
-        headers.set('Cache-Control', 'public, max-age=86400')
-        return new Response(object.body, { headers })
-      }
-    } catch (e) {
-      console.log('R2 read failed, fallback to GitHub:', e.message)
-    }
-  }
-
-  // R2 没有，从 GitHub 读取
   const parts = path.split('/')
   const folder = parts[0]
   const filename = parts.slice(1).join('/')
   const allowedFolders = ['wallpaper', 'cover', 'sh', 'sd']
+
   if (!allowedFolders.includes(folder)) {
     return new Response('Invalid folder', { status: 403 })
   }
+
+  // ============================================================
+  // 1. R2：302 重定向（最快）
+  // ============================================================
+  if (bucket) {
+    try {
+      const object = await bucket.head(path)
+      if (object) {
+        const r2Url = `https://${bucket.name}.r2.dev/${path}`
+        return new Response(null, {
+          status: 302,
+          headers: {
+            'Location': r2Url,
+            'Cache-Control': 'public, max-age=86400',
+            'Access-Control-Allow-Origin': '*'
+          }
+        })
+      }
+    } catch (e) {
+      // R2 没有该文件，继续尝试 GitHub
+    }
+  }
+
+  // ============================================================
+  // 2. GitHub：代理返回（支持私有仓库）
+  // ============================================================
   if (!token) {
     return new Response('GITHUB_TOKEN not configured', { status: 500 })
   }
+
   const rawUrl = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/${folder}/${filename}`
+
   try {
     const response = await fetch(rawUrl, {
       headers: {
@@ -321,19 +333,28 @@ async function handleImage(request, env) {
         'User-Agent': 'Cloudflare-Pages'
       }
     })
+
     if (!response.ok) {
       return new Response('Image not found', { status: 404 })
     }
+
     const ext = filename.split('.').pop().toLowerCase()
     const contentTypes = {
       'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
       'webp': 'image/webp', 'gif': 'image/gif', 'avif': 'image/avif'
     }
-    return new Response(response.body, {
-      headers: { 'Content-Type': contentTypes[ext] || 'image/jpeg' }
+    const contentType = contentTypes[ext] || 'image/jpeg'
+    const body = await response.arrayBuffer()
+
+    return new Response(body, {
+      headers: {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*'
+      }
     })
   } catch (error) {
-    console.error('Proxy error:', error)
+    console.error('GitHub fetch error:', error)
     return new Response('Internal error', { status: 500 })
   }
 }
