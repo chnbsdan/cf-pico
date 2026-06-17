@@ -1,31 +1,32 @@
-# PCBed v2.0 - 现代化个人图床服务
+# CF-Pico - 现代化个人图床
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black)](https://vercel.com)
+[![Cloudflare Pages](https://img.shields.io/badge/Deployed%20on-Cloudflare%20Pages-F38020)](https://pages.cloudflare.com)
 [![React](https://img.shields.io/badge/React-18-blue)](https://reactjs.org)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-CSS-38B2AC)](https://tailwindcss.com)
 
-> 基于 Vercel + GitHub 私有仓库的现代化个人图床服务，支持横屏/竖屏分类上传、批量上传、自动压缩、随机图片 API、图片管理后台、上传历史记录等功能。
+> 基于 Cloudflare Pages + GitHub 私有仓库的现代化个人图床服务，支持横屏/竖屏分类上传、批量上传、自动压缩、随机图片 API、图片管理后台、上传历史记录等功能。同时支持 Cloudflare R2 作为备用存储。
 
-**[在线演示](https://pcbed.vercel.app)** | **[GitHub 仓库](https://github.com/chnbsdan/pcbed)**
+**[在线演示](https://cf-pico.pages.dev)** | **[GitHub 仓库](https://github.com/chnbsdan/cf-pico)**
 
 ---
 
 ## ✨ 功能特点
 
 ### 核心功能
-- 🖼️ **随机图片 API** - `/api/random` 接口，每次返回随机图片（支持 `?format=json` 参数）
+- 🖼️ **随机图片 API** - `/api/random` 接口，每次返回随机图片
 - 📂 **分类管理** - 支持横屏（wallpaper）和竖屏（cover）两种分类，文件夹名可自定义
 - 📤 **批量上传** - 多文件选择、拖拽上传、粘贴上传（Ctrl+V），自动压缩大图
 - 🔒 **私有仓库** - 图片存储在 GitHub 私有仓库中，安全可控
+- ☁️ **R2 存储支持** - 可选 Cloudflare R2 作为备用存储，CDN 加速
 - 🌐 **代理访问** - 通过 `/api/image?path=` 统一代理访问图片
-- 🚀 **大文件直传** - 绕过 Vercel 4.5MB 限制，最大支持 25MB
+- 🚀 **大文件直传** - 突破 4.5MB 限制，最大支持 25MB
 
 ### 管理后台功能
 - 🔐 **密码保护** - 管理页面需要密码登录，安全可控
 - 🖼️ **图片预览** - 网格视图展示所有图片，支持点击放大预览
 - 📋 **一键复制** - 点击复制图片链接（自动补全域名）
-- 🗑️ **删除图片** - 网页上直接删除，同步到 GitHub 仓库
+- 🗑️ **删除图片** - 网页上直接删除，同步到 GitHub 或 R2
 - 📊 **分页浏览** - 每页 64 张图片，支持翻页
 - 📁 **目录树** - 左侧显示横屏/竖屏分类及图片数量
 - 📜 **上传历史** - 记录所有上传图片，支持重新复制链接
@@ -52,41 +53,33 @@
 ## 📁 项目结构
 
 ```
-pcbed/
-├── api/                        # Vercel Serverless Functions
-│   ├── admin/
-│   │   ├── list.js            # 图片列表 API
-│   │   └── delete.js          # 图片删除 API
-│   ├── history.js             # 上传历史记录 API
-│   ├── image.js               # 统一图片代理 API
-│   ├── random.js              # 随机图片接口（支持 JSON 格式）
-│   ├── wallpaper.js           # 横屏图片接口
-│   ├── cover.js               # 竖屏图片接口
-│   ├── list.js                # 图片列表接口
-│   ├── stats.js               # 统计信息接口
-│   └── upload.js              # 图片上传接口（支持直传）
-├── src/
-│   ├── components/            # UI 组件
+cf-pico/
+├── functions/                    # Cloudflare Pages Functions（核心 API）
+│   └── api/
+│       └── [[path]].js          # 统一 API 入口（所有 /api/* 请求）
+├── src/                          # React 前端源码
+│   ├── components/               # UI 组件
 │   │   ├── Header.jsx
 │   │   ├── StatsCard.jsx
 │   │   ├── ApiSection.jsx
 │   │   ├── UploadArea.jsx
 │   │   ├── UploadResult.jsx
 │   │   ├── Footer.jsx
-│   │   └── ThemeToggle.jsx    # 主题切换组件
+│   │   └── ThemeToggle.jsx
 │   ├── pages/
-│   │   ├── Manage.jsx         # 图片管理页面（含移动端适配、历史记录）
-│   │   └── ApiDocs.jsx        # API 文档页面
+│   │   ├── Manage.jsx            # 图片管理页面（含移动端适配、历史记录）
+│   │   └── ApiDocs.jsx           # API 文档页面
 │   ├── lib/
-│   │   └── api.js             # API 调用封装
+│   │   └── api.js                # API 调用封装
 │   ├── App.jsx
 │   ├── main.jsx
 │   └── index.css
 ├── public/
-├── index.html
-├── upload_history.json        # 上传图片后系统自动生成
+│   ├── _redirects                # SPA 路由支持
+│   └── favicon.ico
+├── upload_history.json            # 上传图片后系统自动生成
 ├── package.json
-├── vercel.json
+├── vercel.json                    # Vercel 配置（保留兼容）
 └── README.md
 ```
 
@@ -96,68 +89,71 @@ pcbed/
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
-| `/api/random` | GET | 随机返回一张图片（支持 `?format=json` 返回 JSON） |
+| `/api/random` | GET | 随机返回一张图片（全部分类） |
 | `/api/wallpaper` | GET | 随机返回横屏图片 |
 | `/api/cover` | GET | 随机返回竖屏图片 |
-| `/api/list` | GET | 返回所有图片列表（按分类分组） |
 | `/api/stats` | GET | 返回统计信息（各分类图片数量） |
+| `/api/list` | GET | 返回所有图片列表（按分类分组） |
 | `/api/upload` | POST | 上传图片（multipart/form-data） |
 | `/api/image` | GET | 代理访问图片（参数：path=分类/文件名） |
 | `/api/history` | GET/POST/DELETE | 上传历史记录管理 |
-| `/api/admin/list` | GET | 管理后台图片列表（需要密码） |
 | `/api/admin/delete` | POST | 删除图片（需要密码） |
 
 ### 使用示例
 
 ```bash
 # 随机获取图片
-curl https://pcbed.vercel.app/api/random
-
-# 随机获取图片（JSON 格式）
-curl https://pcbed.vercel.app/api/random?format=json
+curl https://cf-pico.pages.dev/api/random
 
 # 随机获取横屏图片
-curl https://pcbed.vercel.app/api/wallpaper
+curl https://cf-pico.pages.dev/api/wallpaper
 
 # 随机获取竖屏图片
-curl https://pcbed.vercel.app/api/cover
+curl https://cf-pico.pages.dev/api/cover
 
 # 获取统计信息
-curl https://pcbed.vercel.app/api/stats
+curl https://cf-pico.pages.dev/api/stats
 
 # 上传图片
-curl -X POST -F "file=@image.jpg" -F "folder=wallpaper" https://pcbed.vercel.app/api/upload
+curl -X POST -F "file=@image.jpg" -F "folder=wallpaper" https://cf-pico.pages.dev/api/upload
 
 # 代理访问图片
-https://pcbed.vercel.app/api/image?path=wallpaper/20260612_image.jpg
+https://cf-pico.pages.dev/api/image?path=wallpaper/20260617_image.jpg
 ```
 
 ### JSON 返回示例
 
-```json
-{
-  "code": "200",
-  "imgurl": "https://pcbed.vercel.app/api/random?format=json",
-  "source": "https://raw.githubusercontent.com/chnbsdan/pcbed/main/wallpaper/20260612_image.jpg",
-  "total": 128
-}
-```
-
-### 统计返回示例
-
+**统计信息：**
 ```json
 {
   "github_folders": {
     "wallpaper": 33,
-    "cover": 8
+    "cover": 8,
+    "sh": 10,
+    "sd": 5
   },
-  "github_total": 41,
-  "external_folders": {
-    "wallpaper": 10,
-    "cover": 5
-  },
-  "external_total": 15,
+  "github_total": 56,
+  "external_total": 0,
   "grand_total": 56
+}
+```
+
+**图片列表：**
+```json
+{
+  "total": 56,
+  "folders": {
+    "wallpaper": [
+      {
+        "name": "20260617_image.jpg",
+        "url": "https://cf-pico.pages.dev/api/image?path=wallpaper/20260617_image.jpg",
+        "path": "wallpaper/20260617_image.jpg",
+        "size": 3654227,
+        "folder": "wallpaper",
+        "source": "github"
+      }
+    ]
+  }
 }
 ```
 
@@ -165,15 +161,14 @@ https://pcbed.vercel.app/api/image?path=wallpaper/20260612_image.jpg
 
 ## 🔧 环境变量配置
 
-在 Vercel 项目设置中添加以下环境变量：
+在 Cloudflare Pages 项目设置中添加以下环境变量：
 
 | 变量名 | 必填 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `GITHUB_TOKEN` | ✅ 是 | 无 | GitHub Personal Access Token（需 `repo` 权限） |
 | `GITHUB_USER` | ❌ 否 | `chnbsdan` | GitHub 用户名 |
-| `GITHUB_REPO` | ❌ 否 | `pcbed` | 存储图片的仓库名 |
-| `FOLDER_WALLPAPER` | ❌ 否 | `wallpaper` | 横屏图片存储文件夹名 |
-| `FOLDER_COVER` | ❌ 否 | `cover` | 竖屏图片存储文件夹名 |
+| `GITHUB_REPO` | ❌ 否 | `cf-pico` | 存储图片的仓库名 |
+| `IMAGES_BUCKET` | ❌ 否 | 无 | Cloudflare R2 存储桶绑定（使用 R2 时需要） |
 
 ### 获取 GitHub Token
 
@@ -182,36 +177,27 @@ https://pcbed.vercel.app/api/image?path=wallpaper/20260612_image.jpg
 3. 勾选 `repo` 权限（完整控制私有仓库）
 4. 生成并复制 Token（以 `ghp_` 开头）
 
-### 自定义文件夹名示例
-
-如果你想使用自己的文件夹名，在 Vercel 环境变量中设置：
-
-```bash
-FOLDER_WALLPAPER=landscape   # 横屏图片存储到 landscape 文件夹
-FOLDER_COVER=portrait        # 竖屏图片存储到 portrait 文件夹
-```
-
-> **注意**：修改文件夹名后，需要在 GitHub 仓库中手动创建对应的文件夹。
-
 ---
 
 ## 📦 部署步骤
 
 ### 1. 创建 GitHub 图片存储仓库
 
-创建一个新的私有仓库用于存储图片，例如 `pcbed`：
+创建一个新的私有仓库用于存储图片，例如 `cf-pico`：
 
 ```
-pcbed/
-├── wallpaper/   # 横屏图片存放目录（可通过环境变量修改）
-└── cover/       # 竖屏图片存放目录（可通过环境变量修改）
+cf-pico/
+├── wallpaper/   # 横屏图片存放目录
+├── cover/       # 竖屏图片存放目录
+├── sh/          # 横屏图片（备用）
+└── sd/          # 竖屏图片（备用）
 ```
 
 ### 2. Fork 或克隆本项目
 
 ```bash
-git clone https://github.com/chnbsdan/pcbed.git
-cd pcbed
+git clone https://github.com/chnbsdan/cf-pico.git
+cd cf-pico
 ```
 
 ### 3. 安装依赖
@@ -226,31 +212,34 @@ npm install
 npm run dev
 ```
 
-### 5. 部署到 Vercel
+### 5. 部署到 Cloudflare Pages
 
-**方法一：使用 Vercel CLI**
+1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com)
+2. 进入 **Pages** → **创建项目** → **连接到 Git**
+3. 选择你的 GitHub 仓库 `chnbsdan/cf-pico`
+4. 构建设置：
+   - 框架预设：`Vite`
+   - 构建命令：`npm run build`
+   - 输出目录：`dist`
+5. 在 **环境变量** 中添加 `GITHUB_TOKEN` 等
+6. 点击 **保存并部署**
 
-```bash
-npm install -g vercel
-vercel --prod
-```
+### 6. 绑定 R2 存储桶（可选）
 
-**方法二：通过 Vercel 网页**
+1. 在 Cloudflare Pages 项目设置中进入 **绑定**
+2. 点击 **添加绑定** → **R2 存储桶**
+3. 选择你的 R2 存储桶
+4. 变量名输入：`IMAGES_BUCKET`
+5. 点击 **保存**
 
-1. 访问 [Vercel](https://vercel.com)
-2. 点击 **Add New** → **Project**
-3. 导入你的 GitHub 仓库 `chnbsdan/pcbed`
-4. 在 **Environment Variables** 中添加环境变量
-5. 点击 **Deploy**
+### 7. 绑定自定义域名（可选）
 
-### 6. 绑定自定义域名（可选）
-
-1. 在 Vercel 项目设置中进入 **Domains**
-2. 添加你的域名（如 `pcbed.xxxx.com`）
-3. 在你的 DNS 服务商添加 CNAME 记录：
-   - 类型：`CNAME`
-   - 名称：你的子域名
-   - 目标：`cname.vercel-dns.com`
+1. 在 Cloudflare Pages 项目设置中进入 **域 (Domains)**
+2. 点击 **设置自定义域**，输入你的域名（如 `pico.your-domain.com`）
+3. Cloudflare 会自动检测 DNS 配置：
+   - 如果域名在 Cloudflare DNS 托管：自动配置，无需手动操作
+   - 如果域名在外部 DNS 托管：按照提示添加 CNAME 记录
+4. 等待 DNS 生效（通常 1-5 分钟）
 
 ---
 
@@ -258,7 +247,7 @@ vercel --prod
 
 访问 `/manage` 进入管理后台，需要输入密码。
 
-**默认密码**：`your-password`（请在 `src/pages/Manage.jsx` 中修改）
+**默认密码**：`自已设定`（请在 `src/pages/Manage.jsx` 中修改）
 
 ### 管理后台功能
 
@@ -289,6 +278,14 @@ vercel --prod
 - 🌙 **暗色/亮色主题** - 一键切换，支持系统跟随
 - 📱 **移动端适配** - 完美适配 PC、平板、手机
 
+### 按钮颜色
+| 按钮 | 默认颜色 | 悬停效果 |
+|------|----------|----------|
+| 换背景 | 绿色 (`bg-green-500`) | 变亮 (`hover:bg-green-400`) |
+| 横屏 | 蓝色 (`bg-blue-600`) | 变亮 (`hover:bg-gray-300`) |
+| 竖屏 | 紫色 (`bg-purple-600`) | 变亮 (`hover:bg-gray-300`) |
+| 上传区域 | 浅灰 (`bg-gray-50`) | 天蓝色 (`hover:bg-sky-100`) |
+
 ---
 
 ## 📝 图片命名规则
@@ -299,7 +296,7 @@ vercel --prod
 日期_原文件名.扩展名
 ```
 
-示例：`20260612_风景照片.jpg`
+示例：`20260617_风景照片.jpg`
 
 - 日期格式：`YYYYMMDD`
 - 原文件名中的特殊字符会被替换为 `_`
@@ -315,7 +312,7 @@ vercel --prod
 3. **文件大小** - 单张图片限制 25MB（GitHub 限制），超过 5MB 会自动压缩
 4. **支持格式** - JPG、JPEG、PNG、WebP、GIF、AVIF
 5. **API 限制** - GitHub API 限制 5000 次/小时（已认证）
-6. **文件夹名** - 可通过环境变量自定义，修改后需在github仓库中手动创建对应文件夹
+6. **R2 配置** - 使用 R2 存储时，需在 Cloudflare Pages 中绑定 R2 存储桶
 
 ---
 
@@ -325,18 +322,27 @@ vercel --prod
 |------|------|
 | **前端** | React 18 + Vite + Tailwind CSS |
 | **图标** | Font Awesome 6 |
-| **后端** | Vercel Serverless Functions |
-| **存储** | GitHub 私有仓库 |
-| **API** | GitHub REST API |
-| **部署** | Vercel |
+| **后端** | Cloudflare Pages Functions |
+| **存储** | GitHub 私有仓库 + Cloudflare R2 |
+| **API** | GitHub REST API + Cloudflare R2 API |
+| **部署** | Cloudflare Pages |
 
 ---
 
 ## 🔄 更新日志
 
-### v2.1 (2026-06-15)
-- ✨ 新增大文件直传功能，突破 Vercel 4.5MB 限制，最大支持 25MB
-- ✨ 新增自定义文件夹名（通过环境变量配置）
+### v2.1 (2026-06-17)
+- ✨ 新增 Cloudflare R2 存储支持
+- ✨ 新增上传存储方式选择（GitHub / R2）
+- ✨ 管理后台支持显示和删除 R2 图片
+- ✨ `/api/image` 支持 R2 302 重定向加速
+- ✨ 支持外部图片配置（`external.json`）
+- 🎨 优化暗色模式显示
+- 🔧 修复多平台部署兼容性
+
+### v2.0 (2026-06-16)
+- 🚀 从 Vercel 迁移到 Cloudflare Pages
+- ✨ 使用 Cloudflare Pages Functions 重构 API
 - ✨ 新增上传历史记录功能（跨设备同步）
 - ✨ 新增暗色/亮色主题切换
 - ✨ 新增图片搜索功能
@@ -346,16 +352,6 @@ vercel --prod
 - ✨ 新增压缩质量选择（70%/85%/100%）
 - 🎨 优化管理后台布局（左侧目录树）
 - 🎨 优化移动端体验（汉堡菜单）
-
-### v2.0 (2026-06-12)
-- ✨ 新增图片管理后台（预览、复制、删除）
-- 📱 移动端适配，汉堡菜单导航
-- 🖼️ 响应式网格，每页 64 张
-- 🔄 统一图片代理 API `/api/image`
-- 🎨 优化界面：左侧目录树、毛玻璃效果
-- 🔐 管理页面密码保护
-- 📋 复制链接自动补全域名
-- 🔄 上传时可选 WebP 转换
 
 ### v1.0 (2026-06-10)
 - 🎉 初始版本发布
@@ -374,10 +370,10 @@ vercel --prod
 
 ## 🔗 相关链接
 
-- [GitHub 仓库](https://github.com/chnbsdan/pcbed)
-- [在线演示](https://pcbed.vercel.app)
-- [API 文档](https://pcbed.vercel.app/docs)
-- [Vercel 部署](https://vercel.com)
+- [GitHub 仓库](https://github.com/chnbsdan/cf-pico)
+- [在线演示](https://cf-pico.pages.dev)
+- [API 文档](https://cf-pico.pages.dev/docs)
+- [Cloudflare Pages](https://pages.cloudflare.com)
 - [GitHub Token 申请](https://github.com/settings/tokens)
 
 ---
@@ -391,12 +387,10 @@ vercel --prod
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=chnbsdan/pcbed&type=date&legend=top-left">
+<a href="https://www.star-history.com/?repos=chnbsdan/cf-pico&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=chnbsdan/pcbed&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=chnbsdan/pcbed&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=chnbsdan/pcbed&type=date&legend=top-left" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=chnbsdan/cf-pico&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=chnbsdan/cf-pico&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=chnbsdan/cf-pico&type=date&legend=top-left" />
  </picture>
 </a>
-
-
