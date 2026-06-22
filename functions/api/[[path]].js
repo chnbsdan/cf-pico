@@ -512,7 +512,6 @@ async function handleUpload(request, env) {
     let tgMessageId = null
     let tgFileId = null
     let tgFilePath = null
-    const proxyUrl = `https://cf-pico.pages.dev/api/image?path=${folder}/${filename}`
 
     // === 根据用户选择上传 ===
     if (storageType === 'telegram') {
@@ -533,8 +532,19 @@ async function handleUpload(request, env) {
         tgMessageId = result.messageId;
         tgFilePath = result.filePath;
         usedStorage = 'telegram';
-        // 使用代理 URL
-        uploadedUrl = `https://cf-pico.pages.dev/api/image?path=telegram/${encodeURIComponent(tgFilePath)}`;
+        
+        // ✅ 修复：正确生成 Telegram 代理 URL
+        const baseUrl = new URL(request.url).origin;
+        const tgProxyPath = `telegram/${encodeURIComponent(tgFilePath)}`;
+        uploadedUrl = `${baseUrl}/api/image?path=${tgProxyPath}`;
+        
+        console.log('Telegram 上传成功:', {
+          fileId: tgFileId,
+          messageId: tgMessageId,
+          filePath: tgFilePath,
+          url: uploadedUrl
+        });
+        
       } catch (error) {
         console.error('Telegram upload error:', error);
         return new Response(JSON.stringify({ error: error.message }), {
@@ -555,7 +565,8 @@ async function handleUpload(request, env) {
       await bucket.put(key, arrayBuffer, {
         httpMetadata: { contentType: file.type || 'image/jpeg' }
       })
-      uploadedUrl = proxyUrl
+      const baseUrl = new URL(request.url).origin;
+      uploadedUrl = `${baseUrl}/api/image?path=${key}`
       usedStorage = 'r2'
 
     } else {
@@ -589,7 +600,8 @@ async function handleUpload(request, env) {
         })
       }
       const data = await response.json()
-      uploadedUrl = proxyUrl
+      const baseUrl = new URL(request.url).origin;
+      uploadedUrl = `${baseUrl}/api/image?path=${folder}/${filename}`
       usedStorage = 'github'
     }
 
