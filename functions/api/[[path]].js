@@ -1,9 +1,76 @@
 // functions/api/[[path]].js - Cloudflare Pages API 完整入口
 // 支持：stats, random, wallpaper, cover, list, image, upload, history, admin/delete
-// 支持 GitHub 和 R2 双存储（纯代理模式，不暴露 R2 域名）
+// 支持 GitHub、R2、Telegram 三种存储（纯代理模式，不暴露后端域名）
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
+
+// ============================================================
+// Telegram 存储相关函数
+// ============================================================
+
+/**
+ * 上传文件到 Telegram 频道
+ */
+async function uploadToTelegram(file, botToken, chatId) {
+  const formData = new FormData();
+  formData.append('chat_id', chatId);
+  formData.append('document', file, file.name);
+
+  const response = await fetch(
+    `https://api.telegram.org/bot${botToken}/sendDocument`,
+    { method: 'POST', body: formData }
+  );
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.description || 'Telegram 上传失败');
+  }
+
+  const data = await response.json();
+  const fileId = data.result?.document?.file_id;
+  const messageId = data.result?.message_id;
+
+  if (!fileId) {
+    throw new Error('Telegram 未返回 file_id');
+  }
+
+  // 获取文件路径用于代理访问
+  const filePathResponse = await fetch(
+    `https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`
+  );
+  const filePathData = await filePathResponse.json();
+  const filePath = filePathData.result?.file_path;
+
+  return {
+    fileId,
+    messageId,
+    filePath,
+    storageType: 'telegram'
+  };
+}
+
+/**
+ * 从 Telegram 获取文件内容（代理访问）
+ */
+async function getTelegramFileContent(botToken, filePath) {
+  const url = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('从 Telegram 获取文件失败');
+  }
+  return response;
+}
+
+/**
+ * 从 Telegram 删除文件（通过消息ID）
+ */
+async function deleteTelegramFile(botToken, chatId, messageId) {
+  const response = await fetch(
+    `https://api.telegram.org/bot${botToken}/deleteMessage?chat_id=${chatId}&message_id=${messageId}`
+  );
+  return response.ok;
+}
 
 // ============================================================
 // 工具函数
@@ -274,7 +341,8 @@ async function handleList(env) {
 }
 
 // ============================================================
-// GET /api/image - 核心：纯代理模式（不暴露 R2 域名）
+// GET /api/image - 核心：纯代理模式（不暴露后端域名）
+// 支持 GitHub、R2、Telegram 三种存储
 // ============================================================
 async function handleImage(request, env) {
   const url = new URL(request.url)
@@ -288,10 +356,33 @@ async function handleImage(request, env) {
   const parts = path.split('/')
   const folder = parts[0]
   const filename = parts.slice(1).join('/')
-  const allowedFolders = ['wallpaper', 'cover', 'sh', 'sd']
+  const allowedFolders = ['wallpaper', 'cover', 'sh', 'sd', 'telegram']
 
   if (!allowedFolders.includes(folder)) {
     return new Response('Invalid folder', { status: 403 })
+  }
+
+  // ============================================================
+  // 0. Telegram：代理返回
+  // ============================================================
+  if (folder === 'telegram') {
+    const botToken = env.TG_BOT_TOKEN;
+    if (!botToken) {
+      return new Response('Telegram 未配置', { status: 500 });
+    }
+    try {
+      const response = await getTelegramFileContent(botToken, filename);
+      return new Response(response.body, {
+        headers: {
+          'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
+          'Cache-Control': 'public, max-age=86400',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+    } catch (error) {
+      console.error('Telegram fetch error:', error);
+      return new Response('Telegram 文件获取失败', { status: 404 });
+    }
   }
 
   // ============================================================
@@ -304,19 +395,16 @@ async function handleImage(request, env) {
         const contentType = object.httpMetadata?.contentType || 'image/jpeg'
         const body = await object.arrayBuffer()
         
-        // 直接返回图片数据，状态码 200，地址栏保持自定义域名
         return new Response(body, {
           status: 200,
           headers: {
             'Content-Type': contentType,
             'Cache-Control': 'public, max-age=86400',
             'Access-Control-Allow-Origin': '*'
-            // ✅ 没有 Location 头，没有 302 状态码
           }
         })
       }
     } catch (e) {
-      // R2 没有该文件，继续尝试 GitHub
       console.log('R2 miss, trying GitHub:', e.message)
     }
   }
@@ -364,7 +452,7 @@ async function handleImage(request, env) {
 }
 
 // ============================================================
-// POST /api/upload - 上传到 GitHub 或 R2
+// POST /api/upload - 上传到 GitHub、R2 或 Telegram
 // ============================================================
 async function handleUpload(request, env) {
   const bucket = env.IMAGES_BUCKET
@@ -383,8 +471,8 @@ async function handleUpload(request, env) {
       })
     }
 
-    if (file.size > 25 * 1024 * 1024) {
-      return new Response(JSON.stringify({ error: 'File too large (max 25MB)' }), {
+    if (file.size > 50 * 1024 * 1024) {
+      return new Response(JSON.stringify({ error: 'File too large (max 50MB)' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       })
@@ -401,10 +489,42 @@ async function handleUpload(request, env) {
 
     let uploadedUrl = ''
     let usedStorage = storageType
+    let tgMessageId = null
+    let tgFileId = null
+    let tgFilePath = null
     const proxyUrl = `https://cf-pico.pages.dev/api/image?path=${folder}/${filename}`
 
     // === 根据用户选择上传 ===
-    if (storageType === 'r2') {
+    if (storageType === 'telegram') {
+      // ========== Telegram 存储 ==========
+      const botToken = env.TG_BOT_TOKEN;
+      const chatId = env.TG_CHAT_ID;
+      
+      if (!botToken || !chatId) {
+        return new Response(JSON.stringify({ error: 'Telegram 存储未配置' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      // Telegram 限制 50MB（已在前面检查）
+      try {
+        const result = await uploadToTelegram(file, botToken, chatId);
+        tgFileId = result.fileId;
+        tgMessageId = result.messageId;
+        tgFilePath = result.filePath;
+        usedStorage = 'telegram';
+        // 使用代理 URL，格式：/api/image?path=telegram/{filePath}
+        uploadedUrl = `https://cf-pico.pages.dev/api/image?path=telegram/${encodeURIComponent(tgFilePath)}`;
+      } catch (error) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+    } else if (storageType === 'r2') {
+      // ========== R2 存储 ==========
       if (!bucket) {
         return new Response(JSON.stringify({ error: 'R2 bucket not configured' }), {
           status: 500,
@@ -415,10 +535,11 @@ async function handleUpload(request, env) {
       await bucket.put(key, arrayBuffer, {
         httpMetadata: { contentType: file.type || 'image/jpeg' }
       })
-      // ✅ 注意：这里返回的是代理 URL，不是 R2 直链
       uploadedUrl = proxyUrl
+      usedStorage = 'r2'
+
     } else {
-      // 上传到 GitHub
+      // ========== GitHub 存储（默认） ==========
       if (!token) {
         return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
           status: 500,
@@ -449,15 +570,21 @@ async function handleUpload(request, env) {
       }
       const data = await response.json()
       uploadedUrl = proxyUrl
+      usedStorage = 'github'
     }
 
+    // 返回结果（包含 TG 元数据用于删除）
     return new Response(JSON.stringify({
       success: true,
       filename: filename,
       folder: folder,
-      url: proxyUrl,
+      url: uploadedUrl,
       storage: usedStorage,
-      rawUrl: uploadedUrl
+      rawUrl: uploadedUrl,
+      // Telegram 元数据（用于删除）
+      tgMessageId: tgMessageId,
+      tgFileId: tgFileId,
+      tgFilePath: tgFilePath
     }), {
       headers: { 'Content-Type': 'application/json' }
     })
@@ -686,7 +813,7 @@ async function handleDelete(request, env) {
 
   try {
     const body = await request.json()
-    const { filename, folder, sha, source } = body
+    const { filename, folder, sha, source, tgMessageId } = body
 
     if (!filename || !folder) {
       return new Response(JSON.stringify({ error: 'Missing filename or folder' }), {
@@ -697,6 +824,24 @@ async function handleDelete(request, env) {
 
     let deleted = false
 
+    // ========== Telegram 删除 ==========
+    if (source === 'telegram' && tgMessageId) {
+      const botToken = env.TG_BOT_TOKEN;
+      const chatId = env.TG_CHAT_ID;
+      if (botToken && chatId) {
+        try {
+          const result = await deleteTelegramFile(botToken, chatId, tgMessageId);
+          if (result) {
+            deleted = true;
+            console.log(`Telegram deleted: message ${tgMessageId}`);
+          }
+        } catch (e) {
+          console.error('Telegram delete error:', e);
+        }
+      }
+    }
+
+    // ========== R2 删除 ==========
     if (source === 'r2' || !source) {
       if (bucket) {
         try {
@@ -710,6 +855,7 @@ async function handleDelete(request, env) {
       }
     }
 
+    // ========== GitHub 删除 ==========
     if (source === 'github' || !source) {
       if (token && sha) {
         try {
