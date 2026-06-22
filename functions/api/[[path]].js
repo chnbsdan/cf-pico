@@ -6,46 +6,112 @@ const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
 
 // ============================================================
-// Telegram 存储相关函数
+// Telegram 存储相关函数（完整优化版）
 // ============================================================
 
 /**
  * 上传文件到 Telegram 频道
- * 兼容 document、photo、video、audio 等多种文件类型
+ * 自动选择最佳方法：sendPhoto / sendVideo / sendAudio / sendDocument
+ * 兼容所有文件类型，包括 webp
  */
 async function uploadToTelegram(file, botToken, chatId) {
+  const ext = file.name.split('.').pop().toLowerCase();
+  const mimeType = file.type || '';
+  
+  // ============================================================
+  // 1. 智能选择发送方法
+  // ============================================================
+  let method = 'sendDocument';
+  let fieldName = 'document';
+  
+  // 图片（webp 用 document，因为 Telegram 的 sendPhoto 对 webp 支持不好）
+  const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff'];
+  if (imageExts.includes(ext) && mimeType.startsWith('image/')) {
+    method = 'sendPhoto';
+    fieldName = 'photo';
+  } else if (['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext) && mimeType.startsWith('video/')) {
+    method = 'sendVideo';
+    fieldName = 'video';
+  } else if (['mp3', 'wav', 'ogg', 'flac', 'aac'].includes(ext) && mimeType.startsWith('audio/')) {
+    method = 'sendAudio';
+    fieldName = 'audio';
+  } else if (ext === 'webp') {
+    // ✅ webp 用 sendDocument（最稳定）
+    method = 'sendDocument';
+    fieldName = 'document';
+  }
+
+  // ============================================================
+  // 2. 构建请求
+  // ============================================================
   const formData = new FormData();
   formData.append('chat_id', chatId);
-  formData.append('document', file, file.name);
+  formData.append(fieldName, file, file.name);
+  
+  // 为图片添加 caption（方便识别）
+  if (method === 'sendPhoto') {
+    formData.append('caption', `📷 ${file.name}`);
+  }
 
+  console.log(`📤 Telegram 上传: ${file.name} (${method})`);
+
+  // ============================================================
+  // 3. 发送请求
+  // ============================================================
   const response = await fetch(
-    `https://api.telegram.org/bot${botToken}/sendDocument`,
+    `https://api.telegram.org/bot${botToken}/${method}`,
     { method: 'POST', body: formData }
   );
 
   if (!response.ok) {
     const error = await response.json();
+    console.error('Telegram API 错误:', error);
     throw new Error(error.description || 'Telegram 上传失败');
   }
 
   const data = await response.json();
   const result = data.result;
+
+  // ============================================================
+  // 4. 提取 file_id（兼容所有可能的结构）
+  // ============================================================
+  let fileId = null;
   
-  // ✅ 兼容多种文件类型：document、video、audio、photo（数组）
-  let fileId = result?.document?.file_id ||
-               result?.video?.file_id ||
-               result?.audio?.file_id ||
-               (result?.photo && result.photo[result.photo.length - 1]?.file_id) ||
-               result?.file_id;
+  // 按优先级查找
+  const fields = [
+    'document', 'photo', 'video', 'audio', 
+    'animation', 'sticker', 'voice', 'video_note'
+  ];
+  
+  for (const field of fields) {
+    if (result?.[field]) {
+      if (field === 'photo' && Array.isArray(result.photo)) {
+        // photo 是数组，取最大尺寸
+        fileId = result.photo[result.photo.length - 1]?.file_id;
+      } else if (result[field]?.file_id) {
+        fileId = result[field].file_id;
+      }
+      if (fileId) break;
+    }
+  }
+  
+  // 如果还没找到，尝试直接取 file_id
+  if (!fileId && result?.file_id) {
+    fileId = result.file_id;
+  }
 
   const messageId = result?.message_id;
 
   if (!fileId) {
-    console.error('Telegram 响应:', JSON.stringify(data, null, 2));
-    throw new Error('Telegram 未返回 file_id');
+    console.error('❌ Telegram 响应:', JSON.stringify(data, null, 2));
+    throw new Error(`Telegram 未返回 file_id (${method})`);
   }
 
-  // 获取文件路径用于代理访问
+  console.log(`✅ Telegram 上传成功: ${file.name} → file_id: ${fileId}`);
+
+  // ============================================================
+  // 5. 获取文件路径（用于代理访问）
+  // ============================================================
   const filePathResponse = await fetch(
     `https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`
   );
@@ -65,7 +131,8 @@ async function uploadToTelegram(file, botToken, chatId) {
     fileId,
     messageId,
     filePath,
-    storageType: 'telegram'
+    storageType: 'telegram',
+    method: method
   };
 }
 
@@ -382,7 +449,7 @@ async function handleImage(request, env) {
   }
 
   // ============================================================
-  // 0. Telegram：代理返回
+  // 0. Telegram：代理返回（支持图片预览）
   // ============================================================
   if (folder === 'telegram') {
     const botToken = env.TG_BOT_TOKEN;
@@ -391,13 +458,26 @@ async function handleImage(request, env) {
     }
     try {
       const response = await getTelegramFileContent(botToken, filename);
-      return new Response(response.body, {
-        headers: {
-          'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
-          'Cache-Control': 'public, max-age=86400',
-          'Access-Control-Allow-Origin': '*'
-        }
-      });
+      
+      // ✅ 获取文件扩展名，判断是否为图片
+      const ext = filename.split('.').pop().toLowerCase();
+      const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'svg', 'ico'];
+      const isImage = imageExts.includes(ext);
+      
+      const headers = {
+        'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*'
+      };
+      
+      // ✅ 如果是图片，使用 inline 预览；否则 attachment 下载
+      if (isImage) {
+        headers['Content-Disposition'] = `inline; filename="${filename}"`;
+      } else {
+        headers['Content-Disposition'] = `attachment; filename="${filename}"`;
+      }
+      
+      return new Response(response.body, { headers });
     } catch (error) {
       console.error('Telegram fetch error:', error);
       return new Response('Telegram 文件获取失败', { status: 404 });
@@ -533,7 +613,7 @@ async function handleUpload(request, env) {
         tgFilePath = result.filePath;
         usedStorage = 'telegram';
         
-        // ✅ 修复：正确生成 Telegram 代理 URL
+        // ✅ 正确生成 Telegram 代理 URL
         const baseUrl = new URL(request.url).origin;
         const tgProxyPath = `telegram/${encodeURIComponent(tgFilePath)}`;
         uploadedUrl = `${baseUrl}/api/image?path=${tgProxyPath}`;
@@ -968,8 +1048,7 @@ export async function onRequest(context) {
 
   console.log(`API 请求: ${method} ${path}`)
 
-  // POST /api/upload
-  if (path === 'upload' && method === 'POST') {
+  // POST /api/upload  if (path === 'upload' && method === 'POST') {
     return handleUpload(request, env)
   }
 
