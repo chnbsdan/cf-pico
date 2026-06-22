@@ -1,4 +1,3 @@
-// src/components/UploadArea.jsx - 添加存储方式选择
 import React, { useRef, useState, useEffect } from 'react'
 
 export default function UploadArea({ onUpload, isLoading, convertToWebp, onConvertChange }) {
@@ -79,6 +78,13 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
 
   const currentFolder = folderOptions.find(opt => opt.key === folder) || folderOptions[0]
 
+  // 存储方式标签
+  const storageLabels = {
+    github: { label: 'GitHub', icon: 'fab fa-github', color: 'text-blue-400' },
+    r2: { label: 'R2', icon: 'fas fa-cloud-upload-alt', color: 'text-orange-400' },
+    telegram: { label: 'Telegram', icon: 'fab fa-telegram-plane', color: 'text-green-400' }
+  }
+
   return (
     <div className="mb-4">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -118,7 +124,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
 
       {/* 存储方式选择 */}
       <div className="flex justify-center items-center mb-4">
-        <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm rounded-lg px-4 py-2">
+        <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm rounded-lg px-4 py-2 flex-wrap justify-center">
           <span className="text-white/70 text-sm">
             <i className="fas fa-database mr-1"></i>
             存储方式：
@@ -148,7 +154,21 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             />
             <span className="text-white/80 text-sm">
               <i className="fas fa-cloud-upload-alt mr-1"></i>
-              Cloudflare R2
+              R2
+            </span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="storageType"
+              value="telegram"
+              checked={storageType === 'telegram'}
+              onChange={(e) => setStorageType(e.target.value)}
+              className="w-3.5 h-3.5 accent-green-500"
+            />
+            <span className="text-white/80 text-sm">
+              <i className="fab fa-telegram-plane mr-1"></i>
+              Telegram
             </span>
           </label>
         </div>
@@ -198,16 +218,18 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           <i className="fas fa-paste mr-1"></i>也可直接 Ctrl+V 粘贴截图上传
         </p>
 
-        <p className="text-xs mt-2 flex items-center justify-center gap-1">
+        <p className="text-xs mt-2 flex items-center justify-center gap-1 flex-wrap">
           {storageType === 'github' ? (
             <span className="text-blue-400">
-              <i className="fab fa-github mr-1"></i>
-              将存储到 GitHub 私有仓库
+              <i className="fab fa-github mr-1"></i>将存储到 GitHub 私有仓库
+            </span>
+          ) : storageType === 'r2' ? (
+            <span className="text-orange-400">
+              <i className="fas fa-cloud-upload-alt mr-1"></i>将存储到 Cloudflare R2（CDN 加速）
             </span>
           ) : (
-            <span className="text-orange-400">
-              <i className="fas fa-cloud-upload-alt mr-1"></i>
-              将存储到 Cloudflare R2（CDN 加速）
+            <span className="text-green-400">
+              <i className="fab fa-telegram-plane mr-1"></i>将存储到 Telegram 频道（最大 50MB）
             </span>
           )}
         </p>
