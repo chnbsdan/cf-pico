@@ -12,7 +12,7 @@ export default function Header() {
         </h1>
       </div>
       <p className="text-white/70 dark:text-white/50 text-xs">
-        基于 GitHub 私有仓库的独立图床
+        支持 GitHub / R2 / Telegram 三种存储
       </p>
     </div>
   )
