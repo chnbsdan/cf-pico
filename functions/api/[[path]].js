@@ -4,6 +4,7 @@
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
+const TELEGRAM_IMAGES_FILE = 'telegram_images.json'  // Telegram 图片列表存储文件
 
 // ============================================================
 // Telegram 存储相关函数（完整优化版）
@@ -159,6 +160,74 @@ async function deleteTelegramFile(botToken, chatId, messageId) {
 }
 
 // ============================================================
+// Telegram 图片列表管理（独立于历史记录）
+// ============================================================
+
+/**
+ * 读取 Telegram 图片列表
+ */
+async function getTelegramImages(token) {
+  if (!token) return []
+  const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${TELEGRAM_IMAGES_FILE}`
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'User-Agent': 'Cloudflare-Pages'
+      }
+    })
+    if (response.status === 404) return []
+    if (!response.ok) return []
+    const data = await response.json()
+    const content = atob(data.content)
+    return JSON.parse(content) || []
+  } catch (error) {
+    console.error('读取 Telegram 图片列表失败:', error)
+    return []
+  }
+}
+
+/**
+ * 保存 Telegram 图片列表
+ */
+async function saveTelegramImages(token, images, sha = null) {
+  if (!token) return false
+  const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${TELEGRAM_IMAGES_FILE}`
+  
+  let existingSha = sha
+  if (!existingSha) {
+    try {
+      const getRes = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'User-Agent': 'Cloudflare-Pages'
+        }
+      })
+      if (getRes.ok) {
+        const data = await getRes.json()
+        existingSha = data.sha
+      }
+    } catch (e) {}
+  }
+  
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'Cloudflare-Pages'
+    },
+    body: JSON.stringify({
+      message: 'Update Telegram images list',
+      content: btoa(JSON.stringify(images, null, 2)),
+      sha: existingSha || undefined,
+      branch: 'main'
+    })
+  })
+  return response.ok
+}
+
+// ============================================================
 // 工具函数
 // ============================================================
 
@@ -227,6 +296,7 @@ async function handleStats(env) {
   const githubFolders = {}
   let githubTotal = 0
   let externalTotal = 0
+  let telegramTotal = 0
 
   for (const folder of folders) {
     const images = await getFolderImages(folder, env)
@@ -236,6 +306,10 @@ async function handleStats(env) {
 
   const token = env.GITHUB_TOKEN
   if (token) {
+    // 获取 Telegram 图片数量
+    const telegramImages = await getTelegramImages(token)
+    telegramTotal = telegramImages.length
+    
     try {
       const extUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/external.json`
       const response = await fetch(extUrl, {
@@ -261,7 +335,8 @@ async function handleStats(env) {
     github_folders: githubFolders,
     github_total: githubTotal,
     external_total: externalTotal,
-    grand_total: githubTotal + externalTotal
+    telegram_total: telegramTotal,
+    grand_total: githubTotal + externalTotal + telegramTotal
   }), {
     headers: { 'Content-Type': 'application/json' }
   })
@@ -319,6 +394,31 @@ async function handleList(env) {
   const results = {}
   let total = 0
 
+  // ============================================================
+  // ✅ 新增：获取 Telegram 图片列表
+  // ============================================================
+  let telegramImages = []
+  if (token) {
+    telegramImages = await getTelegramImages(token)
+  }
+  results['telegram'] = telegramImages.map(img => ({
+    name: img.filename || img.originalName || 'unknown',
+    url: img.url || '',
+    path: `telegram/${img.filePath}`,
+    sha: img.fileId || '',
+    size: img.size || 0,
+    folder: 'telegram',
+    source: 'telegram',
+    fileId: img.fileId,
+    messageId: img.messageId,
+    filePath: img.filePath,
+    time: img.time
+  }))
+  total += results['telegram'].length
+
+  // ============================================================
+  // 原有的 GitHub/R2/External 获取逻辑
+  // ============================================================
   let externalImages = {}
   if (token) {
     try {
@@ -617,6 +717,29 @@ async function handleUpload(request, env) {
         const baseUrl = new URL(request.url).origin;
         const tgProxyPath = `telegram/${encodeURIComponent(tgFilePath)}`;
         uploadedUrl = `${baseUrl}/api/image?path=${tgProxyPath}`;
+        
+        // ✅ 保存到 Telegram 图片列表
+        if (token) {
+          const existingImages = await getTelegramImages(token);
+          // 检查是否已存在（避免重复）
+          const exists = existingImages.some(img => img.filePath === tgFilePath);
+          if (!exists) {
+            existingImages.push({
+              id: Date.now(),
+              filename: filename,
+              originalName: file.name,
+              fileId: tgFileId,
+              messageId: tgMessageId,
+              filePath: tgFilePath,
+              url: uploadedUrl,
+              time: new Date().toISOString(),
+              size: file.size,
+              mimeType: file.type || 'image/jpeg'
+            });
+            await saveTelegramImages(token, existingImages);
+            console.log(`✅ Telegram 图片已记录: ${filename}`);
+          }
+        }
         
         console.log('Telegram 上传成功:', {
           fileId: tgFileId,
@@ -946,6 +1069,16 @@ async function handleDelete(request, env) {
           if (result) {
             deleted = true;
             console.log(`Telegram deleted: message ${tgMessageId}`);
+            
+            // ✅ 从列表中移除记录
+            if (token) {
+              const images = await getTelegramImages(token);
+              const newImages = images.filter(img => img.messageId !== tgMessageId);
+              if (newImages.length !== images.length) {
+                await saveTelegramImages(token, newImages);
+                console.log(`Telegram 图片记录已移除: ${tgMessageId}`);
+              }
+            }
           } else {
             deleteErrors.push('Telegram 删除失败');
           }
@@ -1048,7 +1181,8 @@ export async function onRequest(context) {
 
   console.log(`API 请求: ${method} ${path}`)
 
-  // POST /api/upload  if (path === 'upload' && method === 'POST') {
+  // POST /api/upload
+  if (path === 'upload' && method === 'POST') {
     return handleUpload(request, env)
   }
 
