@@ -1,4 +1,3 @@
-// src/lib/api.js - 完整版
 export async function fetchStats() {
   const res = await fetch(`/api/stats`)
   if (!res.ok) throw new Error('Failed to fetch stats')
