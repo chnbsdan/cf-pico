@@ -25,31 +25,44 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     img.src = url
   }
 
-  const handleFiles = (files) => {
+  // ✅ 修改：上传完成后，使用后端返回的完整 URL
+  const handleFiles = async (files) => {
     if (!files || files.length === 0) return
     console.log('UploadArea 收到文件数量:', files.length)
-    onUpload(files, folder, storageType)
+    
+    // 调用父组件的上传函数，并等待返回结果
+    const results = await onUpload(files, folder, storageType)
+    
+    // ✅ 如果 onUpload 返回了结果，更新显示
+    if (results && results.length > 0) {
+      results.forEach(result => {
+        if (result.success && result.url) {
+          console.log('上传成功，使用后端返回的 URL:', result.url)
+          // 这里可以根据需要更新 UI
+        }
+      })
+    }
   }
 
-  const handleFileSelect = (e) => {
+  const handleFileSelect = async (e) => {
     const files = e.target.files
     console.log('选择文件数量:', files.length)
-    handleFiles(files)
+    await handleFiles(files)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
   }
 
-  const handleDrop = (e) => {
+  const handleDrop = async (e) => {
     e.preventDefault()
     setDragOver(false)
     const files = e.dataTransfer.files
     console.log('拖拽文件数量:', files.length)
-    handleFiles(files)
+    await handleFiles(files)
   }
 
   useEffect(() => {
-    const handlePaste = (e) => {
+    const handlePaste = async (e) => {
       const items = e.clipboardData?.items
       if (!items) return
       const imageFiles = []
@@ -64,7 +77,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       }
       if (imageFiles.length > 0) {
         e.preventDefault()
-        handleFiles(imageFiles)
+        await handleFiles(imageFiles)
         const toast = document.createElement('div')
         toast.innerHTML = '<i class="fas fa-paste mr-1"></i> 检测到粘贴的图片，开始上传'
         toast.className = 'fixed bottom-20 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm z-50 shadow-lg animate-fade-in-up'
@@ -74,16 +87,9 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     }
     window.addEventListener('paste', handlePaste)
     return () => window.removeEventListener('paste', handlePaste)
-  }, [folder])
+  }, [folder, storageType])
 
   const currentFolder = folderOptions.find(opt => opt.key === folder) || folderOptions[0]
-
-  // 存储方式标签
-  const storageLabels = {
-    github: { label: 'GitHub', icon: 'fab fa-github', color: 'text-blue-400' },
-    r2: { label: 'R2', icon: 'fas fa-cloud-upload-alt', color: 'text-orange-400' },
-    telegram: { label: 'Telegram', icon: 'fab fa-telegram-plane', color: 'text-green-400' }
-  }
 
   return (
     <div className="mb-4">
