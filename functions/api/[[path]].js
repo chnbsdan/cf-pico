@@ -11,6 +11,7 @@ const GITHUB_REPO = 'cf-pico'
 
 /**
  * 上传文件到 Telegram 频道
+ * 兼容 document、photo、video、audio 等多种文件类型
  */
 async function uploadToTelegram(file, botToken, chatId) {
   const formData = new FormData();
@@ -28,10 +29,19 @@ async function uploadToTelegram(file, botToken, chatId) {
   }
 
   const data = await response.json();
-  const fileId = data.result?.document?.file_id;
-  const messageId = data.result?.message_id;
+  const result = data.result;
+  
+  // ✅ 兼容多种文件类型：document、video、audio、photo（数组）
+  let fileId = result?.document?.file_id ||
+               result?.video?.file_id ||
+               result?.audio?.file_id ||
+               (result?.photo && result.photo[result.photo.length - 1]?.file_id) ||
+               result?.file_id;
+
+  const messageId = result?.message_id;
 
   if (!fileId) {
+    console.error('Telegram 响应:', JSON.stringify(data, null, 2));
     throw new Error('Telegram 未返回 file_id');
   }
 
@@ -39,8 +49,17 @@ async function uploadToTelegram(file, botToken, chatId) {
   const filePathResponse = await fetch(
     `https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`
   );
+  
+  if (!filePathResponse.ok) {
+    throw new Error('获取 Telegram 文件路径失败');
+  }
+  
   const filePathData = await filePathResponse.json();
   const filePath = filePathData.result?.file_path;
+
+  if (!filePath) {
+    throw new Error('Telegram 未返回 file_path');
+  }
 
   return {
     fileId,
@@ -471,6 +490,7 @@ async function handleUpload(request, env) {
       })
     }
 
+    // 最大 50MB（Telegram 限制）
     if (file.size > 50 * 1024 * 1024) {
       return new Response(JSON.stringify({ error: 'File too large (max 50MB)' }), {
         status: 400,
@@ -507,16 +527,16 @@ async function handleUpload(request, env) {
         });
       }
       
-      // Telegram 限制 50MB（已在前面检查）
       try {
         const result = await uploadToTelegram(file, botToken, chatId);
         tgFileId = result.fileId;
         tgMessageId = result.messageId;
         tgFilePath = result.filePath;
         usedStorage = 'telegram';
-        // 使用代理 URL，格式：/api/image?path=telegram/{filePath}
+        // 使用代理 URL
         uploadedUrl = `https://cf-pico.pages.dev/api/image?path=telegram/${encodeURIComponent(tgFilePath)}`;
       } catch (error) {
+        console.error('Telegram upload error:', error);
         return new Response(JSON.stringify({ error: error.message }), {
           status: 500,
           headers: { 'Content-Type': 'application/json' }
@@ -573,7 +593,7 @@ async function handleUpload(request, env) {
       usedStorage = 'github'
     }
 
-    // 返回结果（包含 TG 元数据用于删除）
+    // 返回结果
     return new Response(JSON.stringify({
       success: true,
       filename: filename,
@@ -581,7 +601,6 @@ async function handleUpload(request, env) {
       url: uploadedUrl,
       storage: usedStorage,
       rawUrl: uploadedUrl,
-      // Telegram 元数据（用于删除）
       tgMessageId: tgMessageId,
       tgFileId: tgFileId,
       tgFilePath: tgFilePath
@@ -823,6 +842,7 @@ async function handleDelete(request, env) {
     }
 
     let deleted = false
+    let deleteErrors = []
 
     // ========== Telegram 删除 ==========
     if (source === 'telegram' && tgMessageId) {
@@ -834,15 +854,20 @@ async function handleDelete(request, env) {
           if (result) {
             deleted = true;
             console.log(`Telegram deleted: message ${tgMessageId}`);
+          } else {
+            deleteErrors.push('Telegram 删除失败');
           }
         } catch (e) {
           console.error('Telegram delete error:', e);
+          deleteErrors.push('Telegram 删除异常');
         }
+      } else {
+        deleteErrors.push('Telegram 未配置');
       }
     }
 
     // ========== R2 删除 ==========
-    if (source === 'r2' || !source) {
+    if (source === 'r2' || (!source && !tgMessageId)) {
       if (bucket) {
         try {
           const key = `${folder}/${filename}`
@@ -851,12 +876,13 @@ async function handleDelete(request, env) {
           console.log(`R2 deleted: ${key}`)
         } catch (e) {
           console.error('R2 delete error:', e)
+          deleteErrors.push('R2 删除失败')
         }
       }
     }
 
     // ========== GitHub 删除 ==========
-    if (source === 'github' || !source) {
+    if (source === 'github' || (!source && !tgMessageId)) {
       if (token && sha) {
         try {
           const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}/${filename}`
@@ -876,19 +902,30 @@ async function handleDelete(request, env) {
           if (response.ok) {
             deleted = true
             console.log(`GitHub deleted: ${folder}/${filename}`)
+          } else {
+            deleteErrors.push(`GitHub 删除失败: ${response.status}`)
           }
         } catch (e) {
           console.error('GitHub delete error:', e)
+          deleteErrors.push('GitHub 删除异常')
         }
+      } else if (!sha) {
+        deleteErrors.push('缺少 GitHub SHA')
       }
     }
 
     if (deleted) {
-      return new Response(JSON.stringify({ success: true }), {
+      return new Response(JSON.stringify({ 
+        success: true,
+        warnings: deleteErrors.length > 0 ? deleteErrors : undefined
+      }), {
         headers: { 'Content-Type': 'application/json' }
       })
     } else {
-      return new Response(JSON.stringify({ error: 'Delete failed' }), {
+      return new Response(JSON.stringify({ 
+        error: 'Delete failed',
+        details: deleteErrors
+      }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' }
       })
