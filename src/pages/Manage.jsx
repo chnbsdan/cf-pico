@@ -1,4 +1,4 @@
-// src/pages/Manage.jsx - 图片管理页面（密码从环境变量读取 + 历史记录搜索）
+// src/pages/Manage.jsx - 图片管理页面（密码从环境变量读取 + 历史记录搜索 + Telegram 分类）
 import React, { useState, useEffect, useRef } from 'react'
 import { fetchImageList, copyToClipboard, batchCopyLinks } from '../lib/api'
 import ThemeToggle from '../components/ThemeToggle'
@@ -11,7 +11,7 @@ export default function Manage() {
   const [password, setPassword] = useState('')
   const [passwordError, setPasswordError] = useState(false)
   
-  const [images, setImages] = useState({ wallpaper: [], cover: [], sh: [], sd: [] })
+  const [images, setImages] = useState({ wallpaper: [], cover: [], sh: [], sd: [], telegram: [] })
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('wallpaper')
   const [copiedId, setCopiedId] = useState(null)
@@ -30,7 +30,7 @@ export default function Manage() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [selectedHistoryIds, setSelectedHistoryIds] = useState(new Set())
   
-  // ✅ 新增：历史记录搜索关键词
+  // 历史记录搜索关键词
   const [historySearchKeyword, setHistorySearchKeyword] = useState('')
   
   const [loadedImages, setLoadedImages] = useState(new Set())
@@ -46,7 +46,10 @@ export default function Manage() {
   }
 
   const getImageAspect = (img) => {
-    return (img.folder === 'wallpaper' || img.folder === 'sh') ? 'aspect-video' : 'aspect-9/16'
+    if (img.folder === 'wallpaper' || img.folder === 'sh') return 'aspect-video'
+    if (img.folder === 'cover' || img.folder === 'sd') return 'aspect-9/16'
+    if (img.folder === 'telegram') return 'aspect-square'
+    return 'aspect-square'
   }
 
   // ============================================================
@@ -101,7 +104,6 @@ export default function Manage() {
   }
 
   const selectAllHistory = () => {
-    // 只全选当前搜索过滤后的历史记录
     const filteredHistory = getFilteredHistory()
     if (selectedHistoryIds.size === filteredHistory.length && filteredHistory.length > 0) {
       setSelectedHistoryIds(new Set())
@@ -137,7 +139,6 @@ export default function Manage() {
     await loadHistory()
   }
 
-  // ✅ 新增：过滤历史记录（按文件名搜索）
   const getFilteredHistory = () => {
     if (historySearchKeyword.trim() === '') {
       return historyList
@@ -148,12 +149,10 @@ export default function Manage() {
   }
 
   // ============================================================
-  // 登录相关（✅ 从环境变量读取密码）
+  // 登录相关
   // ============================================================
   const handleLogin = (e) => {
     e.preventDefault()
-    // ✅ 从 Vite 环境变量读取密码
-    // 在 Cloudflare Pages 中配置环境变量：VITE_ADMIN_PASSWORD = 你的密码
     const correctPassword = import.meta.env.VITE_ADMIN_PASSWORD || 'admin123'
     
     if (password === correctPassword) {
@@ -175,7 +174,7 @@ export default function Manage() {
     setLoadedImages(new Set())
     try {
       const data = await fetchImageList()
-      setImages(data.folders || { wallpaper: [], cover: [], sh: [], sd: [] })
+      setImages(data.folders || { wallpaper: [], cover: [], sh: [], sd: [], telegram: [] })
     } catch (err) {
       console.error('加载图片列表失败:', err)
     } finally {
@@ -208,7 +207,8 @@ export default function Manage() {
           filename: img.name,
           folder: folder,
           sha: img.sha,
-          source: img.source
+          source: img.source,
+          tgMessageId: img.messageId
         })
       })
       const result = await response.json()
@@ -245,7 +245,8 @@ export default function Manage() {
             filename: img.name,
             folder: activeTab,
             sha: img.sha,
-            source: img.source
+            source: img.source,
+            tgMessageId: img.messageId
           })
         })
         const result = await response.json()
@@ -267,7 +268,7 @@ export default function Manage() {
     setActiveTab(tab)
     setCurrentPage(1)
     setSearchKeyword('')
-    setHistorySearchKeyword('') // ✅ 重置历史搜索
+    setHistorySearchKeyword('')
     setSelectedImages(new Set())
     setSelectedHistoryIds(new Set())
     setLoadedImages(new Set())
@@ -317,7 +318,6 @@ export default function Manage() {
 
   const formatTime = (isoString) => new Date(isoString).toLocaleString('zh-CN')
 
-  // ✅ 过滤后的历史记录
   const filteredHistory = getFilteredHistory()
 
   // ============================================================
@@ -491,6 +491,27 @@ export default function Manage() {
             )
           })}
 
+          {/* Telegram 分类 */}
+          <div
+            onClick={() => handleTabChange('telegram')}
+            className={`
+              flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 mt-2
+              ${activeTab === 'telegram'
+                ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }
+            `}
+          >
+            <div className="flex items-center gap-2">
+              <i className="fab fa-telegram-plane text-sm"></i>
+              <span className="text-sm font-medium">Telegram 图片</span>
+            </div>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+              {images['telegram']?.length || 0}
+            </span>
+          </div>
+
+          {/* 历史记录 */}
           <div
             onClick={() => handleTabChange('history')}
             className={`
@@ -523,6 +544,8 @@ export default function Manage() {
                     ? 'fa-arrows-alt text-blue-500'
                     : activeTab === 'cover' || activeTab === 'sd'
                     ? 'fa-mobile-alt text-purple-500'
+                    : activeTab === 'telegram'
+                    ? 'fa-telegram-plane text-green-500'
                     : 'fa-history text-teal-500'
                   }
                 `}></i>
@@ -534,6 +557,8 @@ export default function Manage() {
                   ? '横屏图片 (sh)'
                   : activeTab === 'sd'
                   ? '竖屏图片 (sd)'
+                  : activeTab === 'telegram'
+                  ? 'Telegram 图片'
                   : '上传历史'}
               </h2>
               {activeTab !== 'history' && (
@@ -571,9 +596,7 @@ export default function Manage() {
           </div>
         </div>
 
-        {/* ============================================================
-            搜索框（图片列表）
-            ============================================================ */}
+        {/* 搜索框（图片列表） */}
         {activeTab !== 'history' && (
           <div className="mb-4">
             <div className="relative">
@@ -600,9 +623,7 @@ export default function Manage() {
           </div>
         )}
 
-        {/* ============================================================
-            ✅ 新增：历史记录搜索框
-            ============================================================ */}
+        {/* 历史记录搜索框 */}
         {activeTab === 'history' && (
           <div className="mb-4">
             <div className="relative">
@@ -634,9 +655,7 @@ export default function Manage() {
           </div>
         )}
 
-        {/* ============================================================
-            批量操作栏（图片）
-            ============================================================ */}
+        {/* 批量操作栏（图片） */}
         {activeTab !== 'history' && selectedImages.size > 0 && (
           <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-blue-200 dark:border-blue-800">
             <span className="text-blue-700 dark:text-blue-300 text-sm flex items-center gap-2">
@@ -693,9 +712,7 @@ export default function Manage() {
           </div>
         )}
 
-        {/* ============================================================
-            批量操作栏（历史记录）
-            ============================================================ */}
+        {/* 批量操作栏（历史记录） */}
         {activeTab === 'history' && selectedHistoryIds.size > 0 && (
           <div className="bg-teal-50 dark:bg-teal-900/30 rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-teal-200 dark:border-teal-800">
             <span className="text-teal-700 dark:text-teal-300 text-sm flex items-center gap-2">
@@ -754,7 +771,7 @@ export default function Manage() {
                           {record.filename}
                         </span>
                         <span className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                          {record.folder === 'wallpaper' || record.folder === 'sh' ? '横屏' : '竖屏'}
+                          {record.folder === 'wallpaper' || record.folder === 'sh' ? '横屏' : record.folder === 'telegram' ? '✈️ TG' : '竖屏'}
                         </span>
                       </div>
                       <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
@@ -871,10 +888,10 @@ export default function Manage() {
                       </p>
                       <div className="flex items-center justify-between mt-1">
                         <span className="text-[8px] text-gray-400">
-  {img.source === 'external' ? '🌐' : 
-   img.source === 'r2' ? '☁️' : 
-   img.source === 'telegram' ? '✈️' : '📦'}
-</span>
+                          {img.source === 'external' ? '🌐' : 
+                           img.source === 'r2' ? '☁️' : 
+                           img.source === 'telegram' ? '✈️' : '📦'}
+                        </span>
                         <div className="flex gap-0.5">
                           <button
                             onClick={(e) => {
