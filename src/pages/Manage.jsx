@@ -871,8 +871,10 @@ export default function Manage() {
                       </p>
                       <div className="flex items-center justify-between mt-1">
                         <span className="text-[8px] text-gray-400">
-                          {img.source === 'external' ? '🌐' : '📦'}
-                        </span>
+  {img.source === 'external' ? '🌐' : 
+   img.source === 'r2' ? '☁️' : 
+   img.source === 'telegram' ? '✈️' : '📦'}
+</span>
                         <div className="flex gap-0.5">
                           <button
                             onClick={(e) => {
