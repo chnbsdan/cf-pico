@@ -173,7 +173,8 @@ function App() {
           const data = await uploadImage(file, folder, storage)
 
           if (data.success) {
-            const proxyUrl = `${window.location.origin}/api/image?path=${data.folder}/${data.filename}`
+            // ✅ 直接使用后端返回的完整 URL，不再自己拼接
+            const proxyUrl = data.url
 
             allResults.push({
               success: true,
