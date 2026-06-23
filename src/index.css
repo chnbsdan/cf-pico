@@ -1,3 +1,4 @@
+/* src/index.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -20,7 +21,7 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.4);
     pointer-events: none;
     z-index: 0;
   }
@@ -32,18 +33,18 @@
 }
 
 @layer components {
-  /* 卡片样式 - 更厚的毛玻璃，更清晰 */
+  /* 卡片样式 - 毛玻璃效果 */
   .card {
-    @apply bg-white/95 backdrop-blur-md rounded-xl shadow-lg border border-white/30;
+    @apply bg-white/80 dark:bg-gray-800/70 backdrop-blur-md rounded-xl shadow-lg border border-white/30 dark:border-gray-700/50;
   }
   
   /* 上传区域 */
   .upload-area {
-    @apply transition-all duration-200 rounded-xl border-2 border-dashed p-8 text-center cursor-pointer bg-white/80 backdrop-blur-sm;
+    @apply transition-all duration-200 rounded-xl border-2 border-dashed p-8 text-center cursor-pointer bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-gray-300 dark:border-gray-600;
   }
   
   .upload-area:hover {
-    @apply border-sky-400 bg-sky-100/90;
+    @apply border-sky-400 bg-sky-100/80 dark:bg-sky-900/30;
   }
 }
 
@@ -76,15 +77,18 @@
   animation: fadeInUp 0.3s ease-out;
 }
 
-/* ========== 暗色模式样式 ========== */
+/* ============================================================
+   暗色模式样式
+   ============================================================ */
 .dark {
   color-scheme: dark;
 }
 
 .dark body {
-  background-image: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%) !important;
+  background-image: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%) !important;
 }
 
+/* 暗色模式下的背景透明覆盖 */
 .dark .bg-white\/5 {
   background-color: rgba(0, 0, 0, 0.3) !important;
 }
@@ -97,35 +101,120 @@
   background-color: rgba(0, 0, 0, 0.5) !important;
 }
 
+.dark .bg-white\/30 {
+  background-color: rgba(0, 0, 0, 0.6) !important;
+}
+
+.dark .bg-white\/40 {
+  background-color: rgba(0, 0, 0, 0.7) !important;
+}
+
+.dark .bg-white\/50 {
+  background-color: rgba(0, 0, 0, 0.7) !important;
+}
+
+.dark .bg-white\/60 {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+}
+
+.dark .bg-white\/70 {
+  background-color: rgba(0, 0, 0, 0.85) !important;
+}
+
+.dark .bg-white\/80 {
+  background-color: rgba(0, 0, 0, 0.9) !important;
+}
+
 .dark .bg-gray-50 {
   background-color: rgba(0, 0, 0, 0.3) !important;
 }
 
-/* 暗色模式下的统计数字 */
+.dark .bg-gray-100 {
+  background-color: rgba(0, 0, 0, 0.4) !important;
+}
+
+.dark .bg-gray-200 {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 暗色模式下的文字颜色 */
 .dark .text-gray-800 {
+  color: #ffffff !important;
+}
+
+.dark .text-gray-700 {
+  color: #e5e5e5 !important;
+}
+
+.dark .text-gray-600 {
+  color: #d1d5db !important;
+}
+
+.dark .text-gray-500 {
+  color: #9ca3af !important;
+}
+
+.dark .text-gray-400 {
+  color: #6b7280 !important;
+}
+
+.dark .text-gray-900 {
+  color: #f9fafb !important;
+}
+
+.dark .text-white {
   color: #ffffff !important;
 }
 
 /* 暗色模式下的卡片背景 */
 .dark .card {
-  background-color: rgba(0, 0, 0, 0.3) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  background-color: rgba(0, 0, 0, 0.5) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .dark .border-gray-300 {
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark .border-gray-200 {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+.dark .border-white\/30 {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.dark .border-white\/20 {
+  border-color: rgba(255, 255, 255, 0.05) !important;
 }
 
 .dark .hover\:bg-sky-100:hover {
-  background-color: rgba(14, 165, 233, 0.2) !important;
+  background-color: rgba(14, 165, 233, 0.15) !important;
 }
 
+/* 暗色模式下的状态颜色 */
 .dark .bg-green-50 {
   background-color: rgba(34, 197, 94, 0.15) !important;
 }
 
 .dark .bg-red-50 {
   background-color: rgba(239, 68, 68, 0.15) !important;
+}
+
+.dark .bg-blue-50 {
+  background-color: rgba(59, 130, 246, 0.15) !important;
+}
+
+.dark .bg-purple-50 {
+  background-color: rgba(168, 85, 247, 0.15) !important;
+}
+
+.dark .bg-orange-50 {
+  background-color: rgba(251, 146, 60, 0.15) !important;
+}
+
+.dark .bg-teal-50 {
+  background-color: rgba(20, 184, 166, 0.15) !important;
 }
 
 .dark .border-green-200 {
@@ -136,6 +225,10 @@
   border-color: rgba(239, 68, 68, 0.3) !important;
 }
 
+.dark .border-blue-200 {
+  border-color: rgba(59, 130, 246, 0.3) !important;
+}
+
 .dark .text-green-700 {
   color: #4ade80 !important;
 }
@@ -144,7 +237,67 @@
   color: #f87171 !important;
 }
 
-.dark .bg-white {
+.dark .text-blue-700 {
+  color: #60a5fa !important;
+}
+
+.dark .text-purple-700 {
+  color: #c084fc !important;
+}
+
+.dark .text-orange-700 {
+  color: #fb923c !important;
+}
+
+/* 暗色模式下的输入框 */
+.dark input,
+.dark textarea,
+.dark select {
   background-color: rgba(0, 0, 0, 0.4) !important;
   color: #e5e5e5 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #6b7280 !important;
+}
+
+.dark input:focus,
+.dark textarea:focus {
+  border-color: rgba(59, 130, 246, 0.5) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
+}
+
+/* 暗色模式下的按钮 */
+.dark .bg-white\/20 {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.dark .hover\:bg-white\/30:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .bg-white\/10 {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* 暗色模式下的滚动条 */
+.dark ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
