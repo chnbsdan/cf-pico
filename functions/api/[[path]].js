@@ -134,7 +134,6 @@ async function uploadToTelegram(file, botToken, chatId) {
 
 /**
  * 从 Telegram 获取文件内容（代理访问）
- * ✅ 终极方案：读取为 ArrayBuffer，构建全新的、完全可控的响应
  */
 async function getTelegramFileContent(botToken, filePath) {
   const url = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
@@ -144,21 +143,35 @@ async function getTelegramFileContent(botToken, filePath) {
     throw new Error(`从 Telegram 获取文件失败: ${response.status}`);
   }
   
-  // 1. 完整读取文件数据到内存
   const fileData = await response.arrayBuffer();
-  // 2. 获取内容类型
-  const contentType = response.headers.get('Content-Type') || 'application/octet-stream';
   
-  // 3. 构建一个全新的 Response，不继承原始响应的任何头信息
-  //    ✅ 不设置 Content-Disposition，让浏览器决定如何处理
-  //    这是让浏览器预览的关键。
+  // ✅ 根据文件扩展名强制设置正确的 MIME 类型
+  const ext = filePath.split('.').pop().toLowerCase();
+  const mimeTypes = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'gif': 'image/gif',
+    'webp': 'image/webp',
+    'bmp': 'image/bmp',
+    'svg': 'image/svg+xml',
+    'ico': 'image/x-icon',
+    'mp4': 'video/mp4',
+    'webm': 'video/webm',
+    'mp3': 'audio/mpeg',
+    'wav': 'audio/wav',
+    'pdf': 'application/pdf'
+  };
+  
+  const contentType = mimeTypes[ext] || response.headers.get('Content-Type') || 'application/octet-stream';
+  
   return new Response(fileData, {
     status: 200,
     headers: {
       'Content-Type': contentType,
       'Cache-Control': 'public, max-age=86400',
       'Access-Control-Allow-Origin': '*'
-      // Content-Disposition 头被彻底移除
+      // ✅ 不设置 Content-Disposition
     }
   });
 }
