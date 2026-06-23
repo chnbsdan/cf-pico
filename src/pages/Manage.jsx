@@ -561,22 +561,22 @@ export default function Manage() {
 
         <div className="p-3 border-b border-gray-200/30 dark:border-gray-800/30">
           <a
-            href="/"
-            className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-white/30 dark:hover:bg-gray-800/30 transition"
-          >
-            <i className="fas fa-home w-4 text-blue-500"></i>
-            <span className="text-sm">返回首页</span>
-          </a>
-          <button
-            onClick={() => {
-              setIsAuthenticated(false)
-              localStorage.removeItem('manage_auth')
-            }}
-            className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-white/30 dark:hover:bg-gray-800/30 transition mt-1"
-          >
-            <i className="fas fa-sign-out-alt w-4 text-red-500"></i>
-            <span className="text-sm">退出登录</span>
-          </button>
+  href="/"
+  className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600 transition"
+>
+  <i className="fas fa-home w-4 text-blue-500"></i>
+  <span className="text-sm">返回首页</span>
+</a>
+<button
+  onClick={() => {
+    setIsAuthenticated(false)
+    localStorage.removeItem('manage_auth')
+  }}
+  className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600 transition mt-1"
+>
+  <i className="fas fa-sign-out-alt w-4 text-red-500"></i>
+  <span className="text-sm">退出登录</span>
+</button>
         </div>
 
         <div className="p-2">
@@ -605,7 +605,7 @@ export default function Manage() {
                   ${folderName !== 'wallpaper' ? 'mt-1' : ''}
                   ${activeTab === folderName
                     ? `${activeColor} bg-white/20 backdrop-blur-sm`
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-white/20 dark:hover:bg-gray-800/30'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600'
                   }
                 `}
               >
@@ -627,7 +627,7 @@ export default function Manage() {
               flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 mt-2
               ${activeTab === 'telegram'
                 ? 'bg-green-500/20 text-green-600 dark:text-green-400 bg-white/20 backdrop-blur-sm'
-                : 'text-gray-600 dark:text-gray-400 hover:bg-white/20 dark:hover:bg-gray-800/30'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600'
               }
             `}
           >
@@ -647,7 +647,7 @@ export default function Manage() {
               flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 mt-2
               ${activeTab === 'history'
                 ? 'bg-teal-500/20 text-teal-600 dark:text-teal-400 bg-white/20 backdrop-blur-sm'
-                : 'text-gray-600 dark:text-gray-400 hover:bg-white/20 dark:hover:bg-gray-800/30'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600'
               }
             `}
           >
@@ -730,7 +730,7 @@ export default function Manage() {
         {activeTab !== 'history' && (
           <div className="mb-4">
             <div className="relative">
-              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm"></i>
+              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 dark:text-blue-400 text-sm"></i>
               <input
                 type="text"
                 placeholder="按文件名搜索图片..."
@@ -757,7 +757,7 @@ export default function Manage() {
         {activeTab === 'history' && (
           <div className="mb-4">
             <div className="relative">
-              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm"></i>
+              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 dark:text-blue-400 text-sm"></i>
               <input
                 type="text"
                 placeholder="搜索历史记录中的文件名..."
