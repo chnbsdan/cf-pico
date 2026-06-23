@@ -551,36 +551,23 @@ async function handleImage(request, env) {
   // ============================================================
   // 0. Telegram：代理返回（支持图片预览）
   // ============================================================
-  // 在 handleImage 函数中，处理 Telegram 的分支
-if (folder === 'telegram') {
+ if (folder === 'telegram') {
   const botToken = env.TG_BOT_TOKEN;
   if (!botToken) {
     return new Response('Telegram 未配置', { status: 500 });
   }
   try {
-    // 1. 获取文件数据
     const response = await getTelegramFileContent(botToken, filename);
-    
-    // 2. 读取文件为 ArrayBuffer（确保完全获取数据）
     const fileData = await response.arrayBuffer();
     
-    // 3. 确定文件类型
-    const contentType = response.headers.get('Content-Type') || 'image/webp';
-    
-    // 4. 构建全新的响应，完全控制所有头部
     const headers = new Headers({
-      'Content-Type': contentType,
-      'Content-Disposition': 'inline',  // ✅ 强制预览
+      'Content-Type': response.headers.get('Content-Type') || 'image/webp',
       'Cache-Control': 'public, max-age=86400',
       'Access-Control-Allow-Origin': '*'
+      // ✅ 不设置 Content-Disposition，让浏览器默认预览
     });
     
-    // 5. 返回新响应
-    return new Response(fileData, {
-      status: 200,
-      headers: headers
-    });
-    
+    return new Response(fileData, { status: 200, headers });
   } catch (error) {
     console.error('Telegram fetch error:', error);
     return new Response('Telegram 文件获取失败', { status: 404 });
