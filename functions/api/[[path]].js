@@ -134,6 +134,7 @@ async function uploadToTelegram(file, botToken, chatId) {
 
 /**
  * 从 Telegram 获取文件内容（代理访问）
+ * 根据文件扩展名强制设置正确的 MIME 类型，实现图片预览
  */
 async function getTelegramFileContent(botToken, filePath) {
   const url = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
@@ -169,11 +170,10 @@ async function getTelegramFileContent(botToken, filePath) {
     status: 200,
     headers: {
       'Content-Type': contentType,
-      'Cache-Control': 'no-cache, no-store, must-revalidate',  // ✅ 强制不缓存
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
       'Access-Control-Allow-Origin': '*'
-      // ✅ 不设置 Content-Disposition
     }
   });
 }
@@ -248,6 +248,46 @@ async function saveTelegramImages(token, images, sha = null) {
     })
   })
   return response.ok
+}
+
+// ============================================================
+// ✅ 新增：处理 /api/tg 随机 Telegram 图片请求
+// ============================================================
+async function handleTelegramRandom(env) {
+  const token = env.GITHUB_TOKEN;
+  if (!token) {
+    return new Response('GITHUB_TOKEN not configured', { status: 500 });
+  }
+
+  // 从 GitHub 读取 Telegram 图片列表
+  const telegramImages = await getTelegramImages(token);
+  if (!telegramImages || telegramImages.length === 0) {
+    return new Response('No Telegram images found', { status: 404 });
+  }
+
+  // 随机选择一张图片
+  const randomImage = telegramImages[Math.floor(Math.random() * telegramImages.length)];
+  
+  // 构建代理 URL（使用当前域名）
+  const baseUrl = 'https://pico.1356666.xyz';
+  const imageUrl = `${baseUrl}/api/image?path=telegram/${encodeURIComponent(randomImage.filePath)}`;
+
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      throw new Error('Failed to fetch image from proxy');
+    }
+    return new Response(response.body, {
+      headers: {
+        'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching Telegram random image:', error);
+    return new Response('Failed to fetch image', { status: 500 });
+  }
 }
 
 // ============================================================
@@ -568,7 +608,6 @@ async function handleImage(request, env) {
       return new Response('Telegram 未配置', { status: 500 });
     }
     try {
-      // ✅ getTelegramFileContent 直接返回 Response
       return await getTelegramFileContent(botToken, filename);
     } catch (error) {
       console.error('Telegram fetch error:', error);
@@ -1192,6 +1231,9 @@ export async function onRequest(context) {
   }
 
   // GET 其他接口
+  if (path === 'tg') {
+    return handleTelegramRandom(env)
+  }
   if (path === 'stats') {
     return handleStats(env)
   }
