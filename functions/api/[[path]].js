@@ -134,7 +134,7 @@ async function uploadToTelegram(file, botToken, chatId) {
 
 /**
  * 从 Telegram 获取文件内容（代理访问）
- * ✅ 直接返回 Response，与 cf-tgbed 做法一致
+ * ✅ 完全模仿 cf-tgbed 的方式：直接返回流
  */
 async function getTelegramFileContent(botToken, filePath) {
   const url = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
@@ -144,13 +144,11 @@ async function getTelegramFileContent(botToken, filePath) {
     throw new Error(`从 Telegram 获取文件失败: ${response.status}`);
   }
   
-  // ✅ 直接读取数据，构建全新 Response
-  const arrayBuffer = await response.arrayBuffer();
   const contentType = response.headers.get('Content-Type') || 'application/octet-stream';
   
-  // ✅ 直接返回 Response，不设置 Content-Disposition
-  // 跟 cf-tgbed 完全一致的做法
-  return new Response(arrayBuffer, {
+  // ✅ 关键：直接使用 response.body（流），不读取为 ArrayBuffer
+  // 和 cf-tgbed 完全一致
+  return new Response(response.body, {
     status: 200,
     headers: {
       'Content-Type': contentType,
