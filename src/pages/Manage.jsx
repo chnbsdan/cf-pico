@@ -575,7 +575,7 @@ export default function Manage() {
                     : activeTab === 'cover' || activeTab === 'sd'
                     ? 'fa-mobile-alt text-purple-500'
                     : activeTab === 'telegram'
-                    ? 'fa-telegram-plane text-green-500'
+                    ? 'fa-paper-plane text-green-500'
                     : 'fa-history text-teal-500'
                   }
                 `}></i>
