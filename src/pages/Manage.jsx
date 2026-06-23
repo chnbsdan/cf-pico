@@ -1129,7 +1129,7 @@ export default function Manage() {
                 id="previewImage"
                 src={getProxyUrl(previewImage)}
                 alt={previewImage.name}
-                className="max-w-[95vw] max-h-[88vh] object-contain select-none pointer-events-none"
+                className="max-w-[95vw] max-h-[88vh] object-contain select-none pointer-events-none rounded-2xl"
                 style={{
                   transform: `scale(${previewScale}) translate(${previewTranslateX}px, ${previewTranslateY}px)`,
                   transition: isDragging ? 'none' : 'transform 0.05s linear',
