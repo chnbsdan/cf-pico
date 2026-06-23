@@ -280,7 +280,7 @@ async function handleTelegramRandom(env) {
     return new Response(response.body, {
       headers: {
         'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
-        'Cache-Control': 'public, max-age=86400',
+        'Cache-Control': 'public, max-age=60',
         'Access-Control-Allow-Origin': '*'
       }
     });
