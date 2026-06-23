@@ -169,7 +169,9 @@ async function getTelegramFileContent(botToken, filePath) {
     status: 200,
     headers: {
       'Content-Type': contentType,
-      'Cache-Control': 'public, max-age=86400',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',  // ✅ 强制不缓存
+      'Pragma': 'no-cache',
+      'Expires': '0',
       'Access-Control-Allow-Origin': '*'
       // ✅ 不设置 Content-Disposition
     }
