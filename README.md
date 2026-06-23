@@ -1,6 +1,6 @@
 # CF-Pico - Cloudflare Pages 现代化的个人图床服务
 
-> 基于 Cloudflare Pages + GitHub 私有仓库 + R2 存储 + **Telegram 频道** 的现代化个人图床服务
+> 基于 Cloudflare Pages + GitHub 私有仓库 + R2 存储 + Telegram 频道的现代化个人图床服务
 
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare_Pages-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://pages.cloudflare.com)
 [![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org)
@@ -8,17 +8,23 @@
 
 ---
 
+## 📖 项目简介
+
+`CF-Pico` 是一个基于 Cloudflare Pages 的现代化个人图床服务，支持 **GitHub 私有仓库**、**Cloudflare R2** 和 **Telegram 频道** 三种存储方式。提供随机图片 API、分类管理、批量上传、管理后台等完整功能，界面采用毛玻璃效果，支持暗色/亮色主题。
+
+---
+
 ## ✨ 功能特点
 
 ### 核心功能
-- 🖼️ **随机图片 API** - `/api/random`、`/api/wallpaper`、`/api/cover`
-- 📂 **分类管理** - 支持横屏（wallpaper/sh）和竖屏（cover/sd）分类
+- 🖼️ **随机图片 API** - `/api/random`、`/api/wallpaper`、`api/cover`、`/api/tg`
+- 📂 **分类管理** - 支持横屏（wallpaper/sh）和竖屏（cover/sd）分类 + Telegram 独立分类
 - 📤 **批量上传** - 多文件选择、拖拽上传、粘贴上传（Ctrl+V）
 - 🔒 **私有仓库** - 图片存储在 GitHub 私有仓库中，安全可控
 - ☁️ **R2 存储支持** - 支持 Cloudflare R2 作为存储，CDN 加速
-- ✈️ **Telegram 存储支持** - 新增 Telegram 频道作为存储后端，充分利用免费资源
+- ✈️ **Telegram 存储支持** - 支持 Telegram 频道作为存储后端
 - 🌐 **代理访问** - 通过 `/api/image?path=` 统一代理，不暴露后端域名
-- 🚀 **大文件上传** - 最大支持 25MB（Telegram 限制 50MB）
+- 🚀 **大文件上传** - 最大支持 50MB（Telegram 限制）
 
 ### 管理后台
 - 🔐 **密码保护** - 管理页面需要密码登录（支持环境变量配置）
@@ -71,20 +77,41 @@ cd cf-pico
 npm install
 ```
 
-### 第四步：配置 Cloudflare Pages 环境变量
+### 第四步：配置环境变量
 
-在 Cloudflare Pages 项目设置中添加以下环境变量：
+#### 方式一：在 Cloudflare Pages 后台配置（推荐）
 
-| 变量名 | 必填 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `GITHUB_TOKEN` | ✅ | 无 | GitHub Personal Access Token（需 `repo` 权限） |
-| `GITHUB_USER` | ❌ | `chnbsdan` | GitHub 用户名 |
-| `GITHUB_REPO` | ❌ | `cf-pico` | 存储图片的仓库名 |
-| `VITE_ADMIN_PASSWORD` | ❌ | `admin123` | 管理后台密码 |
-| `FOLDER_WALLPAPER` | ❌ | `wallpaper` | 横屏图片存储文件夹 |
-| `FOLDER_COVER` | ❌ | `cover` | 竖屏图片存储文件夹 |
-| `TG_BOT_TOKEN` | ❌ | 无 | Telegram Bot Token（使用 Telegram 存储时需要） |
-| `TG_CHAT_ID` | ❌ | 无 | Telegram 频道 ID（使用 Telegram 存储时需要） |
+在 Cloudflare Pages 项目设置 → **环境变量** 中添加：
+
+| 变量名 | 类型 | 必填 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `GITHUB_TOKEN` | 加密文本 | ✅ | 无 | GitHub Personal Access Token（需 `repo` 权限） |
+| `GITHUB_USER` | 纯文本 | ❌ | `chnbsdan` | GitHub 用户名 |
+| `GITHUB_REPO` | 纯文本 | ❌ | `cf-pico` | 存储图片的仓库名 |
+| `VITE_ADMIN_PASSWORD` | 加密文本 | ❌ | `admin123` | 管理后台密码 |
+| `VITE_LOGIN_PASSWORD` | 加密文本 | ❌ | `admin123` | 网站登录密码 |
+| `TG_BOT_TOKEN` | 加密文本 | ❌ | 无 | Telegram Bot Token（使用 Telegram 存储时需要） |
+| `TG_CHAT_ID` | 加密文本 | ❌ | 无 | Telegram 频道 ID（使用 Telegram 存储时需要） |
+| `FOLDER_WALLPAPER` | 纯文本 | ❌ | `wallpaper` | 横屏图片存储文件夹 |
+| `FOLDER_COVER` | 纯文本 | ❌ | `cover` | 竖屏图片存储文件夹 |
+
+#### 方式二：使用 `.env.production` 文件（本地构建）
+
+在项目根目录创建 `.env.production` 文件：
+
+```
+GITHUB_TOKEN=你的GitHub_Token
+GITHUB_USER=chnbsdan
+GITHUB_REPO=cf-pico
+VITE_ADMIN_PASSWORD=你的管理密码
+VITE_LOGIN_PASSWORD=你的登录密码
+TG_BOT_TOKEN=你的Telegram_Bot_Token
+TG_CHAT_ID=你的Telegram频道ID
+FOLDER_WALLPAPER=wallpaper
+FOLDER_COVER=cover
+```
+
+**注意**：`.env.production` 文件不要提交到公开仓库（已在 `.gitignore` 中）。
 
 ### 第五步：绑定 R2 存储桶（可选）
 
@@ -107,9 +134,11 @@ npm install
 ### 图片接口
 | 接口 | 方法 | 说明 |
 |------|------|------|
-| `/api/random` | GET | 随机返回一张图片 |
+| `/api/random` | GET | 随机返回一张图片（所有分类） |
 | `/api/wallpaper` | GET | 随机返回横屏图片 |
 | `/api/cover` | GET | 随机返回竖屏图片 |
+| `/api/tg` | GET | 随机返回一张 Telegram 图片 |
+| `/api/tg?format=html` | GET | 全屏展示 Telegram 随机图片（60秒自动刷新） |
 | `/api/list` | GET | 返回所有图片列表（按分类分组） |
 | `/api/stats` | GET | 返回统计信息 |
 | `/api/image` | GET | 代理访问图片（参数：path=分类/文件名） |
@@ -128,6 +157,12 @@ npm install
 ```bash
 # 随机获取图片
 curl https://your-domain.com/api/random
+
+# 随机获取 Telegram 图片
+curl https://your-domain.com/api/tg
+
+# 全屏展示 Telegram 随机壁纸（60秒自动刷新）
+# 浏览器访问：https://your-domain.com/api/tg?format=html
 
 # 获取统计信息
 curl https://your-domain.com/api/stats
@@ -171,6 +206,7 @@ cf-pico/
 ├── public/
 │   ├── _redirects         # SPA 路由支持
 │   └── favicon.ico
+├── .env.production        # 生产环境变量（可选）
 ├── package.json
 └── README.md
 ```
@@ -210,6 +246,11 @@ cf-pico/
 |--------|------|--------|------|
 | `VITE_ADMIN_PASSWORD` | ❌ | `admin123` | 管理后台密码（前端使用，需 `VITE_` 前缀） |
 
+### 网站登录
+| 变量名 | 必填 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `VITE_LOGIN_PASSWORD` | ❌ | `admin123` | 网站登录密码（前端使用，需 `VITE_` 前缀） |
+
 ### 文件夹自定义
 | 变量名 | 必填 | 默认值 | 说明 |
 |--------|------|--------|------|
@@ -235,6 +276,10 @@ cf-pico/
 ```bash
 # 安装依赖
 npm install
+
+# 创建本地环境变量（可选）
+cp .env.example .env.local
+# 编辑 .env.local 填入你的配置
 
 # 启动开发服务器
 npm run dev
@@ -264,11 +309,14 @@ npm run preview
 
 ### v2.3 (2026-06-23)
 - ✨ **新增 Telegram 存储支持** - 用户可选择将图片上传到 Telegram 频道
+- ✨ **新增登录页面** - 参考 cf-tgbed 风格，支持密码登录
+- ✨ **新增 `/api/tg` 接口** - 随机返回 Telegram 图片，支持 `?format=html` 全屏壁纸模式
 - ✨ **管理后台新增 Telegram 分类** - 独立展示 Telegram 存储的图片
 - ✨ **图片代理优化** - 强制设置正确的 MIME 类型，实现 Telegram 图片在线预览
 - 🐛 **修复缓存问题** - 设置 `Cache-Control: no-cache` 确保最新图片正常预览
 - 🐛 **修复链接生成** - 正确生成 Telegram 图片的代理链接（包含子路径）
 - 🎨 **上传界面优化** - 增加存储方式选择（GitHub / R2 / Telegram）
+- 🎨 **统一 UI 风格** - 首页和管理后台统一毛玻璃风格
 
 ### v2.2 (2026-06-17)
 - ✨ 管理密码支持环境变量配置（`VITE_ADMIN_PASSWORD`）
@@ -308,19 +356,3 @@ npm run preview
 ---
 
 如果觉得这个项目对你有帮助，欢迎 ⭐ Star 支持！
-```
-
----
-
-### 📝 主要更新内容说明
-
-| 更新位置 | 更新内容 |
-|----------|----------|
-| **项目简介** | 增加 "Telegram 频道" 作为存储方式 |
-| **核心功能** | 增加 "✈️ Telegram 存储支持" |
-| **管理后台** | 删除功能增加 "Telegram" |
-| **环境变量** | 增加 Telegram 相关变量（`TG_BOT_TOKEN`、`TG_CHAT_ID`） |
-| **API 示例** | 上传示例增加 `storage=telegram` |
-| **管理后台功能** | 分类筛选增加 "Telegram" |
-| **更新日志** | 新增 v2.3 版本，记录 Telegram 存储相关更新 |
-| **技术栈** | 存储增加 "Telegram 频道" |
