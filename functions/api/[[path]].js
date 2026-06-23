@@ -253,7 +253,7 @@ async function saveTelegramImages(token, images, sha = null) {
 // ============================================================
 // ✅ 新增：处理 /api/tg 随机 Telegram 图片请求
 // ============================================================
-async function handleTelegramRandom(env) {
+async function handleTelegramRandom(env, request) {
   const token = env.GITHUB_TOKEN;
   if (!token) {
     return new Response('GITHUB_TOKEN not configured', { status: 500 });
@@ -267,11 +267,155 @@ async function handleTelegramRandom(env) {
 
   // 随机选择一张图片
   const randomImage = telegramImages[Math.floor(Math.random() * telegramImages.length)];
-  
-  // 构建代理 URL（使用当前域名）
   const baseUrl = 'https://pico.1356666.xyz';
   const imageUrl = `${baseUrl}/api/image?path=telegram/${encodeURIComponent(randomImage.filePath)}`;
 
+  // ============================================================
+  // ✅ 新增：判断是否要返回 HTML 示例页面
+  // ============================================================
+  const url = new URL(request.url);
+  const format = url.searchParams.get('format');
+
+  // 如果访问 /api/tg?format=html，返回示例页面
+  if (format === 'html') {
+    const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TG 随机壁纸</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #1a1a2e;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      padding: 20px;
+    }
+    .container {
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      padding: 20px;
+      border: 1px solid rgba(255,255,255,0.1);
+      max-width: 900px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+    .image-wrapper {
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(0,0,0,0.3);
+    }
+    .image-wrapper img {
+      width: 100%;
+      height: auto;
+      display: block;
+      max-height: 70vh;
+      object-fit: contain;
+    }
+    .info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 16px;
+      padding: 0 8px;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .info .label {
+      color: rgba(255,255,255,0.5);
+      font-size: 14px;
+    }
+    .info .label i {
+      margin-right: 6px;
+    }
+    .info .badge {
+      background: rgba(34,197,94,0.15);
+      color: #4ade80;
+      font-size: 12px;
+      padding: 4px 14px;
+      border-radius: 20px;
+      border: 1px solid rgba(34,197,94,0.2);
+    }
+    .footer {
+      margin-top: 16px;
+      color: rgba(255,255,255,0.2);
+      font-size: 12px;
+      text-align: center;
+    }
+    .footer a {
+      color: rgba(255,255,255,0.3);
+      text-decoration: none;
+    }
+    .footer a:hover {
+      color: rgba(255,255,255,0.6);
+    }
+    @media (max-width: 600px) {
+      .container { padding: 12px; }
+      .info .label { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="image-wrapper">
+      <img id="tgImage" src="${imageUrl}" alt="TG随机图片" loading="eager">
+    </div>
+    <div class="info">
+      <span class="label">
+        <i class="fas fa-image"></i> Telegram 随机壁纸
+      </span>
+      <span class="badge" id="countdown">🔄 60s 自动刷新</span>
+    </div>
+    <div class="footer">
+      <span>Powered by <a href="https://github.com/chnbsdan/cf-pico" target="_blank">CF-Pico</a></span>
+    </div>
+  </div>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <script>
+    // ✅ 60 秒自动刷新图片
+    const img = document.getElementById('tgImage');
+    const countdownEl = document.getElementById('countdown');
+    let seconds = 60;
+
+    function updateCountdown() {
+      countdownEl.textContent = \`🔄 \${seconds}s 自动刷新\`;
+      seconds--;
+      if (seconds < 0) seconds = 59;
+    }
+
+    function refreshImage() {
+      img.src = '/api/tg?t=' + Date.now();
+      seconds = 60;
+      updateCountdown();
+    }
+
+    setInterval(refreshImage, 60000);
+    setInterval(updateCountdown, 1000);
+    img.addEventListener('click', refreshImage);
+  </script>
+</body>
+</html>`;
+
+    return new Response(html, {
+      headers: {
+        'Content-Type': 'text/html;charset=UTF-8',
+        'Cache-Control': 'no-cache'
+      }
+    });
+  }
+
+  // ============================================================
+  // 默认：返回图片（保持原有逻辑）
+  // ============================================================
   try {
     const response = await fetch(imageUrl);
     if (!response.ok) {
@@ -1232,7 +1376,7 @@ export async function onRequest(context) {
 
   // GET 其他接口
   if (path === 'tg') {
-    return handleTelegramRandom(env)
+    return handleTelegramRandom(env, request);
   }
   if (path === 'stats') {
     return handleStats(env)
