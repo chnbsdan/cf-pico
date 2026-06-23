@@ -139,14 +139,24 @@ async function uploadToTelegram(file, botToken, chatId) {
 
 /**
  * 从 Telegram 获取文件内容（代理访问）
+ * ✅ 返回数据而不是原始 Response，彻底清除下载头
  */
 async function getTelegramFileContent(botToken, filePath) {
   const url = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
   const response = await fetch(url);
+  
   if (!response.ok) {
-    throw new Error('从 Telegram 获取文件失败');
+    throw new Error(`从 Telegram 获取文件失败: ${response.status}`);
   }
-  return response;
+  
+  // ✅ 直接提取数据和内容类型，丢弃原始 Response
+  const arrayBuffer = await response.arrayBuffer();
+  const contentType = response.headers.get('Content-Type') || 'application/octet-stream';
+  
+  return {
+    data: arrayBuffer,
+    contentType: contentType
+  };
 }
 
 /**
@@ -549,30 +559,35 @@ async function handleImage(request, env) {
   }
 
   // ============================================================
-  // 0. Telegram：代理返回（支持图片预览）
+  // 0. Telegram：代理返回
   // ============================================================
- if (folder === 'telegram') {
-  const botToken = env.TG_BOT_TOKEN;
-  if (!botToken) {
-    return new Response('Telegram 未配置', { status: 500 });
+  if (folder === 'telegram') {
+    const botToken = env.TG_BOT_TOKEN;
+    if (!botToken) {
+      return new Response('Telegram 未配置', { status: 500 });
+    }
+    try {
+      // ✅ 获取文件数据（不是原始 Response）
+      const result = await getTelegramFileContent(botToken, filename);
+      
+      // ✅ 构建全新的响应，完全由你控制
+      const headers = new Headers({
+        'Content-Type': result.contentType,
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*'
+        // ✅ 不设置 Content-Disposition，跟 GitHub/R2 保持一致
+      });
+      
+      return new Response(result.data, {
+        status: 200,
+        headers: headers
+      });
+      
+    } catch (error) {
+      console.error('Telegram fetch error:', error);
+      return new Response('Telegram 文件获取失败', { status: 404 });
+    }
   }
-  try {
-    const response = await getTelegramFileContent(botToken, filename);
-    const fileData = await response.arrayBuffer();
-    
-    const headers = new Headers({
-      'Content-Type': response.headers.get('Content-Type') || 'image/webp',
-      'Cache-Control': 'public, max-age=86400',
-      'Access-Control-Allow-Origin': '*'
-      // ✅ 不设置 Content-Disposition，让浏览器默认预览
-    });
-    
-    return new Response(fileData, { status: 200, headers });
-  } catch (error) {
-    console.error('Telegram fetch error:', error);
-    return new Response('Telegram 文件获取失败', { status: 404 });
-  }
-}
 
   // ============================================================
   // 1. R2：纯代理模式（返回图片数据，不返回 302 重定向）
