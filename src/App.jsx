@@ -11,11 +11,48 @@ import ApiDocs from './pages/ApiDocs'
 import ThemeToggle from './components/ThemeToggle'
 
 function App() {
-  const [stats, setStats] = useState({ grand_total: 0, github_folders: { wallpaper: 0, cover: 0 }, external_total: 0 })
-  const [uploadResults, setUploadResults] = useState([])
-  const [isUploading, setIsUploading] = useState(false)
-  const [convertToWebp, setConvertToWebp] = useState(false)
+  // ============================================================
+  // 登录状态
+  // ============================================================
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [loginPassword, setLoginPassword] = useState('')
+  const [loginError, setLoginError] = useState(false)
+  const [isLoadingLogin, setIsLoadingLogin] = useState(false)
 
+  // 从环境变量读取登录密码
+  const LOGIN_PASSWORD = import.meta.env.VITE_LOGIN_PASSWORD || 'admin123'
+
+  // 检查是否已登录（从 localStorage 恢复）
+  useEffect(() => {
+    const savedAuth = localStorage.getItem('pico_auth')
+    if (savedAuth === 'true') {
+      setIsLoggedIn(true)
+    }
+  }, [])
+
+  // 处理登录
+  const handleLogin = (e) => {
+    e.preventDefault()
+    setLoginError(false)
+    setIsLoadingLogin(true)
+
+    setTimeout(() => {
+      if (loginPassword === LOGIN_PASSWORD) {
+        setIsLoggedIn(true)
+        localStorage.setItem('pico_auth', 'true')
+        setLoginPassword('')
+        setIsLoadingLogin(false)
+      } else {
+        setLoginError(true)
+        setIsLoadingLogin(false)
+        setLoginPassword('')
+      }
+    }, 500)
+  }
+
+  // ============================================================
+  // 判断路由
+  // ============================================================
   const isManagePage = typeof window !== 'undefined' && window.location.pathname === '/manage'
   if (isManagePage) {
     return <Manage />
@@ -25,6 +62,85 @@ function App() {
   if (isApiDocsPage) {
     return <ApiDocs />
   }
+
+  // ============================================================
+  // 未登录：显示登录界面
+  // ============================================================
+  if (!isLoggedIn) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{
+          backgroundImage: 'url(/api/wallpaper?t=' + Date.now() + ')',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundAttachment: 'fixed'
+        }}
+      >
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-8 w-full max-w-md border border-white/30 shadow-2xl">
+          <div className="text-center mb-8">
+            <div className="inline-block p-4 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg mb-4">
+              <i className="fas fa-cloud-upload-alt text-4xl text-white"></i>
+            </div>
+            <h1 className="text-3xl font-bold text-white drop-shadow-lg">CF-Pico</h1>
+            <p className="text-white/60 text-sm mt-1">请输入密码进入</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="relative">
+              <i className="fas fa-lock absolute left-4 top-1/2 -translate-y-1/2 text-white/40"></i>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="请输入管理密码"
+                className="w-full pl-12 pr-4 py-3 rounded-xl bg-white/20 text-white placeholder-white/50 border border-white/30 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
+                autoFocus
+                disabled={isLoadingLogin}
+              />
+            </div>
+
+            {loginError && (
+              <p className="text-red-400 text-sm text-center animate-pulse">
+                <i className="fas fa-exclamation-circle mr-1"></i>密码错误，请重试
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={isLoadingLogin}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-medium transition-all duration-300 shadow-lg hover:shadow-blue-500/25 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isLoadingLogin ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  验证中...
+                </>
+              ) : (
+                <>
+                  <i className="fas fa-sign-in-alt"></i>
+                  进入图床
+                </>
+              )}
+            </button>
+          </form>
+
+          <p className="text-white/30 text-xs text-center mt-6">
+            <i className="fas fa-shield-alt mr-1"></i>
+            默认密码: {LOGIN_PASSWORD}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // ============================================================
+  // 已登录：正常显示主界面
+  // ============================================================
+  const [stats, setStats] = useState({ grand_total: 0, github_folders: { wallpaper: 0, cover: 0 }, external_total: 0 })
+  const [uploadResults, setUploadResults] = useState([])
+  const [isUploading, setIsUploading] = useState(false)
+  const [convertToWebp, setConvertToWebp] = useState(false)
 
   const setRandomBackground = useCallback(() => {
     const img = new Image()
@@ -173,7 +289,6 @@ function App() {
           const data = await uploadImage(file, folder, storage)
 
           if (data.success) {
-            // ✅ 直接使用后端返回的完整 URL，不再自己拼接
             const proxyUrl = data.url
 
             allResults.push({
@@ -222,9 +337,25 @@ function App() {
     loadStats()
   }
 
+  // 退出登录
+  const handleLogout = () => {
+    if (window.confirm('确定要退出登录吗？')) {
+      localStorage.removeItem('pico_auth')
+      setIsLoggedIn(false)
+    }
+  }
+
   return (
     <div className="min-h-screen py-6 px-4 relative">
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+        <button
+          onClick={handleLogout}
+          className="bg-red-500/80 backdrop-blur-sm hover:bg-red-500 transition px-3 py-2 rounded-lg text-white text-sm flex items-center gap-2"
+          title="退出登录"
+        >
+          <i className="fas fa-sign-out-alt"></i>
+          <span className="hidden sm:inline">退出</span>
+        </button>
         <a
           href="/manage"
           className="bg-white/20 backdrop-blur-sm hover:bg-white/30 transition px-3 py-2 rounded-lg text-gray-1200 dark:text-white text-sm flex items-center gap-2"
