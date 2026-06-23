@@ -178,5 +178,17 @@
     "time": "2026-06-23T06:17:15.257Z",
     "size": 293784,
     "mimeType": "image/webp"
+  },
+  {
+    "id": 1782195441123,
+    "filename": "20260623_bz31.webp",
+    "originalName": "bz31.webp",
+    "fileId": "CAACAgUAAyEGAAMBBNJvJQADLmo6JPBWoDhtcBz9U4TmgtzF7yypAAIJHgACXYTRVe3wl-sdKkXbPAQ",
+    "messageId": 46,
+    "filePath": "stickers/file_29.webp",
+    "url": "https://pico.1356666.xyz/api/image?path=telegram/stickers%2Ffile_29.webp",
+    "time": "2026-06-23T06:17:21.123Z",
+    "size": 132314,
+    "mimeType": "image/webp"
   }
 ]
