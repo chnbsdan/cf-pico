@@ -271,136 +271,42 @@ async function handleTelegramRandom(env, request) {
   const imageUrl = `${baseUrl}/api/image?path=telegram/${encodeURIComponent(randomImage.filePath)}`;
 
   // ============================================================
-  // ✅ 新增：判断是否要返回 HTML 示例页面
+  // ✅ 判断是否返回 HTML 页面
   // ============================================================
   const url = new URL(request.url);
   const format = url.searchParams.get('format');
 
-  // 如果访问 /api/tg?format=html，返回示例页面
   if (format === 'html') {
     const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TG 随机壁纸</title>
+  <title>TG 壁纸</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: #1a1a2e;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      padding: 20px;
-    }
-    .container {
-      background: rgba(255,255,255,0.05);
-      backdrop-filter: blur(10px);
-      border-radius: 20px;
-      padding: 20px;
-      border: 1px solid rgba(255,255,255,0.1);
-      max-width: 900px;
-      width: 100%;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    }
-    .image-wrapper {
-      border-radius: 12px;
+      width: 100vw;
+      height: 100vh;
       overflow: hidden;
-      background: rgba(0,0,0,0.3);
+      background: #000;
     }
-    .image-wrapper img {
-      width: 100%;
-      height: auto;
+    img {
+      width: 100vw;
+      height: 100vh;
+      object-fit: cover;
       display: block;
-      max-height: 70vh;
-      object-fit: contain;
-    }
-    .info {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-top: 16px;
-      padding: 0 8px;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-    .info .label {
-      color: rgba(255,255,255,0.5);
-      font-size: 14px;
-    }
-    .info .label i {
-      margin-right: 6px;
-    }
-    .info .badge {
-      background: rgba(34,197,94,0.15);
-      color: #4ade80;
-      font-size: 12px;
-      padding: 4px 14px;
-      border-radius: 20px;
-      border: 1px solid rgba(34,197,94,0.2);
-    }
-    .footer {
-      margin-top: 16px;
-      color: rgba(255,255,255,0.2);
-      font-size: 12px;
-      text-align: center;
-    }
-    .footer a {
-      color: rgba(255,255,255,0.3);
-      text-decoration: none;
-    }
-    .footer a:hover {
-      color: rgba(255,255,255,0.6);
-    }
-    @media (max-width: 600px) {
-      .container { padding: 12px; }
-      .info .label { font-size: 12px; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="image-wrapper">
-      <img id="tgImage" src="${imageUrl}" alt="TG随机图片" loading="eager">
-    </div>
-    <div class="info">
-      <span class="label">
-        <i class="fas fa-image"></i> Telegram 随机壁纸
-      </span>
-      <span class="badge" id="countdown">🔄 60s 自动刷新</span>
-    </div>
-    <div class="footer">
-      <span>Powered by <a href="https://github.com/chnbsdan/cf-pico" target="_blank">CF-Pico</a></span>
-    </div>
-  </div>
-
-  <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
+  <img id="tgImage" src="${imageUrl}" alt="TG壁纸">
   <script>
-    // ✅ 60 秒自动刷新图片
     const img = document.getElementById('tgImage');
-    const countdownEl = document.getElementById('countdown');
-    let seconds = 60;
-
-    function updateCountdown() {
-      countdownEl.textContent = \`🔄 \${seconds}s 自动刷新\`;
-      seconds--;
-      if (seconds < 0) seconds = 59;
-    }
-
-    function refreshImage() {
+    // 每 60 秒刷新
+    setInterval(() => {
       img.src = '/api/tg?t=' + Date.now();
-      seconds = 60;
-      updateCountdown();
-    }
-
-    setInterval(refreshImage, 60000);
-    setInterval(updateCountdown, 1000);
-    img.addEventListener('click', refreshImage);
+    }, 60000);
   </script>
 </body>
 </html>`;
@@ -414,7 +320,7 @@ async function handleTelegramRandom(env, request) {
   }
 
   // ============================================================
-  // 默认：返回图片（保持原有逻辑）
+  // 默认：返回图片
   // ============================================================
   try {
     const response = await fetch(imageUrl);
