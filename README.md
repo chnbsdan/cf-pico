@@ -1,7 +1,6 @@
-
 # CF-Pico - Cloudflare Pages 现代化的个人图床服务
 
-> 基于 Cloudflare Pages + GitHub 私有仓库 + R2 存储的现代化个人图床服务
+> 基于 Cloudflare Pages + GitHub 私有仓库 + R2 存储 + **Telegram 频道** 的现代化个人图床服务
 
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare_Pages-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://pages.cloudflare.com)
 [![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org)
@@ -17,14 +16,15 @@
 - 📤 **批量上传** - 多文件选择、拖拽上传、粘贴上传（Ctrl+V）
 - 🔒 **私有仓库** - 图片存储在 GitHub 私有仓库中，安全可控
 - ☁️ **R2 存储支持** - 支持 Cloudflare R2 作为存储，CDN 加速
+- ✈️ **Telegram 存储支持** - 新增 Telegram 频道作为存储后端，充分利用免费资源
 - 🌐 **代理访问** - 通过 `/api/image?path=` 统一代理，不暴露后端域名
-- 🚀 **大文件上传** - 最大支持 25MB
+- 🚀 **大文件上传** - 最大支持 25MB（Telegram 限制 50MB）
 
 ### 管理后台
 - 🔐 **密码保护** - 管理页面需要密码登录（支持环境变量配置）
 - 🖼️ **图片预览** - 网格视图展示，支持点击放大预览
 - 📋 **一键复制** - 点击复制图片链接（自动补全域名）
-- 🗑️ **删除图片** - 网页上直接删除，同步到 GitHub/R2
+- 🗑️ **删除图片** - 网页上直接删除，同步到 GitHub/R2/Telegram
 - 📊 **分页浏览** - 每页 48 张图片，支持翻页
 - 📁 **目录树** - 左侧显示分类及图片数量
 - 📜 **上传历史** - 记录所有上传图片，支持搜索和批量删除
@@ -83,6 +83,8 @@ npm install
 | `VITE_ADMIN_PASSWORD` | ❌ | `admin123` | 管理后台密码 |
 | `FOLDER_WALLPAPER` | ❌ | `wallpaper` | 横屏图片存储文件夹 |
 | `FOLDER_COVER` | ❌ | `cover` | 竖屏图片存储文件夹 |
+| `TG_BOT_TOKEN` | ❌ | 无 | Telegram Bot Token（使用 Telegram 存储时需要） |
+| `TG_CHAT_ID` | ❌ | 无 | Telegram 频道 ID（使用 Telegram 存储时需要） |
 
 ### 第五步：绑定 R2 存储桶（可选）
 
@@ -134,7 +136,7 @@ curl https://your-domain.com/api/stats
 curl -X POST \
   -F "file=@image.jpg" \
   -F "folder=wallpaper" \
-  -F "storage=r2" \
+  -F "storage=telegram" \
   https://your-domain.com/api/upload
 
 # 代理访问图片
@@ -184,8 +186,8 @@ cf-pico/
 |------|------|
 | 图片预览 | 网格视图展示，支持点击放大 |
 | 复制链接 | 一键复制完整域名链接 |
-| 删除图片 | 确认后删除，同步到 GitHub/R2 |
-| 分类筛选 | 横屏/竖屏分类切换 |
+| 删除图片 | 确认后删除，同步到 GitHub/R2/Telegram |
+| 分类筛选 | 横屏/竖屏/Telegram 分类切换 |
 | 分页浏览 | 每页 48 张，支持翻页 |
 | 图片搜索 | 按文件名实时搜索 |
 | 批量复制 | 支持复制 URL/Markdown/HTML |
@@ -220,6 +222,12 @@ cf-pico/
 | `IMAGES_BUCKET` | ❌ | 无 | R2 存储桶绑定（在 Pages 设置中绑定） |
 | `R2_PUBLIC_URL` | ❌ | 无 | R2 存储桶公共访问 URL（使用 R2 时需要） |
 
+### Telegram 存储（可选）
+| 变量名 | 必填 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `TG_BOT_TOKEN` | ❌ | 无 | Telegram Bot Token（需 `sendDocument` 权限） |
+| `TG_CHAT_ID` | ❌ | 无 | Telegram 频道 ID（格式：`-100xxxxx`） |
+
 ---
 
 ## 🛠️ 本地开发
@@ -247,12 +255,20 @@ npm run preview
 | **前端** | React 18 + Vite + Tailwind CSS |
 | **图标** | Font Awesome 6 |
 | **后端** | Cloudflare Pages Functions |
-| **存储** | GitHub 私有仓库 + Cloudflare R2 |
+| **存储** | GitHub 私有仓库 + Cloudflare R2 + Telegram 频道 |
 | **部署** | Cloudflare Pages |
 
 ---
 
 ## 🔄 更新日志
+
+### v2.3 (2026-06-23)
+- ✨ **新增 Telegram 存储支持** - 用户可选择将图片上传到 Telegram 频道
+- ✨ **管理后台新增 Telegram 分类** - 独立展示 Telegram 存储的图片
+- ✨ **图片代理优化** - 强制设置正确的 MIME 类型，实现 Telegram 图片在线预览
+- 🐛 **修复缓存问题** - 设置 `Cache-Control: no-cache` 确保最新图片正常预览
+- 🐛 **修复链接生成** - 正确生成 Telegram 图片的代理链接（包含子路径）
+- 🎨 **上传界面优化** - 增加存储方式选择（GitHub / R2 / Telegram）
 
 ### v2.2 (2026-06-17)
 - ✨ 管理密码支持环境变量配置（`VITE_ADMIN_PASSWORD`）
@@ -292,3 +308,19 @@ npm run preview
 ---
 
 如果觉得这个项目对你有帮助，欢迎 ⭐ Star 支持！
+```
+
+---
+
+### 📝 主要更新内容说明
+
+| 更新位置 | 更新内容 |
+|----------|----------|
+| **项目简介** | 增加 "Telegram 频道" 作为存储方式 |
+| **核心功能** | 增加 "✈️ Telegram 存储支持" |
+| **管理后台** | 删除功能增加 "Telegram" |
+| **环境变量** | 增加 Telegram 相关变量（`TG_BOT_TOKEN`、`TG_CHAT_ID`） |
+| **API 示例** | 上传示例增加 `storage=telegram` |
+| **管理后台功能** | 分类筛选增加 "Telegram" |
+| **更新日志** | 新增 v2.3 版本，记录 Telegram 存储相关更新 |
+| **技术栈** | 存储增加 "Telegram 频道" |
