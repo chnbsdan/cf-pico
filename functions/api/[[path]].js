@@ -551,33 +551,36 @@ async function handleImage(request, env) {
   // ============================================================
   // 0. Telegram：代理返回（支持图片预览）
   // ============================================================
-  if (folder === 'telegram') {
+  // 在 handleImage 函数中，处理 Telegram 的分支
+if (folder === 'telegram') {
   const botToken = env.TG_BOT_TOKEN;
   if (!botToken) {
     return new Response('Telegram 未配置', { status: 500 });
   }
   try {
+    // 1. 获取文件数据
     const response = await getTelegramFileContent(botToken, filename);
     
-    // ✅ 获取文件扩展名，判断是否为图片
-    const ext = filename.split('.').pop().toLowerCase();
-    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'svg', 'ico'];
-    const isImage = imageExts.includes(ext);
+    // 2. 读取文件为 ArrayBuffer（确保完全获取数据）
+    const fileData = await response.arrayBuffer();
     
-    // ✅ 构建新 headers，强制覆盖原始响应头
-    const headers = new Headers();
-    headers.set('Content-Type', response.headers.get('Content-Type') || 'image/jpeg');
-    headers.set('Cache-Control', 'public, max-age=86400');
-    headers.set('Access-Control-Allow-Origin', '*');
+    // 3. 确定文件类型
+    const contentType = response.headers.get('Content-Type') || 'image/webp';
     
-    // ✅ 强制设置 Content-Disposition，覆盖原始值
-    if (isImage) {
-      headers.set('Content-Disposition', `inline; filename="${filename}"`);
-    } else {
-      headers.set('Content-Disposition', `attachment; filename="${filename}"`);
-    }
+    // 4. 构建全新的响应，完全控制所有头部
+    const headers = new Headers({
+      'Content-Type': contentType,
+      'Content-Disposition': 'inline',  // ✅ 强制预览
+      'Cache-Control': 'public, max-age=86400',
+      'Access-Control-Allow-Origin': '*'
+    });
     
-    return new Response(response.body, { headers });
+    // 5. 返回新响应
+    return new Response(fileData, {
+      status: 200,
+      headers: headers
+    });
+    
   } catch (error) {
     console.error('Telegram fetch error:', error);
     return new Response('Telegram 文件获取失败', { status: 404 });
