@@ -1,5 +1,5 @@
 // src/pages/Manage.jsx - 图片管理页面（密码从环境变量读取 + 历史记录搜索 + Telegram 分类）
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { fetchImageList, copyToClipboard, batchCopyLinks } from '../lib/api'
 import ThemeToggle from '../components/ThemeToggle'
 
@@ -7,6 +7,9 @@ import ThemeToggle from '../components/ThemeToggle'
 const PLACEHOLDER_SVG = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect fill="%23f0f0f0" width="100" height="100"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23ccc" font-size="20"%3E🖼%3C/text%3E%3C/svg%3E'
 
 export default function Manage() {
+  // ============================================================
+  // 基础状态
+  // ============================================================
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [password, setPassword] = useState('')
   const [passwordError, setPasswordError] = useState(false)
@@ -19,7 +22,19 @@ export default function Manage() {
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 48
   
+  // ============================================================
+  // 预览大图状态 + 缩放拖拽
+  // ============================================================
   const [previewImage, setPreviewImage] = useState(null)
+  const [previewScale, setPreviewScale] = useState(1)
+  const [previewTranslateX, setPreviewTranslateX] = useState(0)
+  const [previewTranslateY, setPreviewTranslateY] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStartX, setDragStartX] = useState(0)
+  const [dragStartY, setDragStartY] = useState(0)
+  const [dragStartTranslateX, setDragStartTranslateX] = useState(0)
+  const [dragStartTranslateY, setDragStartTranslateY] = useState(0)
+
   const [deletingId, setDeletingId] = useState(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   
@@ -33,6 +48,91 @@ export default function Manage() {
   
   const [loadedImages, setLoadedImages] = useState(new Set())
   const [bgImage, setBgImage] = useState('')
+
+  // ============================================================
+  // 预览缩放函数
+  // ============================================================
+  const updatePreviewTransform = useCallback(() => {
+    const img = document.getElementById('previewImage');
+    if (img) {
+      img.style.transform = `scale(${previewScale}) translate(${previewTranslateX}px, ${previewTranslateY}px)`;
+    }
+  }, [previewScale, previewTranslateX, previewTranslateY]);
+
+  // 打开预览时重置缩放
+  const openPreview = (img) => {
+    setPreviewImage(img);
+    setPreviewScale(1);
+    setPreviewTranslateX(0);
+    setPreviewTranslateY(0);
+  };
+
+  // 滚轮缩放
+  const handleWheel = (e) => {
+    if (!previewImage) return;
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    const newScale = Math.min(Math.max(previewScale + delta, 0.2), 5);
+    setPreviewScale(newScale);
+  };
+
+  // 鼠标拖拽
+  const handleMouseDown = (e) => {
+    if (previewScale <= 1) return;
+    setIsDragging(true);
+    setDragStartX(e.clientX);
+    setDragStartY(e.clientY);
+    setDragStartTranslateX(previewTranslateX);
+    setDragStartTranslateY(previewTranslateY);
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return;
+    const dx = e.clientX - dragStartX;
+    const dy = e.clientY - dragStartY;
+    setPreviewTranslateX(dragStartTranslateX + dx);
+    setPreviewTranslateY(dragStartTranslateY + dy);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // 触摸拖拽
+  const handleTouchStart = (e) => {
+    if (previewScale <= 1 || e.touches.length !== 1) return;
+    setIsDragging(true);
+    setDragStartX(e.touches[0].clientX);
+    setDragStartY(e.touches[0].clientY);
+    setDragStartTranslateX(previewTranslateX);
+    setDragStartTranslateY(previewTranslateY);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - dragStartX;
+    const dy = e.touches[0].clientY - dragStartY;
+    setPreviewTranslateX(dragStartTranslateX + dx);
+    setPreviewTranslateY(dragStartTranslateY + dy);
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  // 键盘快捷键：ESC 关闭预览
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setPreviewImage(null);
+        setPreviewScale(1);
+        setPreviewTranslateX(0);
+        setPreviewTranslateY(0);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // ============================================================
   // 自动获取域名生成代理链接
@@ -886,7 +986,7 @@ export default function Manage() {
                     />
                     <div
                       className={`${aspectClass} bg-gray-100/50 dark:bg-gray-900/50 overflow-hidden cursor-pointer relative`}
-                      onClick={() => setPreviewImage(img)}
+                      onClick={() => openPreview(img)}
                     >
                       <img
                         src={isLoaded ? proxyUrl : PLACEHOLDER_SVG}
@@ -995,71 +1095,155 @@ export default function Manage() {
       </div>
 
       {/* ============================================================
-          预览弹窗
+          预览弹窗 - 支持滚轮缩放 + 拖拽平移
            ============================================================ */}
       {previewImage && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
-          onClick={() => setPreviewImage(null)}
+          onClick={() => {
+            setPreviewImage(null)
+            setPreviewScale(1)
+            setPreviewTranslateX(0)
+            setPreviewTranslateY(0)
+          }}
         >
           <div
-            className="relative max-w-[90vw] max-h-[90vh]"
+            className="relative w-full h-full flex items-center justify-center"
             onClick={(e) => e.stopPropagation()}
           >
-            <img
-              src={getProxyUrl(previewImage)}
-              alt={previewImage.name}
-              className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl"
-            />
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setPreviewImage(null)
-              }}
-              className="absolute -top-12 right-0 text-white/70 hover:text-white text-2xl"
+            {/* 图片容器 */}
+            <div
+              id="previewContainer"
+              className="w-full h-full flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing select-none"
+              onWheel={handleWheel}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              style={{ touchAction: 'none' }}
             >
-              <i className="fas fa-times-circle"></i>
+              <img
+                id="previewImage"
+                src={getProxyUrl(previewImage)}
+                alt={previewImage.name}
+                className="max-w-[95vw] max-h-[88vh] object-contain select-none pointer-events-none"
+                style={{
+                  transform: `scale(${previewScale}) translate(${previewTranslateX}px, ${previewTranslateY}px)`,
+                  transition: isDragging ? 'none' : 'transform 0.05s linear',
+                  willChange: 'transform',
+                }}
+                draggable={false}
+              />
+            </div>
+
+            {/* 关闭按钮 */}
+            <button
+              onClick={() => {
+                setPreviewImage(null)
+                setPreviewScale(1)
+                setPreviewTranslateX(0)
+                setPreviewTranslateY(0)
+              }}
+              className="fixed top-4 right-4 z-[101] text-white/60 hover:text-white text-3xl w-10 h-10 flex items-center justify-center rounded-full bg-black/30 hover:bg-black/50 transition backdrop-blur-sm"
+              title="关闭 (ESC)"
+            >
+              <i className="fas fa-times"></i>
             </button>
-            <div className="absolute bottom-0 left-0 right-0 bg-black/60 backdrop-blur-sm p-3 rounded-b-2xl">
-              <p className="text-white text-sm truncate">
-                <i className="fas fa-image mr-2"></i>
+
+            {/* 底部工具栏 */}
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[101] bg-black/50 backdrop-blur-md rounded-xl px-3 py-2 border border-white/10 flex items-center gap-1 flex-wrap justify-center">
+              {/* 文件名 */}
+              <span className="text-white/70 text-xs px-2 truncate max-w-[120px] sm:max-w-[200px]">
                 {previewImage.name}
-              </p>
-              <div className="flex justify-end gap-3 mt-2">
-                <a
-                  href={getProxyUrl(previewImage)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-white/70 hover:text-blue-400 text-sm flex items-center gap-1"
-                >
-                  <i className="fas fa-external-link-alt"></i>
-                  打开
-                </a>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    copyToClipboard(getProxyUrl(previewImage))
-                    setCopiedId(previewImage.name)
-                    setTimeout(() => setCopiedId(null), 2000)
-                  }}
-                  className="text-white/70 hover:text-green-400 text-sm flex items-center gap-1"
-                >
-                  <i className="fas fa-copy"></i>
-                  复制链接
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
+              </span>
+
+              <div className="w-px h-5 bg-white/20 mx-1"></div>
+
+              {/* 缩放控制 */}
+              <button
+                onClick={() => {
+                  setPreviewScale(Math.min(previewScale + 0.2, 5))
+                }}
+                className="text-white/60 hover:text-white text-xs p-1.5 rounded hover:bg-white/10 transition"
+                title="放大"
+              >
+                <i className="fas fa-search-plus"></i>
+              </button>
+              <button
+                onClick={() => {
+                  setPreviewScale(Math.max(previewScale - 0.2, 0.2))
+                }}
+                className="text-white/60 hover:text-white text-xs p-1.5 rounded hover:bg-white/10 transition"
+                title="缩小"
+              >
+                <i className="fas fa-search-minus"></i>
+              </button>
+              <button
+                onClick={() => {
+                  setPreviewScale(1)
+                  setPreviewTranslateX(0)
+                  setPreviewTranslateY(0)
+                }}
+                className="text-white/60 hover:text-white text-xs p-1.5 rounded hover:bg-white/10 transition"
+                title="重置"
+              >
+                <i className="fas fa-expand"></i>
+              </button>
+              <span className="text-white/40 text-[10px] min-w-[36px] text-center">
+                {Math.round(previewScale * 100)}%
+              </span>
+
+              <div className="w-px h-5 bg-white/20 mx-1"></div>
+
+              {/* 操作按钮 */}
+              <a
+                href={getProxyUrl(previewImage)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-white/60 hover:text-blue-400 text-xs p-1.5 rounded hover:bg-white/10 transition"
+                title="打开原图"
+              >
+                <i className="fas fa-external-link-alt"></i>
+              </a>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  copyToClipboard(getProxyUrl(previewImage))
+                  setCopiedId(previewImage.name)
+                  setTimeout(() => setCopiedId(null), 2000)
+                }}
+                className="text-white/60 hover:text-green-400 text-xs p-1.5 rounded hover:bg-white/10 transition"
+                title="复制链接"
+              >
+                <i className="fas fa-copy"></i>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const confirmDelete = confirm(`确定要删除 "${previewImage.name}" 吗？\n\n⚠️ 此操作不可恢复！`)
+                  if (confirmDelete) {
                     handleDelete(previewImage, activeTab, e)
                     setPreviewImage(null)
-                  }}
-                  className="text-white/70 hover:text-red-400 text-sm flex items-center gap-1"
-                >
-                  <i className="fas fa-trash-alt"></i>
-                  删除
-                </button>
-              </div>
+                    setPreviewScale(1)
+                    setPreviewTranslateX(0)
+                    setPreviewTranslateY(0)
+                  }
+                }}
+                className="text-white/60 hover:text-red-400 text-xs p-1.5 rounded hover:bg-white/10 transition"
+                title="删除"
+              >
+                <i className="fas fa-trash-alt"></i>
+              </button>
+
+              <div className="w-px h-5 bg-white/20 mx-1"></div>
+
+              <span className="text-white/30 text-[10px] hidden sm:inline">
+                🖱️ 滚轮缩放 · 拖拽移动
+              </span>
             </div>
           </div>
         </div>
