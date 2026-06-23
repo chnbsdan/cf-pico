@@ -26,7 +26,7 @@ const statsConfig = [
   { 
     id: 'telegram', 
     label: 'Telegram 图片', 
-    icon: 'fa-telegram-plane', 
+    icon: 'fas fa-paper-plane', 
     color: 'text-blue-400 dark:text-blue-300', 
     bg: 'bg-blue-50/60 dark:bg-blue-900/20' 
   },
