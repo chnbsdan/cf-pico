@@ -29,11 +29,10 @@ export default function Manage() {
   const [historyList, setHistoryList] = useState([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [selectedHistoryIds, setSelectedHistoryIds] = useState(new Set())
-  
-  // 历史记录搜索关键词
   const [historySearchKeyword, setHistorySearchKeyword] = useState('')
   
   const [loadedImages, setLoadedImages] = useState(new Set())
+  const [bgImage, setBgImage] = useState('')
 
   // ============================================================
   // 自动获取域名生成代理链接
@@ -42,13 +41,11 @@ export default function Manage() {
     if (img.source === 'external') return img.url
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
     
-    // ✅ 如果是 Telegram 图片，使用保存的完整路径
     if (img.source === 'telegram' && img.filePath) {
       const encodedPath = encodeURIComponent(`telegram/${img.filePath}`)
       return `${baseUrl}/api/image?path=${encodedPath}`
     }
     
-    // 其他图片
     const encodedPath = encodeURIComponent(img.folder + '/' + img.name)
     return `${baseUrl}/api/image?path=${encodedPath}`
   }
@@ -59,6 +56,18 @@ export default function Manage() {
     if (img.folder === 'telegram') return 'aspect-square'
     return 'aspect-square'
   }
+
+  // ============================================================
+  // 背景图：只加载一次
+  // ============================================================
+  useEffect(() => {
+    const img = new Image()
+    const url = `/api/wallpaper?t=${Date.now()}`
+    img.onload = () => {
+      setBgImage(`url(${url})`)
+    }
+    img.src = url
+  }, [])
 
   // ============================================================
   // 检查登录状态
@@ -342,14 +351,16 @@ export default function Manage() {
   }, [activeTab, currentPage, searchKeyword, paginatedImages])
 
   // ============================================================
-  // 未登录界面
+  // 未登录界面（统一风格）
   // ============================================================
   if (!isAuthenticated) {
     return (
       <div
         className="min-h-screen flex items-center justify-center px-4"
         style={{
-          backgroundImage: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          backgroundImage: bgImage || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
           backgroundAttachment: 'fixed'
         }}
       >
@@ -388,36 +399,45 @@ export default function Manage() {
   }
 
   // ============================================================
-  // 已登录界面
+  // 已登录界面（统一毛玻璃风格）
   // ============================================================
   return (
-    <div className="min-h-screen py-6 px-4 bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+    <div
+      className="min-h-screen py-6 px-4"
+      style={{
+        backgroundImage: bgImage || 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed'
+      }}
+    >
       <ThemeToggle />
 
       {/* 移动端菜单按钮 */}
       <button
         onClick={() => setMobileMenuOpen(true)}
-        className="fixed top-4 left-4 z-50 lg:hidden bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm hover:bg-white dark:hover:bg-gray-700 transition p-2.5 rounded-lg text-gray-700 dark:text-white shadow-md"
+        className="fixed top-4 left-4 z-50 lg:hidden bg-white/20 backdrop-blur-sm hover:bg-white/30 transition p-2.5 rounded-lg text-white shadow-md"
       >
         <i className="fas fa-bars text-lg"></i>
       </button>
 
       {mobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black/50 dark:bg-black/70 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
 
+      {/* 左侧菜单 - 毛玻璃效果 */}
       <div
         className={`
-          fixed top-0 left-0 h-full z-50 w-64 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md shadow-2xl transition-transform duration-300 ease-in-out
+          fixed top-0 left-0 h-full z-50 w-64 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md shadow-2xl transition-transform duration-300 ease-in-out
           ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0 lg:left-4 lg:top-1/2 lg:-translate-y-1/2 lg:w-56 lg:h-auto lg:rounded-2xl
-          lg:bg-white/90 dark:lg:bg-gray-900/90 lg:backdrop-blur-md lg:border lg:border-gray-200 dark:lg:border-gray-700
+          lg:bg-white/70 dark:lg:bg-gray-900/70 lg:backdrop-blur-md lg:border lg:border-white/30
         `}
       >
-        <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center lg:block">
+        <div className="p-4 border-b border-gray-200/30 dark:border-gray-800/30 flex justify-between items-center lg:block">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-gray-700 dark:text-gray-200 font-medium">
               <i className="fas fa-folder-tree text-blue-500"></i>
@@ -425,7 +445,7 @@ export default function Manage() {
             </div>
             <button
               onClick={refreshCurrent}
-              className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-white transition p-1.5 rounded-lg hover:bg-gray-100/50 dark:hover:bg-gray-800/50"
               title="刷新"
             >
               <i className="fas fa-sync-alt"></i>
@@ -439,10 +459,10 @@ export default function Manage() {
           </button>
         </div>
 
-        <div className="p-3 border-b border-gray-200 dark:border-gray-800">
+        <div className="p-3 border-b border-gray-200/30 dark:border-gray-800/30">
           <a
             href="/"
-            className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+            className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-white/30 dark:hover:bg-gray-800/30 transition"
           >
             <i className="fas fa-home w-4 text-blue-500"></i>
             <span className="text-sm">返回首页</span>
@@ -452,7 +472,7 @@ export default function Manage() {
               setIsAuthenticated(false)
               localStorage.removeItem('manage_auth')
             }}
-            className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition mt-1"
+            className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-white/30 dark:hover:bg-gray-800/30 transition mt-1"
           >
             <i className="fas fa-sign-out-alt w-4 text-red-500"></i>
             <span className="text-sm">退出登录</span>
@@ -460,6 +480,7 @@ export default function Manage() {
         </div>
 
         <div className="p-2">
+          {/* 分类列表 */}
           {['wallpaper', 'cover', 'sh', 'sd'].map((folderName) => {
             const displayName = {
               wallpaper: '横屏图片',
@@ -469,10 +490,10 @@ export default function Manage() {
             }[folderName]
 
             const activeColor = {
-              wallpaper: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
-              cover: 'bg-purple-500/10 text-purple-600 dark:text-purple-400',
-              sh: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
-              sd: 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+              wallpaper: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
+              cover: 'bg-purple-500/20 text-purple-600 dark:text-purple-400',
+              sh: 'bg-blue-500/20 text-blue-600 dark:text-blue-400',
+              sd: 'bg-purple-500/20 text-purple-600 dark:text-purple-400'
             }[folderName]
 
             return (
@@ -483,8 +504,8 @@ export default function Manage() {
                   flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200
                   ${folderName !== 'wallpaper' ? 'mt-1' : ''}
                   ${activeTab === folderName
-                    ? `${activeColor} bg-gradient-to-r`
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                    ? `${activeColor} bg-white/20 backdrop-blur-sm`
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-white/20 dark:hover:bg-gray-800/30'
                   }
                 `}
               >
@@ -492,7 +513,7 @@ export default function Manage() {
                   <i className={`fas ${activeTab === folderName ? 'fa-folder-open' : 'fa-folder'} text-sm`}></i>
                   <span className="text-sm font-medium">{displayName}</span>
                 </div>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-white/30 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300">
                   {images[folderName]?.length || 0}
                 </span>
               </div>
@@ -505,8 +526,8 @@ export default function Manage() {
             className={`
               flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 mt-2
               ${activeTab === 'telegram'
-                ? 'bg-green-500/10 text-green-600 dark:text-green-400'
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                ? 'bg-green-500/20 text-green-600 dark:text-green-400 bg-white/20 backdrop-blur-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-white/20 dark:hover:bg-gray-800/30'
               }
             `}
           >
@@ -514,7 +535,7 @@ export default function Manage() {
               <i className="fab fa-telegram-plane text-sm"></i>
               <span className="text-sm font-medium">Telegram 图片</span>
             </div>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+            <span className="text-xs px-2 py-0.5 rounded-full bg-white/30 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300">
               {images['telegram']?.length || 0}
             </span>
           </div>
@@ -525,8 +546,8 @@ export default function Manage() {
             className={`
               flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 mt-2
               ${activeTab === 'history'
-                ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400'
-                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                ? 'bg-teal-500/20 text-teal-600 dark:text-teal-400 bg-white/20 backdrop-blur-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-white/20 dark:hover:bg-gray-800/30'
               }
             `}
           >
@@ -534,15 +555,16 @@ export default function Manage() {
               <i className="fas fa-history text-sm"></i>
               <span className="text-sm font-medium">上传历史</span>
             </div>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+            <span className="text-xs px-2 py-0.5 rounded-full bg-white/30 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300">
               {historyList.length}
             </span>
           </div>
         </div>
       </div>
 
+      {/* 主内容区 */}
       <div className="lg:pl-[250px]">
-        <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-gray-200 dark:border-gray-700 p-4 mb-6 shadow-sm">
+        <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-white/30 p-4 mb-6 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h2 className="text-gray-800 dark:text-white font-semibold flex items-center gap-2 text-base sm:text-lg">
@@ -585,17 +607,17 @@ export default function Manage() {
                 <button
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm"
+                  className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
                 >
                   <i className="fas fa-chevron-left"></i>
                 </button>
-                <span className="px-4 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-white text-sm font-medium">
+                <span className="px-4 py-1.5 rounded-lg bg-white/70 dark:bg-gray-700/70 text-gray-700 dark:text-white text-sm font-medium backdrop-blur-sm">
                   {currentPage} / {totalPages}
                 </span>
                 <button
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm"
+                  className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
                 >
                   <i className="fas fa-chevron-right"></i>
                 </button>
@@ -604,7 +626,7 @@ export default function Manage() {
           </div>
         </div>
 
-        {/* 搜索框（图片列表） */}
+        {/* 搜索框 */}
         {activeTab !== 'history' && (
           <div className="mb-4">
             <div className="relative">
@@ -617,7 +639,7 @@ export default function Manage() {
                   setSearchKeyword(e.target.value)
                   setCurrentPage(1)
                 }}
-                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border border-white/30 dark:border-gray-700 text-gray-700 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
               />
               {searchKeyword && (
                 <button
@@ -644,7 +666,7 @@ export default function Manage() {
                   setHistorySearchKeyword(e.target.value)
                   setSelectedHistoryIds(new Set())
                 }}
-                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border border-white/30 dark:border-gray-700 text-gray-700 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition"
               />
               {historySearchKeyword && (
                 <button
@@ -663,9 +685,9 @@ export default function Manage() {
           </div>
         )}
 
-        {/* 批量操作栏（图片） */}
+        {/* 批量操作栏 */}
         {activeTab !== 'history' && selectedImages.size > 0 && (
-          <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-blue-200 dark:border-blue-800">
+          <div className="bg-blue-50/80 dark:bg-blue-900/30 backdrop-blur-sm rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-blue-200/50 dark:border-blue-800/50">
             <span className="text-blue-700 dark:text-blue-300 text-sm flex items-center gap-2">
               <i className="fas fa-check-circle"></i>
               已选择 {selectedImages.size} 张图片
@@ -687,29 +709,29 @@ export default function Manage() {
               <div className="relative">
                 <button
                   onClick={() => setShowBatchMenu(!showBatchMenu)}
-                  className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-white text-sm flex items-center gap-2 transition"
+                  className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 hover:bg-white/70 dark:hover:bg-gray-600/70 text-gray-700 dark:text-white text-sm flex items-center gap-2 transition backdrop-blur-sm"
                 >
                   <i className="fas fa-copy"></i>
                   批量复制
                   <i className="fas fa-chevron-down text-xs"></i>
                 </button>
                 {showBatchMenu && (
-                  <div className="absolute right-0 bottom-full mb-2 w-44 bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden z-[200] border border-gray-200 dark:border-gray-700">
+                  <div className="absolute right-0 bottom-full mb-2 w-44 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-xl shadow-lg overflow-hidden z-[200] border border-white/30 dark:border-gray-700">
                     <button
                       onClick={() => handleBatchCopy('url')}
-                      className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm flex items-center gap-2"
+                      className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-white/50 dark:hover:bg-gray-700/50 text-sm flex items-center gap-2"
                     >
                       <i className="fas fa-link"></i> 复制链接 (URL)
                     </button>
                     <button
                       onClick={() => handleBatchCopy('markdown')}
-                      className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm flex items-center gap-2"
+                      className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-white/50 dark:hover:bg-gray-700/50 text-sm flex items-center gap-2"
                     >
                       <i className="fab fa-markdown"></i> 复制 Markdown
                     </button>
                     <button
                       onClick={() => handleBatchCopy('html')}
-                      className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 text-sm flex items-center gap-2"
+                      className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-white/50 dark:hover:bg-gray-700/50 text-sm flex items-center gap-2"
                     >
                       <i className="fab fa-html5"></i> 复制 HTML
                     </button>
@@ -722,7 +744,7 @@ export default function Manage() {
 
         {/* 批量操作栏（历史记录） */}
         {activeTab === 'history' && selectedHistoryIds.size > 0 && (
-          <div className="bg-teal-50 dark:bg-teal-900/30 rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-teal-200 dark:border-teal-800">
+          <div className="bg-teal-50/80 dark:bg-teal-900/30 backdrop-blur-sm rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-teal-200/50 dark:border-teal-800/50">
             <span className="text-teal-700 dark:text-teal-300 text-sm flex items-center gap-2">
               <i className="fas fa-check-circle"></i>
               已选择 {selectedHistoryIds.size} 条记录
@@ -752,7 +774,7 @@ export default function Manage() {
               <i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i>
             </div>
           ) : filteredHistory.length === 0 ? (
-            <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 rounded-xl">
+            <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl">
               <i className="fas fa-inbox text-5xl text-gray-400 mb-3"></i>
               <p className="text-gray-500">
                 {historySearchKeyword ? `没有找到 "${historySearchKeyword}" 相关的记录` : '暂无上传记录'}
@@ -763,7 +785,7 @@ export default function Manage() {
               {filteredHistory.map((record) => (
                 <div
                   key={record.id}
-                  className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-xl p-4 border border-gray-200 dark:border-gray-700 shadow-sm relative group"
+                  className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-xl p-4 border border-white/30 dark:border-gray-700 shadow-sm relative group"
                 >
                   <input
                     type="checkbox"
@@ -778,7 +800,7 @@ export default function Manage() {
                         <span className="text-sm font-medium text-gray-800 dark:text-white truncate">
                           {record.filename}
                         </span>
-                        <span className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                        <span className="text-xs px-2 py-0.5 rounded bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300">
                           {record.folder === 'wallpaper' || record.folder === 'sh' ? '横屏' : record.folder === 'telegram' ? '✈️ TG' : '竖屏'}
                         </span>
                       </div>
@@ -792,7 +814,7 @@ export default function Manage() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleCopy(record.url, record.id)}
-                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                        className="p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-700/50 transition"
                         title="复制链接"
                       >
                         {copiedId === record.id ? (
@@ -805,14 +827,14 @@ export default function Manage() {
                         href={record.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                        className="p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-700/50 transition"
                         title="打开图片"
                       >
                         <i className="fas fa-external-link-alt text-gray-500"></i>
                       </a>
                       <button
                         onClick={() => handleDeleteHistory(record.id)}
-                        className="p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition"
+                        className="p-2 rounded-lg hover:bg-red-100/50 dark:hover:bg-red-900/30 transition"
                         title="删除记录"
                       >
                         <i className="fas fa-trash-alt text-red-400"></i>
@@ -828,7 +850,7 @@ export default function Manage() {
             <i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i>
           </div>
         ) : paginatedImages.length === 0 ? (
-          <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 rounded-xl">
+          <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl">
             <i className="fas fa-folder-open text-5xl text-gray-400 mb-3"></i>
             <p className="text-gray-500">
               {searchKeyword ? `没有找到 "${searchKeyword}" 相关的图片` : '暂无图片'}
@@ -853,7 +875,7 @@ export default function Manage() {
                 return (
                   <div
                     key={img.sha || idx}
-                    className="group bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-600 transition-all hover:scale-105 hover:shadow-xl relative"
+                    className="group bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-xl overflow-hidden border border-white/30 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-600 transition-all hover:scale-105 hover:shadow-xl relative"
                   >
                     <input
                       type="checkbox"
@@ -863,7 +885,7 @@ export default function Manage() {
                       className="absolute top-2 left-2 z-10 w-3.5 h-3.5 rounded border-gray-300 bg-white/80 checked:bg-blue-500 cursor-pointer"
                     />
                     <div
-                      className={`${aspectClass} bg-gray-100 dark:bg-gray-900 overflow-hidden cursor-pointer relative`}
+                      className={`${aspectClass} bg-gray-100/50 dark:bg-gray-900/50 overflow-hidden cursor-pointer relative`}
                       onClick={() => setPreviewImage(img)}
                     >
                       <img
@@ -938,31 +960,31 @@ export default function Manage() {
                 <button
                   onClick={() => setCurrentPage(1)}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm"
+                  className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
                 >
                   首页
                 </button>
                 <button
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm"
+                  className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
                 >
                   上一页
                 </button>
-                <span className="px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-white text-sm">
+                <span className="px-3 py-1.5 rounded-lg bg-white/70 dark:bg-gray-700/70 text-gray-700 dark:text-white text-sm backdrop-blur-sm">
                   {currentPage} / {totalPages}
                 </span>
                 <button
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm"
+                  className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
                 >
                   下一页
                 </button>
                 <button
                   onClick={() => setCurrentPage(totalPages)}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-30 transition text-sm"
+                  className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
                 >
                   末页
                 </button>
