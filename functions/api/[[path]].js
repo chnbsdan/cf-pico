@@ -134,7 +134,7 @@ async function uploadToTelegram(file, botToken, chatId) {
 
 /**
  * 从 Telegram 获取文件内容（代理访问）
- * ✅ 完全模仿 cf-tgbed 的方式：直接返回流
+ * ✅ 终极方案：读取为 ArrayBuffer，构建全新的、完全可控的响应
  */
 async function getTelegramFileContent(botToken, filePath) {
   const url = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
@@ -144,16 +144,21 @@ async function getTelegramFileContent(botToken, filePath) {
     throw new Error(`从 Telegram 获取文件失败: ${response.status}`);
   }
   
+  // 1. 完整读取文件数据到内存
+  const fileData = await response.arrayBuffer();
+  // 2. 获取内容类型
   const contentType = response.headers.get('Content-Type') || 'application/octet-stream';
   
-  // ✅ 关键：直接使用 response.body（流），不读取为 ArrayBuffer
-  // 和 cf-tgbed 完全一致
-  return new Response(response.body, {
+  // 3. 构建一个全新的 Response，不继承原始响应的任何头信息
+  //    ✅ 不设置 Content-Disposition，让浏览器决定如何处理
+  //    这是让浏览器预览的关键。
+  return new Response(fileData, {
     status: 200,
     headers: {
       'Content-Type': contentType,
       'Cache-Control': 'public, max-age=86400',
       'Access-Control-Allow-Origin': '*'
+      // Content-Disposition 头被彻底移除
     }
   });
 }
