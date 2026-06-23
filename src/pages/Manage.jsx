@@ -532,7 +532,7 @@ export default function Manage() {
             `}
           >
             <div className="flex items-center gap-2">
-              <i className="fab fa-telegram-plane text-sm"></i>
+              <i className="fas fa-paper-plane text-sm"></i>
               <span className="text-sm font-medium">Telegram 图片</span>
             </div>
             <span className="text-xs px-2 py-0.5 rounded-full bg-white/30 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300">
