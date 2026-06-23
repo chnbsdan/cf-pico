@@ -730,7 +730,7 @@ export default function Manage() {
         {activeTab !== 'history' && (
           <div className="mb-4">
             <div className="relative">
-              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 dark:text-blue-400 text-sm"></i>
+              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-white/80 dark:text-white/80 text-sm"></i>
               <input
                 type="text"
                 placeholder="按文件名搜索图片..."
@@ -757,7 +757,7 @@ export default function Manage() {
         {activeTab === 'history' && (
           <div className="mb-4">
             <div className="relative">
-              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 dark:text-blue-400 text-sm"></i>
+              <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-white/80 dark:text-white/80 text-sm"></i>
               <input
                 type="text"
                 placeholder="搜索历史记录中的文件名..."
