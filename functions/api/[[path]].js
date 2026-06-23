@@ -552,37 +552,37 @@ async function handleImage(request, env) {
   // 0. Telegram：代理返回（支持图片预览）
   // ============================================================
   if (folder === 'telegram') {
-    const botToken = env.TG_BOT_TOKEN;
-    if (!botToken) {
-      return new Response('Telegram 未配置', { status: 500 });
-    }
-    try {
-      const response = await getTelegramFileContent(botToken, filename);
-      
-      // ✅ 获取文件扩展名，判断是否为图片
-      const ext = filename.split('.').pop().toLowerCase();
-      const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'svg', 'ico'];
-      const isImage = imageExts.includes(ext);
-      
-      const headers = {
-        'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
-        'Cache-Control': 'public, max-age=86400',
-        'Access-Control-Allow-Origin': '*'
-      };
-      
-      // ✅ 如果是图片，使用 inline 预览；否则 attachment 下载
-      if (isImage) {
-        headers['Content-Disposition'] = `inline; filename="${filename}"`;
-      } else {
-        headers['Content-Disposition'] = `attachment; filename="${filename}"`;
-      }
-      
-      return new Response(response.body, { headers });
-    } catch (error) {
-      console.error('Telegram fetch error:', error);
-      return new Response('Telegram 文件获取失败', { status: 404 });
-    }
+  const botToken = env.TG_BOT_TOKEN;
+  if (!botToken) {
+    return new Response('Telegram 未配置', { status: 500 });
   }
+  try {
+    const response = await getTelegramFileContent(botToken, filename);
+    
+    // ✅ 获取文件扩展名，判断是否为图片
+    const ext = filename.split('.').pop().toLowerCase();
+    const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'svg', 'ico'];
+    const isImage = imageExts.includes(ext);
+    
+    // ✅ 构建新 headers，强制覆盖原始响应头
+    const headers = new Headers();
+    headers.set('Content-Type', response.headers.get('Content-Type') || 'image/jpeg');
+    headers.set('Cache-Control', 'public, max-age=86400');
+    headers.set('Access-Control-Allow-Origin', '*');
+    
+    // ✅ 强制设置 Content-Disposition，覆盖原始值
+    if (isImage) {
+      headers.set('Content-Disposition', `inline; filename="${filename}"`);
+    } else {
+      headers.set('Content-Disposition', `attachment; filename="${filename}"`);
+    }
+    
+    return new Response(response.body, { headers });
+  } catch (error) {
+    console.error('Telegram fetch error:', error);
+    return new Response('Telegram 文件获取失败', { status: 404 });
+  }
+}
 
   // ============================================================
   // 1. R2：纯代理模式（返回图片数据，不返回 302 重定向）
