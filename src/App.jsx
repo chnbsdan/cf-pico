@@ -366,9 +366,16 @@ function App() {
           </form>
 
           <p className="text-white/30 text-xs text-center mt-6">
-            <i className="fas fa-shield-alt mr-1"></i>
-            默认密码: {LOGIN_PASSWORD}
-          </p>
+  Powered by{' '}
+  <a 
+    href="https://github.com/chnbsdan/cf-pico" 
+    target="_blank" 
+    rel="noopener noreferrer"
+    className="text-white/40 hover:text-white/70 transition"
+  >
+    chnbsdan
+  </a>
+</p>
         </div>
       </div>
     )
