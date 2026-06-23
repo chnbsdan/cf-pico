@@ -41,6 +41,14 @@ export default function Manage() {
   const getProxyUrl = (img) => {
     if (img.source === 'external') return img.url
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+    
+    // ✅ 如果是 Telegram 图片，使用保存的完整路径
+    if (img.source === 'telegram' && img.filePath) {
+      const encodedPath = encodeURIComponent(`telegram/${img.filePath}`)
+      return `${baseUrl}/api/image?path=${encodedPath}`
+    }
+    
+    // 其他图片
     const encodedPath = encodeURIComponent(img.folder + '/' + img.name)
     return `${baseUrl}/api/image?path=${encodedPath}`
   }
