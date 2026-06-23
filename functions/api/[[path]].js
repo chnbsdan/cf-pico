@@ -277,8 +277,7 @@ async function handleTelegramRandom(env, request) {
   const format = url.searchParams.get('format');
 
   if (format === 'html') {
-    // ✅ 简洁全屏版本 + 60秒自动刷新
-    const html = `<!DOCTYPE html>
+  const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -303,21 +302,26 @@ async function handleTelegramRandom(env, request) {
 <body>
   <img id="tgImage" src="${imageUrl}" alt="TG壁纸">
   <script>
-    // ✅ 每 60 秒自动刷新图片
-    setInterval(() => {
-      document.getElementById('tgImage').src = '/api/tg?t=' + Date.now();
-    }, 60000);
+    // ✅ 使用 setTimeout 递归，确保每次都刷新
+    function refreshImage() {
+      const img = document.getElementById('tgImage');
+      img.src = '/api/tg?t=' + Date.now();
+      // 60秒后再次刷新
+      setTimeout(refreshImage, 60000);
+    }
+    // 60秒后开始第一次刷新
+    setTimeout(refreshImage, 60000);
   </script>
 </body>
 </html>`;
 
-    return new Response(html, {
-      headers: {
-        'Content-Type': 'text/html;charset=UTF-8',
-        'Cache-Control': 'no-cache'
-      }
-    });
-  }
+  return new Response(html, {
+    headers: {
+      'Content-Type': 'text/html;charset=UTF-8',
+      'Cache-Control': 'no-cache'
+    }
+  });
+}
 
   // ============================================================
   // 默认：返回图片
