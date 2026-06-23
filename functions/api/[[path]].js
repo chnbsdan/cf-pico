@@ -561,33 +561,19 @@ async function handleImage(request, env) {
   // ============================================================
   // 0. Telegram：代理返回
   // ============================================================
-  if (folder === 'telegram') {
-    const botToken = env.TG_BOT_TOKEN;
-    if (!botToken) {
-      return new Response('Telegram 未配置', { status: 500 });
-    }
-    try {
-      // ✅ 获取文件数据（不是原始 Response）
-      const result = await getTelegramFileContent(botToken, filename);
-      
-      // ✅ 构建全新的响应，完全由你控制
-      const headers = new Headers({
-        'Content-Type': result.contentType,
-        'Cache-Control': 'public, max-age=86400',
-        'Access-Control-Allow-Origin': '*'
-        // ✅ 不设置 Content-Disposition，跟 GitHub/R2 保持一致
-      });
-      
-      return new Response(result.data, {
-        status: 200,
-        headers: headers
-      });
-      
-    } catch (error) {
-      console.error('Telegram fetch error:', error);
-      return new Response('Telegram 文件获取失败', { status: 404 });
-    }
+ if (folder === 'telegram') {
+  const botToken = env.TG_BOT_TOKEN;
+  if (!botToken) {
+    return new Response('Telegram 未配置', { status: 500 });
   }
+  try {
+    // ✅ 直接返回 getTelegramFileContent 构建的响应
+    return await getTelegramFileContent(botToken, filename);
+  } catch (error) {
+    console.error('Telegram fetch error:', error);
+    return new Response('Telegram 文件获取失败', { status: 404 });
+  }
+}
 
   // ============================================================
   // 1. R2：纯代理模式（返回图片数据，不返回 302 重定向）
