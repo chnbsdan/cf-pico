@@ -778,7 +778,7 @@ export default function Manage() {
               )}
             </div>
             {historySearchKeyword && (
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+              <p className="text-xs text-blue-500 dark:text-blue-400 mt-1">
                 找到 {filteredHistory.length} 条匹配记录
               </p>
             )}
@@ -904,7 +904,7 @@ export default function Manage() {
                           {record.folder === 'wallpaper' || record.folder === 'sh' ? '横屏' : record.folder === 'telegram' ? '✈️ TG' : '竖屏'}
                         </span>
                       </div>
-                      <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                      <div className="text-xs text-blue-500 dark:text-blue-400 mt-1">
                         {formatTime(record.time)}
                       </div>
                       <code className="text-xs text-gray-500 dark:text-gray-400 mt-1 block truncate">
