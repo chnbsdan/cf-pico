@@ -277,8 +277,9 @@ async function handleTelegramRandom(env, request) {
   const format = url.searchParams.get('format');
 
   if (format === 'html') {
+    // ✅ 简洁全屏版本 + 60秒自动刷新
     const html = `<!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -302,10 +303,9 @@ async function handleTelegramRandom(env, request) {
 <body>
   <img id="tgImage" src="${imageUrl}" alt="TG壁纸">
   <script>
-    const img = document.getElementById('tgImage');
-    // 每 60 秒刷新
+    // ✅ 每 60 秒自动刷新图片
     setInterval(() => {
-      img.src = '/api/tg?t=' + Date.now();
+      document.getElementById('tgImage').src = '/api/tg?t=' + Date.now();
     }, 60000);
   </script>
 </body>
