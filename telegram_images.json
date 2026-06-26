@@ -10,5 +10,17 @@
     "time": "2026-06-26T10:10:03.176Z",
     "size": 323581,
     "mimeType": "image/jpeg"
+  },
+  {
+    "id": 1782468608513,
+    "filename": "20260626_ait1.jpg",
+    "originalName": "ait1.jpg",
+    "fileId": "AgACAgUAAyEGAAMBBNJvJQADM2o-T_-oLbEgTIQAARrfXzm5AAE9AbEAAm8SaxtdtvFVl6pcAXQWhPoBAAMCAAN3AAM8BA",
+    "messageId": 51,
+    "filePath": "photos/file_34.jpg",
+    "url": "https://pico.1356666.xyz/api/image?path=telegram/photos%2Ffile_34.jpg",
+    "time": "2026-06-26T10:10:08.513Z",
+    "size": 147854,
+    "mimeType": "image/jpeg"
   }
 ]
