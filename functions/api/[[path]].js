@@ -307,10 +307,10 @@ async function handleTelegramRandom(env, request) {
       const img = document.getElementById('tgImage');
       img.src = '/api/tg?t=' + Date.now();
       // 60秒后再次刷新
-      setTimeout(refreshImage, 60000);
+      setTimeout(refreshImage, 3600000);
     }
     // 60秒后开始第一次刷新
-    setTimeout(refreshImage, 60000);
+    setTimeout(refreshImage, 3600000);
   </script>
 </body>
 </html>`;
