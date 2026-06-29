@@ -133,21 +133,42 @@ async function uploadToTelegram(file, botToken, chatId) {
 }
 
 /**
- * 从 Telegram 获取文件内容（代理访问）
- * 根据文件扩展名强制设置正确的 MIME 类型，实现图片预览
+ * ✅ 核心修改：通过 file_id 实时获取文件内容（兼容 file_path 过期）
+ * 先调用 getFile 获取最新的 file_path，再下载文件
  */
-async function getTelegramFileContent(botToken, filePath) {
-  const url = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
-  const response = await fetch(url);
+async function getTelegramFileContentByFileId(botToken, fileId) {
+  if (!fileId) {
+    throw new Error('缺少 fileId');
+  }
+
+  // 1. 用 file_id 获取最新的 file_path
+  const getFilePathUrl = `https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`;
+  const filePathRes = await fetch(getFilePathUrl);
+  
+  if (!filePathRes.ok) {
+    const errorText = await filePathRes.text();
+    throw new Error(`获取文件路径失败: ${filePathRes.status} ${errorText}`);
+  }
+  
+  const filePathData = await filePathRes.json();
+  const currentFilePath = filePathData.result?.file_path;
+  
+  if (!currentFilePath) {
+    throw new Error('Telegram 未返回 file_path');
+  }
+
+  // 2. 用最新的 file_path 下载文件
+  const downloadUrl = `https://api.telegram.org/file/bot${botToken}/${currentFilePath}`;
+  const response = await fetch(downloadUrl);
   
   if (!response.ok) {
-    throw new Error(`从 Telegram 获取文件失败: ${response.status}`);
+    throw new Error(`从 Telegram 下载文件失败: ${response.status}`);
   }
   
   const fileData = await response.arrayBuffer();
   
-  // ✅ 根据文件扩展名强制设置正确的 MIME 类型
-  const ext = filePath.split('.').pop().toLowerCase();
+  // 3. 根据文件扩展名设置正确的 MIME 类型
+  const ext = currentFilePath.split('.').pop().toLowerCase();
   const mimeTypes = {
     'jpg': 'image/jpeg',
     'jpeg': 'image/jpeg',
@@ -633,7 +654,7 @@ async function handleList(env) {
 }
 
 // ============================================================
-// GET /api/image - 核心代理
+// GET /api/image - 核心代理（✅ 核心修改：改用 file_id 实时获取）
 // ============================================================
 async function handleImage(request, env) {
   const url = new URL(request.url)
@@ -654,18 +675,33 @@ async function handleImage(request, env) {
   }
 
   // ============================================================
-  // Telegram：直接返回 getTelegramFileContent 的 Response
+  // ✅ 核心修改：Telegram 改用 file_id 实时获取
   // ============================================================
   if (folder === 'telegram') {
     const botToken = env.TG_BOT_TOKEN;
     if (!botToken) {
       return new Response('Telegram 未配置', { status: 500 });
     }
+    if (!token) {
+      return new Response('GITHUB_TOKEN not configured', { status: 500 });
+    }
+
     try {
-      return await getTelegramFileContent(botToken, filename);
+      // 1. 从 telegram_images.json 查找记录
+      const images = await getTelegramImages(token);
+      const record = images.find(img => img.filePath === filename);
+      
+      if (!record || !record.fileId) {
+        console.error(`未找到记录: ${filename}`);
+        return new Response('未找到对应的 fileId', { status: 404 });
+      }
+
+      // 2. 用 file_id 实时获取文件（自动处理 file_path 过期）
+      return await getTelegramFileContentByFileId(botToken, record.fileId);
+      
     } catch (error) {
       console.error('Telegram fetch error:', error);
-      return new Response('Telegram 文件获取失败', { status: 404 });
+      return new Response(`Telegram 文件获取失败: ${error.message}`, { status: 404 });
     }
   }
 
@@ -1119,14 +1155,16 @@ async function deleteHistory(request, env) {
   }
 }
 
-// POST /api/admin/delete
+// ============================================================
+// POST /api/admin/delete - ✅ 优化：Telegram 删除失败时仍清理记录
+// ============================================================
 async function handleDelete(request, env) {
   const bucket = env.IMAGES_BUCKET
   const token = env.GITHUB_TOKEN
 
   try {
     const body = await request.json()
-    const { filename, folder, sha, source, tgMessageId } = body
+    const { filename, folder, sha, source, tgMessageId, fileId } = body
 
     if (!filename || !folder) {
       return new Response(JSON.stringify({ error: 'Missing filename or folder' }), {
@@ -1138,45 +1176,61 @@ async function handleDelete(request, env) {
     let deleted = false
     let deleteErrors = []
 
-    // Telegram 删除
+    // ============================================================
+    // ✅ Telegram 删除：即使文件已过期也清理记录
+    // ============================================================
     if (source === 'telegram' && tgMessageId) {
       const botToken = env.TG_BOT_TOKEN;
       const chatId = env.TG_CHAT_ID;
+      let tgDeleted = false;
+      
       if (botToken && chatId) {
         try {
           const result = await deleteTelegramFile(botToken, chatId, tgMessageId);
           if (result) {
-            deleted = true;
-            console.log(`Telegram deleted: message ${tgMessageId}`);
-            
-            if (token) {
-              const images = await getTelegramImages(token);
-              const newImages = images.filter(img => img.messageId !== tgMessageId);
-              if (newImages.length !== images.length) {
-                await saveTelegramImages(token, newImages);
-                console.log(`Telegram 图片记录已移除: ${tgMessageId}`);
-              }
-            }
+            tgDeleted = true;
+            console.log(`✅ Telegram 消息已删除: ${tgMessageId}`);
           } else {
-            deleteErrors.push('Telegram 删除失败');
+            console.warn(`⚠️ Telegram 消息删除失败（可能已不存在）: ${tgMessageId}`);
+            // 不报错，继续清理记录
           }
         } catch (e) {
-          console.error('Telegram delete error:', e);
-          deleteErrors.push('Telegram 删除异常');
+          console.warn(`⚠️ Telegram 删除异常（可能已过期）: ${e.message}`);
+          // 不中断，继续清理记录
         }
       } else {
         deleteErrors.push('Telegram 未配置');
       }
+      
+      // ✅ 关键：无论 Telegram 删除是否成功，都清理记录
+      if (token) {
+        try {
+          const images = await getTelegramImages(token);
+          const newImages = images.filter(img => img.messageId !== tgMessageId);
+          if (newImages.length !== images.length) {
+            await saveTelegramImages(token, newImages);
+            deleted = true;
+            console.log(`✅ Telegram 图片记录已移除: ${tgMessageId}`);
+          } else {
+            // 记录中找不到该 messageId，说明已经被清理了
+            deleted = true;
+            console.log(`ℹ️ 记录中已无该 messageId: ${tgMessageId}`);
+          }
+        } catch (e) {
+          console.error('清理 Telegram 记录失败:', e);
+          deleteErrors.push('记录清理失败');
+        }
+      }
     }
 
-    // R2 删除
+    // R2 删除（非 Telegram 图片）
     if (source === 'r2' || (!source && !tgMessageId)) {
       if (bucket) {
         try {
           const key = `${folder}/${filename}`
           await bucket.delete(key)
           deleted = true
-          console.log(`R2 deleted: ${key}`)
+          console.log(`✅ R2 已删除: ${key}`)
         } catch (e) {
           console.error('R2 delete error:', e)
           deleteErrors.push('R2 删除失败')
@@ -1184,7 +1238,7 @@ async function handleDelete(request, env) {
       }
     }
 
-    // GitHub 删除
+    // GitHub 删除（非 Telegram 图片）
     if (source === 'github' || (!source && !tgMessageId)) {
       if (token && sha) {
         try {
@@ -1204,7 +1258,7 @@ async function handleDelete(request, env) {
           })
           if (response.ok) {
             deleted = true
-            console.log(`GitHub deleted: ${folder}/${filename}`)
+            console.log(`✅ GitHub 已删除: ${folder}/${filename}`)
           } else {
             deleteErrors.push(`GitHub 删除失败: ${response.status}`)
           }
