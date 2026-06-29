@@ -70,5 +70,17 @@
     "time": "2026-06-29T08:05:44.586Z",
     "size": 1025580,
     "mimeType": "image/jpeg"
+  },
+  {
+    "id": 1782721344437,
+    "filename": "20260629_sz2.jpg",
+    "originalName": "sz2.jpg",
+    "fileId": "AgACAgUAAyEGAAMBBNJvJQADOGpCKz7-pQ6KM5Uz7uduEsLxvBXWAAL6EWsbblIRVr1jfVpTm2WzAQADAgADdwADPAQ",
+    "messageId": 56,
+    "filePath": "photos/file_39.jpg",
+    "url": "https://pico.1356666.xyz/api/image?path=telegram/photos%2Ffile_39.jpg",
+    "time": "2026-06-29T08:22:24.437Z",
+    "size": 2480699,
+    "mimeType": "image/jpeg"
   }
 ]
