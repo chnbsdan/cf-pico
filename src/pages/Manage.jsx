@@ -135,10 +135,18 @@ export default function Manage() {
   }, []);
 
   // ============================================================
-  // 自动获取域名生成代理链接
+  // ✅ 修复：获取图片代理链接（优先使用存储的完整URL）
   // ============================================================
   const getProxyUrl = (img) => {
+    // ✅ 如果图片自带完整 URL（Telegram 上传时已生成），直接使用
+    if (img.url && img.url.startsWith('http')) {
+      return img.url
+    }
+    
+    // 外部图片（external）直接使用原链接
     if (img.source === 'external') return img.url
+    
+    // 兜底：手动拼接（兼容旧数据）
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
     
     if (img.source === 'telegram' && img.filePath) {
