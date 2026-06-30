@@ -13,10 +13,10 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const fileInputRef = useRef(null)
 
   const folderOptions = [
-    { key: 'wallpaper', label: '横屏图片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
-    { key: 'sh', label: '横屏图片 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'sd', label: '竖屏图片 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
+    { key: 'wallpaper', label: '横屏 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'cover', label: '竖屏 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
+    { key: 'sh', label: '横屏 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'sd', label: '竖屏 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
   ]
 
   const refreshBackground = () => {
@@ -145,11 +145,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             folder: folder,
             storage: storageType
           })
-          // ✅ 立即更新父组件
-          if (onUpload) {
-            await onUpload(results)
-          }
-          results.length = 0
           
         } else {
           const result = await onUpload([file], folder, storageType)
@@ -175,10 +170,12 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           error: error.message,
           folder: folder
         })
-        if (onUpload) {
-          await onUpload(results)
-        }
       }
+    }
+
+    // ✅ 所有文件处理完后，统一调用一次 onUpload
+    if (results.length > 0 && onUpload) {
+      await onUpload(results)
     }
   }
 
