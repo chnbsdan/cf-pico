@@ -1,16 +1,20 @@
 // functions/api/[[path]].js - Cloudflare Pages API 完整入口
 // 支持：stats, random, wallpaper, cover, list, image, upload, history, admin/delete
-// 支持 GitHub、R2、Telegram 三种存储（纯代理模式，不暴露后端域名）
+// 支持 GitHub、R2、Telegram 三种存储
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
 const TELEGRAM_IMAGES_FILE = 'telegram_images.json'
 
 // ============================================================
-// 大文件分片上传配置
+// 大文件分片上传配置（前后端统一 20MB）
 // ============================================================
 const CHUNK_SIZE = 20 * 1024 * 1024
 const MAX_FILE_SIZE = 1024 * 1024 * 1024
+
+function generateUploadId() {
+  return Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9)
+}
 
 // ============================================================
 // Telegram 存储相关函数
@@ -231,10 +235,7 @@ async function saveTelegramImages(token, images, sha = null) {
 // 分片上传相关函数
 // ============================================================
 
-function generateUploadId() {
-  return Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9)
-}
-
+// 1. 初始化分片上传
 async function handleInitUpload(request, env) {
   try {
     const { filename, totalSize } = await request.json()
@@ -255,6 +256,8 @@ async function handleInitUpload(request, env) {
       status: 'uploading',
       createdAt: Date.now()
     }
+    // 删除可能残留的旧记录
+    await env.CHUNK_STORE.delete(`upload:${uploadId}`)
     await env.CHUNK_STORE.put(`upload:${uploadId}`, JSON.stringify(uploadData))
     return new Response(JSON.stringify({ uploadId, chunkCount, chunkSize: CHUNK_SIZE }), {
       headers: { 'Content-Type': 'application/json' }
@@ -267,6 +270,25 @@ async function handleInitUpload(request, env) {
   }
 }
 
+// 2. 上传单个分片到 Telegram
+async function uploadChunkToTelegram(fileData, botToken, chatId, chunkIndex, filename) {
+  const formData = new FormData()
+  formData.append('chat_id', chatId)
+  formData.append('document', new Blob([fileData]), `chunk_${chunkIndex}_${filename}`)
+  
+  const response = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
+    method: 'POST',
+    body: formData
+  })
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.description || 'Telegram 上传分片失败')
+  }
+  const data = await response.json()
+  return data.result.document.file_id
+}
+
+// 3. 处理分片上传
 async function handleUploadChunk(request, env) {
   try {
     const formData = await request.formData()
@@ -300,33 +322,15 @@ async function handleUploadChunk(request, env) {
     const botToken = env.TG_BOT_TOKEN
     const chatId = env.TG_CHAT_ID
     const fileData = await chunk.arrayBuffer()
-    
-    const tgFormData = new FormData()
-    tgFormData.append('chat_id', chatId)
-    tgFormData.append('document', new Blob([fileData]), `chunk_${chunkIndex}_${upload.filename}`)
-    
-    const tgResponse = await fetch(
-      `https://api.telegram.org/bot${botToken}/sendDocument`,
-      { method: 'POST', body: tgFormData }
-    )
-    
-    if (!tgResponse.ok) {
-      const error = await tgResponse.json()
-      throw new Error(error.description || 'Telegram 上传分片失败')
-    }
-    
-    const tgData = await tgResponse.json()
-    const fileId = tgData.result.document.file_id
+    const fileId = await uploadChunkToTelegram(fileData, botToken, chatId, chunkIndex, upload.filename)
     
     upload.uploadedChunks.push({ index: chunkIndex, fileId })
     await env.CHUNK_STORE.put(`upload:${uploadId}`, JSON.stringify(upload))
     
-    const progress = upload.uploadedChunks.length / upload.chunkCount
-    
     return new Response(JSON.stringify({
       success: true,
       chunkIndex,
-      progress,
+      progress: upload.uploadedChunks.length / upload.chunkCount,
       uploaded: upload.uploadedChunks.length,
       total: upload.chunkCount
     }), {
@@ -341,6 +345,7 @@ async function handleUploadChunk(request, env) {
   }
 }
 
+// 4. 完成上传（✅ 使用 Set 检查缺失分片，更健壮）
 async function handleCompleteUpload(request, env) {
   try {
     const { uploadId, folder } = await request.json()
@@ -360,15 +365,22 @@ async function handleCompleteUpload(request, env) {
     }
     
     const upload = JSON.parse(uploadDataRaw)
-    if (upload.uploadedChunks.length !== upload.chunkCount) {
+    
+    // ✅ 用 Set 检查是否所有分片都已上传（更健壮）
+    const expectedChunks = new Set()
+    for (let i = 0; i < upload.chunkCount; i++) {
+      expectedChunks.add(i)
+    }
+    const uploadedChunks = new Set(upload.uploadedChunks.map(c => c.index))
+    const missingChunks = [...expectedChunks].filter(i => !uploadedChunks.has(i))
+    
+    if (missingChunks.length > 0) {
       return new Response(JSON.stringify({
-        error: `分片未完整上传：${upload.uploadedChunks.length}/${upload.chunkCount}`
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
+        error: `缺少分片: ${missingChunks.join(', ')}`
+      }), { status: 400 })
     }
     
+    // 保存大文件记录
     const fileId = `large_${uploadId}`
     const fileRecord = {
       id: Date.now(),
@@ -406,6 +418,7 @@ async function handleCompleteUpload(request, env) {
   }
 }
 
+// 5. 下载大文件（下载时合并所有分片）
 async function handleDownloadLarge(request, env) {
   try {
     const url = new URL(request.url)
@@ -824,8 +837,8 @@ async function handleImage(request, env) {
       return await getTelegramFileContentByFileId(botToken, record.fileId);
       
     } catch (error) {
-      console.error('Telegram fetch error:', error);
-      return new Response(`Telegram 文件获取失败: ${error.message}`, { status: 404 });
+      console.error('Telegram fetch error:', error)
+      return new Response(`Telegram 文件获取失败: ${error.message}`, { status: 404 })
     }
   }
 
@@ -1483,6 +1496,25 @@ export async function onRequest(context) {
   }
   if (path.startsWith('large/') && method === 'GET') {
     return handleDownloadLarge(request, env)
+  }
+
+  // ============================================================
+  // 临时清理路由（用一次后可以删掉）
+  // ============================================================
+  if (path === 'clean' && method === 'GET') {
+    try {
+      const list = await env.CHUNK_STORE.list()
+      let count = 0
+      for (const key of list.keys) {
+        await env.CHUNK_STORE.delete(key.name)
+        count++
+      }
+      return new Response(`✅ 已清理 ${count} 条 KV 记录`, {
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' }
+      })
+    } catch (e) {
+      return new Response('❌ 清理失败: ' + e.message, { status: 500 })
+    }
   }
 
   // ============================================================
