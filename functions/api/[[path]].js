@@ -9,7 +9,8 @@ const TELEGRAM_IMAGES_FILE = 'telegram_images.json'  // Telegram 图片列表存
 // ============================================================
 // 大文件分片上传配置
 // ============================================================
-const CHUNK_SIZE = 10 * 1024 * 1024        // 10MB 一片
+const CHUNK_SIZE = 16 * 1024 * 1024        // 16MB 一片
+const CHUNK_THRESHOLD = 16 * 1024 * 1024   // 16MB 阈值
 const MAX_FILE_SIZE = 1024 * 1024 * 1024   // 1GB 最大文件
 
 // ============================================================
@@ -238,61 +239,6 @@ function generateUploadId() {
 }
 
 // ============================================================
-// ✅ 后台合并分片（异步执行，不阻塞响应）
-// ============================================================
-async function mergeChunksInBackground(uploadId, folder, env) {
-  console.log(`🔄 开始后台合并: ${uploadId}`);
-  
-  try {
-    // 1. 获取上传状态
-    const uploadDataRaw = await env.CHUNK_STORE.get(`upload:${uploadId}`);
-    if (!uploadDataRaw) {
-      console.error(`❌ 上传会话不存在: ${uploadId}`);
-      return;
-    }
-    
-    const upload = JSON.parse(uploadDataRaw);
-    
-    // 2. 检查是否所有分片都已上传
-    if (upload.uploadedChunks.length !== upload.chunkCount) {
-      console.error(`❌ 分片未完整上传：${upload.uploadedChunks.length}/${upload.chunkCount}`);
-      return;
-    }
-    
-    // 3. 保存大文件记录
-    const fileRecord = {
-      id: Date.now(),
-      filename: upload.filename,
-      originalName: upload.filename,
-      size: upload.totalSize,
-      chunks: upload.uploadedChunks,
-      chunkCount: upload.chunkCount,
-      folder: folder || 'large',
-      storageType: 'telegram_chunks',
-      time: new Date().toISOString(),
-      status: 'ready'  // ✅ 标记为已完成
-    };
-    
-    const fileId = `large_${uploadId}`;
-    await env.CHUNK_STORE.put(`file:${fileId}`, JSON.stringify(fileRecord));
-    
-    // 4. 删除临时上传状态
-    await env.CHUNK_STORE.delete(`upload:${uploadId}`);
-    
-    console.log(`✅ 后台合并完成: ${uploadId} → ${fileId}`);
-    
-  } catch (error) {
-    console.error(`❌ 后台合并失败 ${uploadId}:`, error);
-    // 记录失败状态，供前端查询
-    await env.CHUNK_STORE.put(`upload:${uploadId}`, JSON.stringify({
-      ...JSON.parse(uploadDataRaw || '{}'),
-      status: 'failed',
-      error: error.message
-    }));
-  }
-}
-
-// ============================================================
 // ✅ 初始化分片上传
 // ============================================================
 async function handleInitUpload(request, env) {
@@ -452,23 +398,36 @@ async function handleCompleteUpload(request, env) {
       });
     }
     
-    // ✅ 关键：立即返回，后台异步合并
-    // 使用 ctx.waitUntil 让后台任务继续执行
+    // ✅ 保存大文件记录（异步合并，不阻塞响应）
+    const fileRecord = {
+      id: Date.now(),
+      filename: upload.filename,
+      originalName: upload.filename,
+      size: upload.totalSize,
+      chunks: upload.uploadedChunks,
+      chunkCount: upload.chunkCount,
+      folder: folder || 'large',
+      storageType: 'telegram_chunks',
+      time: new Date().toISOString(),
+      status: 'merging'
+    };
+    
     const fileId = `large_${uploadId}`;
+    await env.CHUNK_STORE.put(`file:${fileId}`, JSON.stringify(fileRecord));
+    
+    // ✅ 删除临时上传状态
+    await env.CHUNK_STORE.delete(`upload:${uploadId}`);
+    
     const baseUrl = new URL(request.url).origin;
     const fileUrl = `${baseUrl}/api/large/${fileId}`;
-    
-    // 启动后台合并任务（不阻塞响应）
-    const ctx = request.cf?.ctx || { waitUntil: (cb) => { setTimeout(cb, 0); } };
-    ctx.waitUntil(mergeChunksInBackground(uploadId, folder, env));
     
     return new Response(JSON.stringify({ 
       success: true, 
       url: fileUrl,
       filename: upload.filename,
       size: upload.totalSize,
-      status: 'merging',  // ✅ 告诉前端正在合并
-      message: '文件已接收，正在后台合并，请稍后刷新查看'
+      status: 'merging',
+      message: '文件已接收，正在后台合并，请稍后刷新'
     }), {
       headers: { 'Content-Type': 'application/json' }
     });
@@ -1483,7 +1442,7 @@ async function handleDelete(request, env) {
             console.log(`ℹ️ 记录中已无该 messageId: ${tgMessageId}`);
           }
         } catch (e) {
-          console.error('清理 Telegram 记录失败:', e);
+          console.error('清理 Telegram 记录失败:', e)
           deleteErrors.push('记录清理失败');
         }
       }
