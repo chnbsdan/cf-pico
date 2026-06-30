@@ -13,10 +13,10 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const fileInputRef = useRef(null)
 
   const folderOptions = [
-    { key: 'wallpaper', label: '横屏 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'cover', label: '竖屏 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
-    { key: 'sh', label: '横屏 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'sd', label: '竖屏 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
+    { key: 'wallpaper', label: '横屏图片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
+    { key: 'sh', label: '横屏图片 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'sd', label: '竖屏图片 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
   ]
 
   const refreshBackground = () => {
@@ -137,22 +137,35 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           }
           console.log(`📦 大文件 (${(file.size / 1024 / 1024).toFixed(1)}MB)，使用分片上传`)
           url = await uploadLargeFile(file, folder, storageType)
+          
+          results.push({
+            success: true,
+            filename: file.name,
+            url: url,
+            folder: folder,
+            storage: storageType
+          })
+          // ✅ 立即更新父组件
+          if (onUpload) {
+            await onUpload(results)
+          }
+          results.length = 0
+          
         } else {
           const result = await onUpload([file], folder, storageType)
           if (result && result.length > 0 && result[0].success) {
             url = result[0].url
+            results.push({
+              success: true,
+              filename: file.name,
+              url: url,
+              folder: folder,
+              storage: storageType
+            })
           } else {
             throw new Error(result?.[0]?.error || '上传失败')
           }
         }
-
-        results.push({
-          success: true,
-          filename: file.name,
-          url: url,
-          folder: folder,
-          storage: storageType
-        })
 
       } catch (error) {
         console.error('上传失败:', error)
@@ -162,11 +175,10 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           error: error.message,
           folder: folder
         })
+        if (onUpload) {
+          await onUpload(results)
+        }
       }
-    }
-
-    if (results.length > 0) {
-      await onUpload(results)
     }
   }
 
@@ -295,14 +307,14 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
 
         {isChunkUploading && (
           <div className="mt-4 bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/10">
-            <div className="flex justify-between items-center text-sm text-white/80 mb-2">
+            <div className="flex justify-between items-center text-sm text-gray-800 dark:text-white/80 mb-2">
               <span>{uploadStatus}</span>
               <div className="flex items-center gap-3">
-                {uploadSpeed && <span className="text-xs text-green-400">{uploadSpeed}</span>}
-                <span className="font-mono">{uploadProgress}%</span>
+                {uploadSpeed && <span className="text-xs text-green-600 dark:text-green-400">{uploadSpeed}</span>}
+                <span className="font-mono text-gray-800 dark:text-white">{uploadProgress}%</span>
               </div>
             </div>
-            <div className="w-full bg-gray-700/50 rounded-full h-3 overflow-hidden">
+            <div className="w-full bg-gray-300 dark:bg-gray-700/50 rounded-full h-3 overflow-hidden">
               <div className="bg-gradient-to-r from-blue-500 to-green-500 h-3 rounded-full transition-all duration-300 ease-out" style={{ width: `${uploadProgress}%` }}></div>
             </div>
           </div>
