@@ -7,7 +7,7 @@ const GITHUB_REPO = 'cf-pico'
 const TELEGRAM_IMAGES_FILE = 'telegram_images.json'
 
 // ============================================================
-// 大文件分片上传配置（前后端统一 20MB）
+// 大文件分片上传配置
 // ============================================================
 const CHUNK_SIZE = 20 * 1024 * 1024
 const MAX_FILE_SIZE = 1024 * 1024 * 1024
@@ -235,7 +235,6 @@ async function saveTelegramImages(token, images, sha = null) {
 // 分片上传相关函数
 // ============================================================
 
-// 1. 初始化分片上传
 async function handleInitUpload(request, env) {
   try {
     const { filename, totalSize } = await request.json()
@@ -256,7 +255,6 @@ async function handleInitUpload(request, env) {
       status: 'uploading',
       createdAt: Date.now()
     }
-    // 删除可能残留的旧记录
     await env.CHUNK_STORE.delete(`upload:${uploadId}`)
     await env.CHUNK_STORE.put(`upload:${uploadId}`, JSON.stringify(uploadData))
     return new Response(JSON.stringify({ uploadId, chunkCount, chunkSize: CHUNK_SIZE }), {
@@ -270,7 +268,6 @@ async function handleInitUpload(request, env) {
   }
 }
 
-// 2. 上传单个分片到 Telegram
 async function uploadChunkToTelegram(fileData, botToken, chatId, chunkIndex, filename) {
   const formData = new FormData()
   formData.append('chat_id', chatId)
@@ -288,7 +285,6 @@ async function uploadChunkToTelegram(fileData, botToken, chatId, chunkIndex, fil
   return data.result.document.file_id
 }
 
-// 3. 处理分片上传
 async function handleUploadChunk(request, env) {
   try {
     const formData = await request.formData()
@@ -345,7 +341,6 @@ async function handleUploadChunk(request, env) {
   }
 }
 
-// 4. 完成上传（✅ 使用 Set 检查缺失分片，更健壮）
 async function handleCompleteUpload(request, env) {
   try {
     const { uploadId, folder } = await request.json()
@@ -366,7 +361,7 @@ async function handleCompleteUpload(request, env) {
     
     const upload = JSON.parse(uploadDataRaw)
     
-    // ✅ 用 Set 检查是否所有分片都已上传（更健壮）
+    // 检查缺失分片
     const expectedChunks = new Set()
     for (let i = 0; i < upload.chunkCount; i++) {
       expectedChunks.add(i)
@@ -418,7 +413,9 @@ async function handleCompleteUpload(request, env) {
   }
 }
 
-// 5. 下载大文件（下载时合并所有分片）
+// ============================================================
+// ✅ 修复：下载大文件（合并所有分片返回）
+// ============================================================
 async function handleDownloadLarge(request, env) {
   try {
     const url = new URL(request.url)
@@ -435,6 +432,7 @@ async function handleDownloadLarge(request, env) {
     const file = JSON.parse(fileDataRaw)
     const botToken = env.TG_BOT_TOKEN
     
+    // 按顺序获取所有分片
     const chunks = []
     for (const chunkInfo of file.chunks) {
       const filePathResponse = await fetch(
@@ -453,6 +451,7 @@ async function handleDownloadLarge(request, env) {
       chunks.push(chunkData)
     }
     
+    // 合并所有分片
     const totalSize = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0)
     const merged = new Uint8Array(totalSize)
     let offset = 0
@@ -461,19 +460,32 @@ async function handleDownloadLarge(request, env) {
       offset += chunk.byteLength
     }
     
+    // 判断文件类型
     const ext = file.filename.split('.').pop().toLowerCase()
     const mimeTypes = {
       'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
       'webp': 'image/webp', 'gif': 'image/gif', 'mp4': 'video/mp4',
-      'mp3': 'audio/mpeg', 'pdf': 'application/pdf', 'zip': 'application/zip'
+      'webm': 'video/webm', 'mp3': 'audio/mpeg', 'wav': 'audio/wav',
+      'ogg': 'audio/ogg', 'flac': 'audio/flac', 'aac': 'audio/aac',
+      'pdf': 'application/pdf', 'zip': 'application/zip'
     }
     const contentType = mimeTypes[ext] || 'application/octet-stream'
+    
+    // ✅ 视频用 inline 可以播放
+    const isVideo = ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)
+    const isAudio = ['mp3', 'wav', 'ogg', 'flac', 'aac'].includes(ext)
     const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp', 'ico'].includes(ext)
+    
+    // ✅ 视频和音频用 inline 可以播放，其他用 attachment 下载
+    let disposition = 'attachment'
+    if (isVideo || isAudio || isImage) {
+      disposition = 'inline'
+    }
     
     return new Response(merged, {
       headers: {
         'Content-Type': contentType,
-        'Content-Disposition': isImage ? 'inline' : `attachment; filename="${file.filename}"`,
+        'Content-Disposition': disposition,
         'Cache-Control': 'public, max-age=86400',
         'Access-Control-Allow-Origin': '*'
       }
@@ -992,7 +1004,7 @@ async function handleUpload(request, env) {
         });
         
       } catch (error) {
-        console.error('Telegram upload error:', error);
+        console.error('Telegram upload error:', error)
         return new Response(JSON.stringify({ error: error.message }), {
           status: 500,
           headers: { 'Content-Type': 'application/json' }
@@ -1460,7 +1472,7 @@ async function handleTelegramRandom(env, request) {
       }
     });
   } catch (error) {
-    console.error('Error fetching Telegram random image:', error);
+    console.error('Error fetching Telegram random image:', error)
     return new Response('Failed to fetch image', { status: 500 });
   }
 }
@@ -1482,9 +1494,7 @@ export async function onRequest(context) {
 
   console.log(`API 请求: ${method} ${path}`)
 
-  // ============================================================
   // 分片上传路由
-  // ============================================================
   if (path === 'upload/init' && method === 'POST') {
     return handleInitUpload(request, env)
   }
@@ -1498,28 +1508,7 @@ export async function onRequest(context) {
     return handleDownloadLarge(request, env)
   }
 
-  // ============================================================
-  // 临时清理路由（用一次后可以删掉）
-  // ============================================================
-  if (path === 'clean' && method === 'GET') {
-    try {
-      const list = await env.CHUNK_STORE.list()
-      let count = 0
-      for (const key of list.keys) {
-        await env.CHUNK_STORE.delete(key.name)
-        count++
-      }
-      return new Response(`✅ 已清理 ${count} 条 KV 记录`, {
-        headers: { 'Content-Type': 'text/plain;charset=UTF-8' }
-      })
-    } catch (e) {
-      return new Response('❌ 清理失败: ' + e.message, { status: 500 })
-    }
-  }
-
-  // ============================================================
   // 普通路由
-  // ============================================================
   if (path === 'upload' && method === 'POST') {
     return handleUpload(request, env)
   }
