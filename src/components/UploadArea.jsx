@@ -174,7 +174,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       }
     }
 
-    // ✅ 更新父组件状态
+    // ✅ 关键修改：直接调用 onUpload 并传递 results
     if (onUpload && results.length > 0) {
       await onUpload(results)
     }
