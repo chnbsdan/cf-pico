@@ -1,13 +1,10 @@
 // functions/api/[[path]].js - Cloudflare Pages API 完整入口
-// 支持：stats, random, wallpaper, cover, list, image, upload, history, admin/delete
-// 支持 GitHub、R2、Telegram 三种存储
-
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
 const TELEGRAM_IMAGES_FILE = 'telegram_images.json'
 
 // ============================================================
-// 大文件分片上传配置
+// ✅ 和 cloudflareimgbed 一致：16MB
 // ============================================================
 const CHUNK_SIZE = 16 * 1024 * 1024
 const MAX_FILE_SIZE = 1024 * 1024 * 1024
@@ -17,7 +14,7 @@ function generateUploadId() {
 }
 
 // ============================================================
-// Telegram 存储相关函数
+// Telegram 存储函数（和 cloudflareimgbed 一样）
 // ============================================================
 
 async function uploadToTelegram(file, botToken, chatId) {
@@ -232,7 +229,7 @@ async function saveTelegramImages(token, images, sha = null) {
 }
 
 // ============================================================
-// 分片上传相关函数
+// ✅ 分片上传 - 照抄 cloudflareimgbed
 // ============================================================
 
 async function handleInitUpload(request, env) {
@@ -341,9 +338,7 @@ async function handleUploadChunk(request, env) {
   }
 }
 
-// ============================================================
-// ✅ 完成上传 - 生成 /api/file/ 链接，图片自动添加到后台
-// ============================================================
+// ✅ 照抄 cloudflareimgbed：只检查数量，不检查具体哪个缺失
 async function handleCompleteUpload(request, env) {
   try {
     const { uploadId, folder } = await request.json()
@@ -364,24 +359,14 @@ async function handleCompleteUpload(request, env) {
     
     const upload = JSON.parse(uploadDataRaw)
     
-    // 检查缺失分片
-    const expectedChunks = new Set()
-    for (let i = 0; i < upload.chunkCount; i++) {
-      expectedChunks.add(i)
-    }
-    const uploadedChunks = new Set(upload.uploadedChunks.map(c => c.index))
-    const missingChunks = [...expectedChunks].filter(i => !uploadedChunks.has(i))
-    
-    if (missingChunks.length > 0) {
+    // ✅ 只检查数量是否匹配
+    if (upload.uploadedChunks.length !== upload.chunkCount) {
       return new Response(JSON.stringify({
-        error: `缺少分片: ${missingChunks.join(', ')}`
+        error: `分片未完整上传：${upload.uploadedChunks.length}/${upload.chunkCount}`
       }), { status: 400 })
     }
     
-    // 保存大文件记录
-    const timestamp = Date.now()
-    const random = Math.random().toString(36).substring(2, 8)
-    const fileId = `${timestamp}_${random}`
+    const fileId = `large_${uploadId}`
     const fileRecord = {
       id: fileId,
       filename: upload.filename,
@@ -398,37 +383,7 @@ async function handleCompleteUpload(request, env) {
     await env.CHUNK_STORE.delete(`upload:${uploadId}`)
     
     const baseUrl = new URL(request.url).origin
-    // ✅ 使用 /api/file/ 前缀，不被 SPA 拦截
     const fileUrl = `${baseUrl}/api/file/${fileId}`
-    
-    // ✅ 如果是图片，添加到 Telegram 图片列表（后台显示）
-    const ext = upload.filename.split('.').pop().toLowerCase()
-    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext)
-    if (isImage) {
-      const token = env.GITHUB_TOKEN
-      if (token) {
-        try {
-          const existingImages = await getTelegramImages(token)
-          existingImages.push({
-            id: Date.now(),
-            filename: upload.filename,
-            originalName: upload.filename,
-            fileId: `large_${fileId}`,
-            messageId: Date.now(),
-            filePath: `large/${fileId}`,
-            url: fileUrl,
-            time: new Date().toISOString(),
-            size: upload.totalSize,
-            mimeType: 'image/jpeg',
-            isLarge: true
-          })
-          await saveTelegramImages(token, existingImages)
-          console.log(`✅ 大文件图片已添加到记录: ${upload.filename}`)
-        } catch (e) {
-          console.warn('添加大文件记录失败:', e)
-        }
-      }
-    }
     
     return new Response(JSON.stringify({
       success: true,
@@ -448,54 +403,42 @@ async function handleCompleteUpload(request, env) {
   }
 }
 
-// ============================================================
-// ✅ 下载大文件 - 使用 /api/file/ 前缀
-// ============================================================
+// ✅ 下载大文件
 async function handleDownloadLarge(request, env) {
   try {
     const url = new URL(request.url)
     const fileId = url.pathname.split('/').pop()
-    console.log('📥 下载请求 fileId:', fileId)
     
     if (!fileId) {
       return new Response('Missing file ID', { status: 400 })
     }
     
-    // 从 KV 读取文件记录
     const fileDataRaw = await env.CHUNK_STORE.get(`file:${fileId}`)
     if (!fileDataRaw) {
-      console.error('❌ KV 中未找到记录:', fileId)
       return new Response('File not found', { status: 404 })
     }
     
     const file = JSON.parse(fileDataRaw)
-    console.log('📥 找到文件记录:', file.filename, '分片数:', file.chunks.length)
-    
     const botToken = env.TG_BOT_TOKEN
-    if (!botToken) {
-      return new Response('TG bot token not configured', { status: 500 })
-    }
     
-    // 按顺序获取所有分片
     const chunks = []
     for (const chunkInfo of file.chunks) {
       const filePathResponse = await fetch(
         `https://api.telegram.org/bot${botToken}/getFile?file_id=${chunkInfo.fileId}`
       )
       if (!filePathResponse.ok) {
-        throw new Error(`获取分片 ${chunkInfo.index} 失败: ${filePathResponse.status}`)
+        throw new Error(`获取分片 ${chunkInfo.index} 失败`)
       }
       const filePathData = await filePathResponse.json()
       const fileUrl = `https://api.telegram.org/file/bot${botToken}/${filePathData.result.file_path}`
       const chunkResponse = await fetch(fileUrl)
       if (!chunkResponse.ok) {
-        throw new Error(`下载分片 ${chunkInfo.index} 失败: ${chunkResponse.status}`)
+        throw new Error(`下载分片 ${chunkInfo.index} 失败`)
       }
       const chunkData = await chunkResponse.arrayBuffer()
       chunks.push(chunkData)
     }
     
-    // 合并所有分片
     const totalSize = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0)
     const merged = new Uint8Array(totalSize)
     let offset = 0
@@ -504,17 +447,13 @@ async function handleDownloadLarge(request, env) {
       offset += chunk.byteLength
     }
     
-    // 判断文件类型
     const ext = file.filename.split('.').pop().toLowerCase()
     const mimeTypes = {
       'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
       'webp': 'image/webp', 'gif': 'image/gif', 'mp4': 'video/mp4',
-      'webm': 'video/webm', 'mp3': 'audio/mpeg', 'wav': 'audio/wav',
-      'ogg': 'audio/ogg', 'flac': 'audio/flac', 'aac': 'audio/aac',
-      'pdf': 'application/pdf', 'zip': 'application/zip'
+      'mp3': 'audio/mpeg', 'pdf': 'application/pdf', 'zip': 'application/zip'
     }
     const contentType = mimeTypes[ext] || 'application/octet-stream'
-    
     const isVideo = ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)
     const isAudio = ['mp3', 'wav', 'ogg', 'flac', 'aac'].includes(ext)
     const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp', 'ico'].includes(ext)
@@ -539,7 +478,7 @@ async function handleDownloadLarge(request, env) {
 }
 
 // ============================================================
-// 工具函数
+// 工具函数（照抄 cloudflareimgbed）
 // ============================================================
 
 async function getFolderImages(folder, env) {
@@ -570,16 +509,6 @@ async function getFolderImages(folder, env) {
     console.error(`Failed to fetch ${folder}:`, error)
     return []
   }
-}
-
-async function getAllImages(env) {
-  const folders = ['wallpaper', 'cover', 'sh', 'sd']
-  let allImages = []
-  for (const folder of folders) {
-    const images = await getFolderImages(folder, env)
-    allImages = allImages.concat(images.map(f => ({ ...f, folder })))
-  }
-  return allImages
 }
 
 function generateFilename(originalName) {
@@ -1536,16 +1465,12 @@ export async function onRequest(context) {
 
   console.log(`API 请求: ${method} ${path}`)
 
-  // ============================================================
-  // ✅ 文件下载路由 - 放最前面，避免被 SPA 拦截
-  // ============================================================
+  // ✅ 文件下载放最前面
   if (path.startsWith('api/file/') && method === 'GET') {
     return handleDownloadLarge(request, env)
   }
 
-  // ============================================================
   // 分片上传路由
-  // ============================================================
   if (path === 'upload/init' && method === 'POST') {
     return handleInitUpload(request, env)
   }
@@ -1556,9 +1481,7 @@ export async function onRequest(context) {
     return handleCompleteUpload(request, env)
   }
 
-  // ============================================================
   // 普通路由
-  // ============================================================
   if (path === 'upload' && method === 'POST') {
     return handleUpload(request, env)
   }
