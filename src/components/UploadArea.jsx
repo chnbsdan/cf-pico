@@ -98,6 +98,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
 
       setUploadStatus('正在提交...')
       const completeResult = await completeChunkUpload(uploadId, folder)
+      console.log('📤 completeChunkUpload 结果:', completeResult)
       if (!completeResult.success) {
         throw new Error(completeResult.error || '提交失败')
       }
@@ -173,8 +174,9 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       }
     }
 
-    // ✅ 所有文件处理完后，统一调用一次 onUpload
-    if (results.length > 0 && onUpload) {
+    // ✅ 无论结果如何，都调用 onUpload
+    if (onUpload) {
+      console.log('📤 调用 onUpload，结果数量:', results.length)
       await onUpload(results)
     }
   }
