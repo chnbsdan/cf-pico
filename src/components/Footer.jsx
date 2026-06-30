@@ -32,8 +32,8 @@ export default function Footer() {
         <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener noreferrer">
           <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT License" className="h-5" />
         </a>
-        <a href="https://vercel.com" target="_blank" rel="noopener noreferrer">
-          <img src="https://img.shields.io/badge/Deployed%20on-Vercel-black" alt="Vercel" className="h-5" />
+        <a href="https://cloudflare.com" target="_blank" rel="noopener noreferrer">
+          <img src="https://img.shields.io/badge/Deployed%20on-Cloudflare%20Pages-F38020" alt="Cloudflare Pages" className="h-5" />
         </a>
         <a href="https://reactjs.org" target="_blank" rel="noopener noreferrer">
           <img src="https://img.shields.io/badge/React-18-blue" alt="React 18" className="h-5" />
@@ -41,16 +41,20 @@ export default function Footer() {
         <a href="https://tailwindcss.com" target="_blank" rel="noopener noreferrer">
           <img src="https://img.shields.io/badge/Tailwind-CSS-38B2AC" alt="Tailwind CSS" className="h-5" />
         </a>
+        <a href="https://telegram.org" target="_blank" rel="noopener noreferrer">
+          <img src="https://img.shields.io/badge/Telegram-26A5E4?logo=telegram&logoColor=white" alt="Telegram" className="h-5" />
+        </a>
       </div>
 
       <p>
         <span className="text-white/60 dark:text-white/40">Powered by</span>
-        <a href="https://vercel.com" target="_blank" rel="noopener noreferrer" className="text-white/80 dark:text-white/70 hover:text-white transition mx-1">Vercel</a>
+        <a href="https://cloudflare.com" target="_blank" rel="noopener noreferrer" className="text-white/80 dark:text-white/70 hover:text-white transition mx-1">Cloudflare Pages</a>
         <span className="text-white/60 dark:text-white/40">+</span>
         <a href="https://github.com/chnbsdan" target="_blank" rel="noopener noreferrer" className="text-white/80 dark:text-white/70 hover:text-white transition ml-1">GitHub</a>
+        <span className="text-white/60 dark:text-white/40 ml-1">+</span>
+        <a href="https://telegram.org" target="_blank" rel="noopener noreferrer" className="text-white/80 dark:text-white/70 hover:text-white transition ml-1">Telegram</a>
       </p>
       
-            
       <p className="mt-2 text-white/60 dark:text-white/40 text-xs flex items-center justify-center gap-1 flex-wrap">
         本站已稳定运行
         <span className="text-white/80 dark:text-white/70 font-mono mx-1">{timeElapsed.days}</span>天
