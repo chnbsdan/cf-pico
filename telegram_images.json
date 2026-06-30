@@ -82,5 +82,17 @@
     "time": "2026-06-30T06:20:18.039Z",
     "size": 1130392,
     "mimeType": "image/jpeg"
+  },
+  {
+    "id": 1782807479083,
+    "filename": "20260630_bj22.jpg",
+    "originalName": "bj22.jpg",
+    "fileId": "AgACAgUAAyEGAAMBBNJvJQADTWpDe7XIrPBJEZmiVzE6dm_7LDqSAALpEWsbblIZVoZ1FibDKPYcAQADAgADdwADPAQ",
+    "messageId": 77,
+    "filePath": "photos/file_46.jpg",
+    "url": "https://pico.1356666.xyz/api/image?path=telegram/photos%2Ffile_46.jpg",
+    "time": "2026-06-30T08:17:59.083Z",
+    "size": 1994160,
+    "mimeType": "image/jpeg"
   }
 ]
