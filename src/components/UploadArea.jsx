@@ -13,10 +13,10 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const fileInputRef = useRef(null)
 
   const folderOptions = [
-    { key: 'wallpaper', label: '横屏 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'cover', label: '竖屏 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
-    { key: 'sh', label: '横屏 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'sd', label: '竖屏 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
+    { key: 'wallpaper', label: '横屏图片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
+    { key: 'sh', label: '横屏图片 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'sd', label: '竖屏图片 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
   ]
 
   const refreshBackground = () => {
@@ -47,7 +47,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     throw new Error(`分片 ${chunkIndex} 上传失败: ${lastError}`)
   }
 
-  const CHUNK_SIZE = 16 * 1024 * 1024
+  const CHUNK_SIZE = 20 * 1024 * 1024
   const CONCURRENT = 3
 
   const uploadLargeFile = async (file, folder, storage) => {
@@ -67,28 +67,30 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
 
       const startTime = Date.now()
       let uploadedBytes = 0
+      let uploadedCount = 0
 
-      for (let i = 0; i < chunkCount; i += CONCURRENT) {
+      // ✅ 修复：使用 while 循环，确保索引连续
+      while (uploadedCount < chunkCount) {
         const batch = []
-        const batchSize = Math.min(CONCURRENT, chunkCount - i)
-
-        for (let j = i; j < i + batchSize; j++) {
-          const start = j * CHUNK_SIZE
+        const batchSize = Math.min(CONCURRENT, chunkCount - uploadedCount)
+        
+        for (let j = 0; j < batchSize; j++) {
+          const chunkIndex = uploadedCount + j
+          const start = chunkIndex * CHUNK_SIZE
           const end = Math.min(start + CHUNK_SIZE, file.size)
           if (start >= end) continue
           const chunk = file.slice(start, end)
-          batch.push(uploadChunkWithRetry(uploadId, j, chunk, 3))
+          batch.push(uploadChunkWithRetry(uploadId, chunkIndex, chunk, 3))
         }
-
-        if (batch.length === 0) continue
+        
         await Promise.all(batch)
-
-        const completed = Math.min(i + CONCURRENT, chunkCount)
-        const progress = Math.round((completed / chunkCount) * 100)
+        uploadedCount += batchSize
+        
+        const progress = Math.round((uploadedCount / chunkCount) * 100)
         setUploadProgress(progress)
-        setUploadStatus(`上传分片 ${completed}/${chunkCount}`)
+        setUploadStatus(`上传分片 ${uploadedCount}/${chunkCount}`)
 
-        uploadedBytes = Math.min((i + CONCURRENT) * CHUNK_SIZE, file.size)
+        uploadedBytes = Math.min(uploadedCount * CHUNK_SIZE, file.size)
         const elapsed = (Date.now() - startTime) / 1000
         if (elapsed > 0.5) {
           const speed = (uploadedBytes / elapsed / 1024 / 1024).toFixed(1)
@@ -174,8 +176,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       }
     }
 
-    // ✅ 无论结果如何，都调用 onUpload
-    if (onUpload) {
+    if (results.length > 0 && onUpload) {
       console.log('📤 调用 onUpload，结果数量:', results.length)
       await onUpload(results)
     }
