@@ -31,9 +31,9 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   }
 
   // ============================================================
-  // ✅ 大文件分片上传（10MB 分片 + 3 片并行 + 实时进度）
+  // ✅ 大文件分片上传（16MB 分片 + 3 片并行 + 实时进度）
   // ============================================================
-  const CHUNK_SIZE = 10 * 1024 * 1024  // 10MB 一片
+  const CHUNK_SIZE = 16 * 1024 * 1024  // 16MB 一片
   const CONCURRENT = 3                  // 同时上传 3 片
 
   const uploadLargeFile = async (file, folder, storage) => {
@@ -50,7 +50,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       }
 
       const { uploadId, chunkCount } = initResult
-      setUploadStatus(`准备上传 ${chunkCount} 个分片...`)
+      setUploadStatus(`准备上传 ${chunkCount} 个分片 (16MB/片)...`)
 
       const startTime = Date.now()
       let uploadedBytes = 0
@@ -86,11 +86,11 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         }
       }
 
-      // 3. 完成上传
-      setUploadStatus('正在合并文件...')
+      // 3. 完成上传（异步合并）
+      setUploadStatus('正在提交合并...')
       const completeResult = await completeChunkUpload(uploadId, folder)
       if (!completeResult.success) {
-        throw new Error(completeResult.error || '完成上传失败')
+        throw new Error(completeResult.error || '提交合并失败')
       }
 
       setUploadStatus('上传完成 ✅')
@@ -123,12 +123,12 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       try {
         let url
 
-        // ✅ 判断：大于 20MB 使用分片上传
-        if (file.size > 20 * 1024 * 1024) {
+        // ✅ 判断：大于 16MB 使用分片上传
+        if (file.size > 16 * 1024 * 1024) {
           if (storageType !== 'telegram') {
             throw new Error('大文件仅支持 Telegram 存储，请切换到 Telegram')
           }
-          console.log(`📦 大文件 (${(file.size / 1024 / 1024).toFixed(1)}MB)，使用分片上传 (10MB/片，3片并行)`)
+          console.log(`📦 大文件 (${(file.size / 1024 / 1024).toFixed(1)}MB)，使用分片上传 (16MB/片，3片并行)`)
           url = await uploadLargeFile(file, folder, storageType)
         } else {
           // 小文件走原有逻辑（通过 onUpload 回调）
@@ -359,7 +359,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             </span>
           ) : (
             <span className="text-green-400">
-              <i className="fab fa-telegram-plane mr-1"></i>将存储到 Telegram 频道（>20MB 自动分片上传）
+              <i className="fab fa-telegram-plane mr-1"></i>将存储到 Telegram 频道（>16MB 自动分片上传）
             </span>
           )}
         </p>
@@ -371,7 +371,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
               <span>{uploadStatus}</span>
               <div className="flex items-center gap-3">
                 {uploadSpeed && <span className="text-xs text-green-400">{uploadSpeed}</span>}
-                <span className="font-mono">{uploadProgress}%</span>
+                <span className="font-mono">{uploadProgress}%}</span>
               </div>
             </div>
             <div className="w-full bg-gray-700/50 rounded-full h-3 overflow-hidden">
