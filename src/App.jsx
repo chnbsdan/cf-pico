@@ -194,7 +194,6 @@ function App() {
     }
   }
 
-  // ✅ 修复：确保上传结果稳定显示
   const handleUpload = async (files, folder, storage = 'github') => {
     console.log('===== App.jsx handleUpload =====')
     console.log('收到文件数量:', files?.length || 0)
@@ -296,11 +295,9 @@ function App() {
     console.log('===== 上传完成 =====')
     console.log('总共上传了', allResults.length, '张图片')
 
-    // ✅ 先关闭加载状态
     setIsUploading(false)
     loadStats()
 
-    // ✅ 返回结果给 UploadArea
     return allResults
   }
 
