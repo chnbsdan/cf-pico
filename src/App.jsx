@@ -1,9 +1,8 @@
 // ============================================================
 // src/App.jsx - 主应用组件
-// 功能：登录验证、路由控制、图片上传、统计信息展示
 // ============================================================
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import Header from './components/Header'
 import StatsCard from './components/StatsCard'
 import ApiSection from './components/ApiSection'
@@ -16,11 +15,6 @@ import ApiDocs from './pages/ApiDocs'
 import ThemeToggle from './components/ThemeToggle'
 
 function App() {
-  // ============================================================
-  // 所有 Hooks 在组件最顶层
-  // ============================================================
-
-  // ---------- 登录状态 ----------
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [loginPassword, setLoginPassword] = useState('')
   const [loginError, setLoginError] = useState(false)
@@ -30,7 +24,6 @@ function App() {
 
   const LOGIN_PASSWORD = import.meta.env.VITE_LOGIN_PASSWORD || 'admin123'
 
-  // ---------- 主界面状态 ----------
   const [stats, setStats] = useState({
     grand_total: 0,
     github_folders: { wallpaper: 0, cover: 0 },
@@ -40,7 +33,8 @@ function App() {
   const [isUploading, setIsUploading] = useState(false)
   const [convertToWebp, setConvertToWebp] = useState(false)
 
-  // ---------- useEffect ----------
+  const isUploadingRef = useRef(false)
+
   useEffect(() => {
     const savedAuth = localStorage.getItem('pico_auth')
     if (savedAuth === 'true') {
@@ -80,7 +74,6 @@ function App() {
     return () => clearInterval(interval)
   }, [setRandomBackground])
 
-  // ---------- 函数定义 ----------
   const loadStats = async () => {
     try {
       const data = await fetchStats()
@@ -199,111 +192,123 @@ function App() {
     console.log('收到文件数量:', files?.length || 0)
     console.log('存储方式:', storage)
 
+    // ✅ 加锁：防止重复调用
+    if (isUploadingRef.current) {
+      console.warn('上传进行中，跳过重复调用')
+      return []
+    }
+
     if (!files || files.length === 0) {
       console.warn('没有文件，跳过上传')
       return []
     }
 
+    isUploadingRef.current = true
     setIsUploading(true)
     setUploadResults([])
 
-    const fileArray = Array.isArray(files) ? files : Array.from(files)
-    const allResults = []
+    try {
+      const fileArray = Array.isArray(files) ? files : Array.from(files)
+      const allResults = []
 
-    for (let i = 0; i < fileArray.length; i++) {
-      const file = fileArray[i]
-      
-      if (!file || !file.name) {
-        console.warn('file 或 file.name 为空，跳过')
-        continue
-      }
-
-      const ext = file.name.split('.').pop().toLowerCase()
-
-      if (!['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(ext)) {
-        allResults.push({ success: false, filename: file.name, error: '格式不支持', folder })
-        setUploadResults([...allResults])
-        continue
-      }
-
-      let processedFile = file
-
-      if (convertToWebp && !['gif', 'avif'].includes(ext)) {
-        try {
-          processedFile = await convertToWebP(file)
-          console.log(`✅ 已转换 ${file.name} 为 WebP`)
-        } catch (err) {
-          console.error('WebP 转换失败:', err)
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i]
+        
+        if (!file || !file.name) {
+          console.warn('file 或 file.name 为空，跳过')
+          continue
         }
-      }
 
-      if (processedFile.size > 5 * 1024 * 1024 && processedFile.type !== 'image/webp') {
-        try {
-          processedFile = await compressImage(processedFile)
-        } catch (e) {}
-      }
+        const ext = file.name.split('.').pop().toLowerCase()
 
-      let retry = 3
-      let uploaded = false
+        if (!['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(ext)) {
+          allResults.push({ success: false, filename: file.name, error: '格式不支持', folder })
+          setUploadResults([...allResults])
+          continue
+        }
 
-      while (retry > 0 && !uploaded) {
-        try {
-          const data = await uploadImage(processedFile, folder, storage)
+        let processedFile = file
 
-          if (data.success) {
-            const proxyUrl = data.url
+        if (convertToWebp && !['gif', 'avif'].includes(ext)) {
+          try {
+            processedFile = await convertToWebP(file)
+            console.log(`✅ 已转换 ${file.name} 为 WebP`)
+          } catch (err) {
+            console.error('WebP 转换失败:', err)
+          }
+        }
 
-            allResults.push({
-              success: true,
-              filename: data.filename,
-              url: proxyUrl,
-              folder: data.folder,
-              storage: data.storage
-            })
-            setUploadResults([...allResults])
+        if (processedFile.size > 5 * 1024 * 1024 && processedFile.type !== 'image/webp') {
+          try {
+            processedFile = await compressImage(processedFile)
+          } catch (e) {}
+        }
 
-            try {
-              await addHistoryRecord(data.filename, proxyUrl, data.folder)
-              console.log(`📝 已保存历史记录: ${data.filename}`)
-            } catch (err) {
-              console.error('保存历史记录失败:', err)
+        let retry = 3
+        let uploaded = false
+
+        while (retry > 0 && !uploaded) {
+          try {
+            const data = await uploadImage(processedFile, folder, storage)
+
+            if (data.success) {
+              const proxyUrl = data.url
+
+              allResults.push({
+                success: true,
+                filename: data.filename,
+                url: proxyUrl,
+                folder: data.folder,
+                storage: data.storage
+              })
+              setUploadResults([...allResults])
+
+              try {
+                await addHistoryRecord(data.filename, proxyUrl, data.folder)
+                console.log(`📝 已保存历史记录: ${data.filename}`)
+              } catch (err) {
+                console.error('保存历史记录失败:', err)
+              }
+
+              uploaded = true
+            } else {
+              throw new Error(data.error || '上传失败')
             }
-
-            uploaded = true
-          } else {
-            throw new Error(data.error || '上传失败')
-          }
-        } catch (err) {
-          retry--
-          if (retry === 0) {
-            allResults.push({
-              success: false,
-              filename: file.name,
-              error: err.message,
-              folder
-            })
-            setUploadResults([...allResults])
-          } else {
-            await new Promise(r => setTimeout(r, 1000))
+          } catch (err) {
+            retry--
+            if (retry === 0) {
+              allResults.push({
+                success: false,
+                filename: file.name,
+                error: err.message,
+                folder
+              })
+              setUploadResults([...allResults])
+            } else {
+              await new Promise(r => setTimeout(r, 1000))
+            }
           }
         }
+
+        if (i < fileArray.length - 1) await new Promise(r => setTimeout(r, 500))
       }
 
-      if (i < fileArray.length - 1) await new Promise(r => setTimeout(r, 500))
+      console.log('===== 上传完成 =====')
+      console.log('总共上传了', allResults.length, '张图片')
+
+      setIsUploading(false)
+      loadStats()
+      isUploadingRef.current = false
+
+      return allResults
+
+    } catch (error) {
+      console.error('上传异常:', error)
+      setIsUploading(false)
+      isUploadingRef.current = false
+      return []
     }
-
-    console.log('===== 上传完成 =====')
-    console.log('总共上传了', allResults.length, '张图片')
-
-    setIsUploading(false)
-    loadStats()
-
-    return allResults
   }
-
-  // ============================================================
-  // 路由判断和界面渲染
-  // ============================================================
 
   const isManagePage = typeof window !== 'undefined' && window.location.pathname === '/manage'
   if (isManagePage) {
@@ -315,7 +320,6 @@ function App() {
     return <ApiDocs />
   }
 
-  // ---------- 未登录：显示登录界面 ----------
   if (!isLoggedIn) {
     return (
       <div
@@ -392,7 +396,6 @@ function App() {
     )
   }
 
-  // ---------- 已登录：主界面 ----------
   return (
     <div className="min-h-screen py-6 px-4 relative">
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
