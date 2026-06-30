@@ -96,8 +96,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       try {
         let url
 
-        // ✅ 判断：大于 50MB 使用分片上传
-        if (file.size > 50 * 1024 * 1024) {
+        // ✅ 判断：大于 10MB 使用分片上传
+        if (file.size > 10 * 1024 * 1024) {
           if (storageType !== 'telegram') {
             throw new Error('大文件仅支持 Telegram 存储，请切换到 Telegram')
           }
