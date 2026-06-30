@@ -13,10 +13,10 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const fileInputRef = useRef(null)
 
   const folderOptions = [
-    { key: 'wallpaper', label: '横屏图片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
-    { key: 'sh', label: '横屏图片 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'sd', label: '竖屏图片 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
+    { key: 'wallpaper', label: '横屏 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'cover', label: '竖屏 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
+    { key: 'sh', label: '横屏 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'sd', label: '竖屏 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
   ]
 
   const refreshBackground = () => {
