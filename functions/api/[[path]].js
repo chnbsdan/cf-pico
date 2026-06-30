@@ -7,6 +7,12 @@ const GITHUB_REPO = 'cf-pico'
 const TELEGRAM_IMAGES_FILE = 'telegram_images.json'  // Telegram 图片列表存储文件
 
 // ============================================================
+// 大文件分片上传配置（写死在代码里）
+// ============================================================
+const CHUNK_SIZE = 10 * 1024 * 1024;        // 10MB 一片
+const MAX_FILE_SIZE = 1024 * 1024 * 1024;   // 1GB 最大文件
+
+// ============================================================
 // Telegram 存储相关函数（完整优化版）
 // ============================================================
 
@@ -272,6 +278,298 @@ async function saveTelegramImages(token, images, sha = null) {
 }
 
 // ============================================================
+// ✅ 新增：生成上传 ID
+// ============================================================
+function generateUploadId() {
+  return Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9);
+}
+
+// ============================================================
+// ✅ 新增：初始化分片上传
+// ============================================================
+async function handleInitUpload(request, env) {
+  try {
+    const { filename, totalSize } = await request.json();
+    
+    // 检查文件大小
+    if (totalSize > MAX_FILE_SIZE) {
+      return new Response(JSON.stringify({ 
+        error: `文件太大，最大支持 ${MAX_FILE_SIZE / 1024 / 1024}MB` 
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    const uploadId = generateUploadId();
+    const chunkCount = Math.ceil(totalSize / CHUNK_SIZE);
+    
+    // 保存到 KV
+    const uploadData = {
+      filename,
+      totalSize,
+      chunkSize: CHUNK_SIZE,
+      chunkCount,
+      uploadedChunks: [],
+      status: 'pending',
+      createdAt: Date.now()
+    };
+    
+    await env.CHUNK_STORE.put(`upload:${uploadId}`, JSON.stringify(uploadData));
+    
+    return new Response(JSON.stringify({ 
+      uploadId, 
+      chunkCount,
+      chunkSize: CHUNK_SIZE
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Init upload error:', error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ============================================================
+// ✅ 新增：上传单个分片
+// ============================================================
+async function handleUploadChunk(request, env) {
+  try {
+    const formData = await request.formData();
+    const uploadId = formData.get('uploadId');
+    const chunkIndex = parseInt(formData.get('chunkIndex'));
+    const chunk = formData.get('file');
+    
+    if (!uploadId || !chunk) {
+      return new Response(JSON.stringify({ error: '缺少必要参数' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // 获取上传状态
+    const uploadDataRaw = await env.CHUNK_STORE.get(`upload:${uploadId}`);
+    if (!uploadDataRaw) {
+      return new Response(JSON.stringify({ error: '上传会话不存在或已过期' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    const upload = JSON.parse(uploadDataRaw);
+    
+    // 检查是否已上传该分片
+    if (upload.uploadedChunks.some(c => c.index === chunkIndex)) {
+      return new Response(JSON.stringify({ 
+        success: true, 
+        chunkIndex, 
+        message: '分片已上传' 
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // 上传分片到 Telegram
+    const botToken = env.TG_BOT_TOKEN;
+    const chatId = env.TG_CHAT_ID;
+    
+    const tgFormData = new FormData();
+    tgFormData.append('chat_id', chatId);
+    tgFormData.append('document', chunk, `chunk_${chunkIndex}_${upload.filename}`);
+    
+    const tgResponse = await fetch(
+      `https://api.telegram.org/bot${botToken}/sendDocument`,
+      { method: 'POST', body: tgFormData }
+    );
+    
+    if (!tgResponse.ok) {
+      const error = await tgResponse.json();
+      throw new Error(error.description || 'Telegram 上传分片失败');
+    }
+    
+    const tgData = await tgResponse.json();
+    const fileId = tgData.result.document.file_id;
+    
+    // 记录分片信息
+    upload.uploadedChunks.push({ index: chunkIndex, fileId });
+    await env.CHUNK_STORE.put(`upload:${uploadId}`, JSON.stringify(upload));
+    
+    const progress = upload.uploadedChunks.length / upload.chunkCount;
+    
+    return new Response(JSON.stringify({ 
+      success: true, 
+      chunkIndex, 
+      progress,
+      uploaded: upload.uploadedChunks.length,
+      total: upload.chunkCount
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Upload chunk error:', error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ============================================================
+// ✅ 新增：完成分片上传
+// ============================================================
+async function handleCompleteUpload(request, env) {
+  try {
+    const { uploadId, folder } = await request.json();
+    
+    if (!uploadId) {
+      return new Response(JSON.stringify({ error: '缺少 uploadId' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // 获取上传状态
+    const uploadDataRaw = await env.CHUNK_STORE.get(`upload:${uploadId}`);
+    if (!uploadDataRaw) {
+      return new Response(JSON.stringify({ error: '上传会话不存在或已过期' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    const upload = JSON.parse(uploadDataRaw);
+    
+    // 检查是否所有分片都已上传
+    if (upload.uploadedChunks.length !== upload.chunkCount) {
+      return new Response(JSON.stringify({ 
+        error: `分片未完整上传：${upload.uploadedChunks.length}/${upload.chunkCount}` 
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
+    // 保存大文件记录
+    const fileRecord = {
+      id: Date.now(),
+      filename: upload.filename,
+      originalName: upload.filename,
+      size: upload.totalSize,
+      chunks: upload.uploadedChunks,
+      chunkCount: upload.chunkCount,
+      folder: folder || 'large',
+      storageType: 'telegram_chunks',
+      time: new Date().toISOString()
+    };
+    
+    const fileId = `large_${uploadId}`;
+    await env.CHUNK_STORE.put(`file:${fileId}`, JSON.stringify(fileRecord));
+    
+    // 删除临时上传状态
+    await env.CHUNK_STORE.delete(`upload:${uploadId}`);
+    
+    const baseUrl = new URL(request.url).origin;
+    const fileUrl = `${baseUrl}/api/large/${fileId}`;
+    
+    return new Response(JSON.stringify({ 
+      success: true, 
+      url: fileUrl,
+      filename: upload.filename,
+      size: upload.totalSize
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Complete upload error:', error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+// ============================================================
+// ✅ 新增：下载大文件（重组所有分片）
+// ============================================================
+async function handleDownloadLarge(request, env) {
+  try {
+    const url = new URL(request.url);
+    const fileId = url.pathname.split('/').pop();
+    
+    if (!fileId) {
+      return new Response('Missing file ID', { status: 400 });
+    }
+    
+    const fileDataRaw = await env.CHUNK_STORE.get(`file:${fileId}`);
+    if (!fileDataRaw) {
+      return new Response('File not found', { status: 404 });
+    }
+    
+    const file = JSON.parse(fileDataRaw);
+    const botToken = env.TG_BOT_TOKEN;
+    
+    // 按顺序获取所有分片
+    const chunks = [];
+    for (const chunkInfo of file.chunks) {
+      // 获取文件路径
+      const filePathResponse = await fetch(
+        `https://api.telegram.org/bot${botToken}/getFile?file_id=${chunkInfo.fileId}`
+      );
+      
+      if (!filePathResponse.ok) {
+        throw new Error(`获取分片 ${chunkInfo.index} 失败`);
+      }
+      
+      const filePathData = await filePathResponse.json();
+      const fileUrl = `https://api.telegram.org/file/bot${botToken}/${filePathData.result.file_path}`;
+      
+      const chunkResponse = await fetch(fileUrl);
+      if (!chunkResponse.ok) {
+        throw new Error(`下载分片 ${chunkInfo.index} 失败`);
+      }
+      
+      const chunkData = await chunkResponse.arrayBuffer();
+      chunks.push(chunkData);
+    }
+    
+    // 合并所有分片
+    const totalSize = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+    const merged = new Uint8Array(totalSize);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(new Uint8Array(chunk), offset);
+      offset += chunk.byteLength;
+    }
+    
+    // 判断 MIME 类型
+    const ext = file.filename.split('.').pop().toLowerCase();
+    const mimeTypes = {
+      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+      'webp': 'image/webp', 'gif': 'image/gif', 'mp4': 'video/mp4',
+      'mp3': 'audio/mpeg', 'pdf': 'application/pdf', 'zip': 'application/zip'
+    };
+    const contentType = mimeTypes[ext] || 'application/octet-stream';
+    
+    const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp', 'ico'].includes(ext);
+    
+    return new Response(merged, {
+      headers: {
+        'Content-Type': contentType,
+        'Content-Disposition': isImage ? 'inline' : `attachment; filename="${file.filename}"`,
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  } catch (error) {
+    console.error('Download large file error:', error);
+    return new Response('Download failed: ' + error.message, { status: 500 });
+  }
+}
+
+// ============================================================
 // ✅ 新增：处理 /api/tg 随机 Telegram 图片请求
 // ============================================================
 async function handleTelegramRandom(env, request) {
@@ -342,7 +640,7 @@ async function handleTelegramRandom(env, request) {
       'Cache-Control': 'no-cache'
     }
   });
-}
+  }
 
   // ============================================================
   // 默认：返回图片
@@ -1351,6 +1649,29 @@ export async function onRequest(context) {
 
   console.log(`API 请求: ${method} ${path}`)
 
+  // ============================================================
+  // ✅ 大文件分片上传路由
+  // ============================================================
+  // POST /api/upload/init
+  if (path === 'upload/init' && method === 'POST') {
+    return handleInitUpload(request, env);
+  }
+
+  // POST /api/upload/chunk
+  if (path === 'upload/chunk' && method === 'POST') {
+    return handleUploadChunk(request, env);
+  }
+
+  // POST /api/upload/complete
+  if (path === 'upload/complete' && method === 'POST') {
+    return handleCompleteUpload(request, env);
+  }
+
+  // GET /api/large/*
+  if (path.startsWith('large/') && method === 'GET') {
+    return handleDownloadLarge(request, env);
+  }
+
   // POST /api/upload
   if (path === 'upload' && method === 'POST') {
     return handleUpload(request, env)
@@ -1385,7 +1706,7 @@ export async function onRequest(context) {
   }
   if (path === 'random') {
   return handleRandom(request, env); // ✅ 传入 request
-}9
+}
   if (path === 'wallpaper') {
     return handleWallpaper(request, env)
   }
