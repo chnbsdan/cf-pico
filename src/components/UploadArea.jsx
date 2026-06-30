@@ -30,9 +30,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     img.src = url
   }
 
-  // ============================================================
-  // 带重试的分片上传
-  // ============================================================
   const uploadChunkWithRetry = async (uploadId, chunkIndex, chunk, maxRetries = 3) => {
     let lastError
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -50,9 +47,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     throw new Error(`分片 ${chunkIndex} 上传失败: ${lastError}`)
   }
 
-  // ============================================================
-  // 大文件分片上传
-  // ============================================================
   const CHUNK_SIZE = 20 * 1024 * 1024
   const CONCURRENT = 3
 
@@ -74,7 +68,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       const startTime = Date.now()
       let uploadedBytes = 0
 
-      // ✅ 修复：确保每个分片都有数据
       for (let i = 0; i < chunkCount; i += CONCURRENT) {
         const batch = []
         const batchSize = Math.min(CONCURRENT, chunkCount - i)
@@ -82,13 +75,11 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         for (let j = i; j < i + batchSize; j++) {
           const start = j * CHUNK_SIZE
           const end = Math.min(start + CHUNK_SIZE, file.size)
-          // ✅ 如果分片为空，跳过
           if (start >= end) continue
           const chunk = file.slice(start, end)
           batch.push(uploadChunkWithRetry(uploadId, j, chunk, 3))
         }
 
-        // ✅ 如果批次为空，跳过
         if (batch.length === 0) continue
         await Promise.all(batch)
 
@@ -127,14 +118,12 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     }
   }
 
-  // ============================================================
-  // 处理文件上传
-  // ============================================================
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
     console.log('UploadArea 收到文件数量:', files.length)
 
     const fileArray = Array.isArray(files) ? files : Array.from(files)
+    const results = []
 
     for (const file of fileArray) {
       if (!file) continue
@@ -157,11 +146,27 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           }
         }
 
-        // 结果由 App.jsx 的 setUploadResults 处理
+        results.push({
+          success: true,
+          filename: file.name,
+          url: url,
+          folder: folder,
+          storage: storageType
+        })
 
       } catch (error) {
         console.error('上传失败:', error)
+        results.push({
+          success: false,
+          filename: file.name,
+          error: error.message,
+          folder: folder
+        })
       }
+    }
+
+    if (results.length > 0) {
+      await onUpload(results)
     }
   }
 
