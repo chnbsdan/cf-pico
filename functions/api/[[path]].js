@@ -341,6 +341,9 @@ async function handleUploadChunk(request, env) {
   }
 }
 
+// ============================================================
+// ✅ 完成上传 - 生成 /api/file/ 链接，图片自动添加到后台
+// ============================================================
 async function handleCompleteUpload(request, env) {
   try {
     const { uploadId, folder } = await request.json()
@@ -375,7 +378,7 @@ async function handleCompleteUpload(request, env) {
       }), { status: 400 })
     }
     
-    // ✅ 保存大文件记录，使用纯数字ID
+    // 保存大文件记录
     const timestamp = Date.now()
     const random = Math.random().toString(36).substring(2, 8)
     const fileId = `${timestamp}_${random}`
@@ -395,8 +398,37 @@ async function handleCompleteUpload(request, env) {
     await env.CHUNK_STORE.delete(`upload:${uploadId}`)
     
     const baseUrl = new URL(request.url).origin
-    // ✅ 使用 /file/ 前缀，不包含 large
-    const fileUrl = `${baseUrl}/file/${fileId}`
+    // ✅ 使用 /api/file/ 前缀，不被 SPA 拦截
+    const fileUrl = `${baseUrl}/api/file/${fileId}`
+    
+    // ✅ 如果是图片，添加到 Telegram 图片列表（后台显示）
+    const ext = upload.filename.split('.').pop().toLowerCase()
+    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'].includes(ext)
+    if (isImage) {
+      const token = env.GITHUB_TOKEN
+      if (token) {
+        try {
+          const existingImages = await getTelegramImages(token)
+          existingImages.push({
+            id: Date.now(),
+            filename: upload.filename,
+            originalName: upload.filename,
+            fileId: `large_${fileId}`,
+            messageId: Date.now(),
+            filePath: `large/${fileId}`,
+            url: fileUrl,
+            time: new Date().toISOString(),
+            size: upload.totalSize,
+            mimeType: 'image/jpeg',
+            isLarge: true
+          })
+          await saveTelegramImages(token, existingImages)
+          console.log(`✅ 大文件图片已添加到记录: ${upload.filename}`)
+        } catch (e) {
+          console.warn('添加大文件记录失败:', e)
+        }
+      }
+    }
     
     return new Response(JSON.stringify({
       success: true,
@@ -417,7 +449,7 @@ async function handleCompleteUpload(request, env) {
 }
 
 // ============================================================
-// ✅ 下载大文件 - 使用 /file/ 前缀
+// ✅ 下载大文件 - 使用 /api/file/ 前缀
 // ============================================================
 async function handleDownloadLarge(request, env) {
   try {
@@ -1505,9 +1537,9 @@ export async function onRequest(context) {
   console.log(`API 请求: ${method} ${path}`)
 
   // ============================================================
-  // ✅ 文件下载路由 - 放最前面
+  // ✅ 文件下载路由 - 放最前面，避免被 SPA 拦截
   // ============================================================
-  if (path.startsWith('file/') && method === 'GET') {
+  if (path.startsWith('api/file/') && method === 'GET') {
     return handleDownloadLarge(request, env)
   }
 
