@@ -476,17 +476,55 @@ async function handleStats(env) {
   })
 }
 
-// GET /api/random
-async function handleRandom(env) {
-  const allImages = await getAllImages(env)
-  if (allImages.length === 0) {
-    return new Response('No images found', { status: 404 })
+// GET /api/random - 支持 format=json 参数
+async function handleRandom(request, env) {
+  const url = new URL(request.url);
+  const format = url.searchParams.get('format');
+  
+  // 从所有文件夹中获取图片列表
+  const folders = ['wallpaper', 'cover', 'sh', 'sd'];
+  let allImages = [];
+  
+  for (const folder of folders) {
+    const images = await getFolderImages(folder, env);
+    allImages = allImages.concat(images.map(f => ({ ...f, folder })));
   }
-  const random = allImages[Math.floor(Math.random() * allImages.length)]
-  const response = await fetch(random.download_url)
+  
+  if (allImages.length === 0) {
+    return new Response('No images found', { status: 404 });
+  }
+  
+  // 随机选择一张图片
+  const random = allImages[Math.floor(Math.random() * allImages.length)];
+  const baseUrl = new URL(request.url).origin;
+  const imageUrl = `${baseUrl}/api/image?path=${random.folder}/${random.name}`;
+  
+  // ✅ 如果 format=json，返回 JSON 格式
+  if (format === 'json') {
+    const result = {
+      code: 200,
+      imgurl: imageUrl,
+      source: random.download_url || '',
+      total: allImages.length
+    };
+    return new Response(JSON.stringify(result, null, 2), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=60',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  }
+  
+  // 默认返回图片
+  const response = await fetch(random.download_url);
   return new Response(response.body, {
-    headers: { 'Content-Type': response.headers.get('Content-Type') || 'image/jpeg' }
-  })
+    headers: {
+      'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
+      'Cache-Control': 'public, max-age=86400',
+      'Access-Control-Allow-Origin': '*'
+    }
+  });
 }
 
 // GET /api/wallpaper
@@ -1346,8 +1384,8 @@ export async function onRequest(context) {
     return handleStats(env)
   }
   if (path === 'random') {
-    return handleRandom(env)
-  }
+  return handleRandom(request, env); // ✅ 传入 request
+}9
   if (path === 'wallpaper') {
     return handleWallpaper(request, env)
   }
