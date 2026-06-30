@@ -4,7 +4,7 @@ const GITHUB_REPO = 'cf-pico'
 const TELEGRAM_IMAGES_FILE = 'telegram_images.json'
 
 // ============================================================
-// ✅ 和 cloudflareimgbed 一致：16MB
+// 大文件分片上传配置
 // ============================================================
 const CHUNK_SIZE = 16 * 1024 * 1024
 const MAX_FILE_SIZE = 1024 * 1024 * 1024
@@ -14,7 +14,7 @@ function generateUploadId() {
 }
 
 // ============================================================
-// Telegram 存储函数（和 cloudflareimgbed 一样）
+// Telegram 存储相关函数
 // ============================================================
 
 async function uploadToTelegram(file, botToken, chatId) {
@@ -229,7 +229,7 @@ async function saveTelegramImages(token, images, sha = null) {
 }
 
 // ============================================================
-// ✅ 分片上传 - 照抄 cloudflareimgbed
+// 分片上传相关函数
 // ============================================================
 
 async function handleInitUpload(request, env) {
@@ -338,7 +338,6 @@ async function handleUploadChunk(request, env) {
   }
 }
 
-// ✅ 照抄 cloudflareimgbed：只检查数量，不检查具体哪个缺失
 async function handleCompleteUpload(request, env) {
   try {
     const { uploadId, folder } = await request.json()
@@ -359,14 +358,15 @@ async function handleCompleteUpload(request, env) {
     
     const upload = JSON.parse(uploadDataRaw)
     
-    // ✅ 只检查数量是否匹配
     if (upload.uploadedChunks.length !== upload.chunkCount) {
       return new Response(JSON.stringify({
         error: `分片未完整上传：${upload.uploadedChunks.length}/${upload.chunkCount}`
       }), { status: 400 })
     }
     
-    const fileId = `large_${uploadId}`
+    const timestamp = Date.now()
+    const random = Math.random().toString(36).substring(2, 8)
+    const fileId = `${timestamp}_${random}`
     const fileRecord = {
       id: fileId,
       filename: upload.filename,
@@ -403,12 +403,10 @@ async function handleCompleteUpload(request, env) {
   }
 }
 
-// ✅ 下载大文件
 async function handleDownloadLarge(request, env) {
   try {
     const url = new URL(request.url)
     const fileId = url.pathname.split('/').pop()
-    
     if (!fileId) {
       return new Response('Missing file ID', { status: 400 })
     }
@@ -478,7 +476,7 @@ async function handleDownloadLarge(request, env) {
 }
 
 // ============================================================
-// 工具函数（照抄 cloudflareimgbed）
+// 工具函数
 // ============================================================
 
 async function getFolderImages(folder, env) {
@@ -1465,7 +1463,7 @@ export async function onRequest(context) {
 
   console.log(`API 请求: ${method} ${path}`)
 
-  // ✅ 文件下载放最前面
+  // 文件下载放最前面
   if (path.startsWith('api/file/') && method === 'GET') {
     return handleDownloadLarge(request, env)
   }
