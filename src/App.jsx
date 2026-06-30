@@ -187,6 +187,13 @@ function App() {
   }
 
   const handleUpload = async (files, folder, storage = 'github') => {
+    // ✅ 如果 files 是结果数组（有 success 字段），直接显示
+    if (Array.isArray(files) && files.length > 0 && files[0].success !== undefined) {
+      console.log('📤 收到 UploadArea 的结果，直接显示')
+      setUploadResults(files)
+      return files
+    }
+
     // ✅ 加锁：防止重复调用
     if (isProcessing.current) {
       console.warn('上传进行中，跳过重复调用')
