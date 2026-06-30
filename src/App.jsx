@@ -3,7 +3,7 @@
 // 功能：登录验证、路由控制、图片上传、统计信息展示
 // ============================================================
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import Header from './components/Header'
 import StatsCard from './components/StatsCard'
 import ApiSection from './components/ApiSection'
@@ -41,7 +41,6 @@ function App() {
   const [convertToWebp, setConvertToWebp] = useState(false)
 
   // ---------- useEffect ----------
-  // 检查登录状态
   useEffect(() => {
     const savedAuth = localStorage.getItem('pico_auth')
     if (savedAuth === 'true') {
@@ -49,7 +48,6 @@ function App() {
     }
   }, [])
 
-  // ✅ 登录界面背景图：只加载一次，避免闪烁
   useEffect(() => {
     if (!bgLoaded) {
       const img = new Image()
@@ -59,7 +57,6 @@ function App() {
         setBgLoaded(true)
       }
       img.onerror = () => {
-        // 加载失败时使用渐变背景
         setLoginBgImage('linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)')
         setBgLoaded(true)
       }
@@ -67,7 +64,6 @@ function App() {
     }
   }, [bgLoaded])
 
-  // 主界面背景
   const setRandomBackground = useCallback(() => {
     const img = new Image()
     const url = `/api/wallpaper?t=${Date.now()}`
@@ -198,20 +194,33 @@ function App() {
     }
   }
 
-  // ✅ 修改：添加 return allResults，供 UploadArea 使用
+  // ✅ 修改：添加 return allResults，修复上传卡住问题
   const handleUpload = async (files, folder, storage = 'github') => {
     console.log('===== App.jsx handleUpload =====')
-    console.log('收到文件数量:', files.length)
+    console.log('收到文件数量:', files?.length || 0)
     console.log('存储方式:', storage)
+
+    // ✅ 安全检查
+    if (!files || files.length === 0) {
+      console.warn('没有文件，跳过上传')
+      return []
+    }
 
     setIsUploading(true)
     setUploadResults([])
 
-    const fileArray = Array.from(files)
+    const fileArray = Array.isArray(files) ? files : Array.from(files)
     const allResults = []
 
     for (let i = 0; i < fileArray.length; i++) {
-      let file = fileArray[i]
+      const file = fileArray[i]
+      
+      // ✅ 确保 file 和 file.name 存在
+      if (!file || !file.name) {
+        console.warn('file 或 file.name 为空，跳过')
+        continue
+      }
+
       const ext = file.name.split('.').pop().toLowerCase()
 
       if (!['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif'].includes(ext)) {
@@ -220,18 +229,20 @@ function App() {
         continue
       }
 
+      let processedFile = file
+
       if (convertToWebp && !['gif', 'avif'].includes(ext)) {
         try {
-          file = await convertToWebP(file)
+          processedFile = await convertToWebP(file)
           console.log(`✅ 已转换 ${file.name} 为 WebP`)
         } catch (err) {
           console.error('WebP 转换失败:', err)
         }
       }
 
-      if (file.size > 5 * 1024 * 1024 && file.type !== 'image/webp') {
+      if (processedFile.size > 5 * 1024 * 1024 && processedFile.type !== 'image/webp') {
         try {
-          file = await compressImage(file)
+          processedFile = await compressImage(processedFile)
         } catch (e) {}
       }
 
@@ -240,7 +251,7 @@ function App() {
 
       while (retry > 0 && !uploaded) {
         try {
-          const data = await uploadImage(file, folder, storage)
+          const data = await uploadImage(processedFile, folder, storage)
 
           if (data.success) {
             const proxyUrl = data.url
@@ -290,7 +301,7 @@ function App() {
     setIsUploading(false)
     loadStats()
 
-    // ✅ 关键：返回结果给 UploadArea 使用
+    // ✅ 关键：返回结果给 UploadArea
     return allResults
   }
 
@@ -370,16 +381,16 @@ function App() {
           </form>
 
           <p className="text-white/30 text-xs text-center mt-6">
-  Powered by{' '}
-  <a 
-    href="https://github.com/chnbsdan/cf-pico" 
-    target="_blank" 
-    rel="noopener noreferrer"
-    className="text-white/40 hover:text-white/70 transition"
-  >
-    chnbsdan
-  </a>
-</p>
+            Powered by{' '}
+            <a
+              href="https://github.com/chnbsdan/cf-pico"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white/40 hover:text-white/70 transition"
+            >
+              chnbsdan
+            </a>
+          </p>
         </div>
       </div>
     )
@@ -388,7 +399,6 @@ function App() {
   // ---------- 已登录：主界面 ----------
   return (
     <div className="min-h-screen py-6 px-4 relative">
-      {/* 顶部导航栏 */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
         <button
           onClick={handleLogout}
@@ -417,7 +427,6 @@ function App() {
         <ThemeToggle />
       </div>
 
-      {/* GitHub 仓库链接 */}
       <a
         href="https://github.com/chnbsdan/cf-pico"
         target="_blank"
@@ -428,7 +437,6 @@ function App() {
         <img src="/favicon.ico" alt="Logo" className="w-12 h-12 hover:opacity-80 transition-opacity" />
       </a>
 
-      {/* 主内容 */}
       <div className="max-w-4xl mx-auto">
         <Header />
         <div className="space-y-4 backdrop-blur-md bg-white/5 rounded-xl p-4 shadow-xl border border-white/30">
