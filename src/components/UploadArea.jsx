@@ -1,10 +1,13 @@
 import React, { useRef, useState, useEffect } from 'react'
+import { initChunkUpload, uploadChunk, completeChunkUpload } from '../lib/api'
 
 export default function UploadArea({ onUpload, isLoading, convertToWebp, onConvertChange }) {
   const [dragOver, setDragOver] = useState(false)
   const [folder, setFolder] = useState('wallpaper')
   const [bgRefresh, setBgRefresh] = useState(false)
   const [storageType, setStorageType] = useState('github')
+  const [uploadProgress, setUploadProgress] = useState(0)      // 上传进度 0-100
+  const [isChunkUploading, setIsChunkUploading] = useState(false)
   const fileInputRef = useRef(null)
 
   const folderOptions = [
@@ -25,22 +28,114 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     img.src = url
   }
 
+  // ============================================================
+  // ✅ 大文件分片上传（10MB一片，最大1GB）
+  // ============================================================
+  const CHUNK_SIZE = 10 * 1024 * 1024 // 10MB
+
+  const uploadLargeFile = async (file, folder, storage) => {
+    setIsChunkUploading(true)
+    setUploadProgress(0)
+
+    try {
+      // 1. 初始化
+      const initResult = await initChunkUpload(file.name, file.size)
+      if (!initResult.uploadId) {
+        throw new Error(initResult.error || '初始化上传失败')
+      }
+
+      const { uploadId, chunkCount } = initResult
+      let uploadedCount = 0
+
+      // 2. 逐片上传
+      for (let i = 0; i < chunkCount; i++) {
+        const start = i * CHUNK_SIZE
+        const end = Math.min(start + CHUNK_SIZE, file.size)
+        const chunk = file.slice(start, end)
+
+        const result = await uploadChunk(uploadId, i, chunk)
+        if (!result.success) {
+          throw new Error(`分片 ${i} 上传失败: ${result.error || '未知错误'}`)
+        }
+
+        uploadedCount = i + 1
+        const progress = Math.round((uploadedCount / chunkCount) * 100)
+        setUploadProgress(progress)
+        console.log(`📤 分片 ${i + 1}/${chunkCount} 完成，进度 ${progress}%`)
+      }
+
+      // 3. 完成上传
+      const completeResult = await completeChunkUpload(uploadId, folder)
+      if (!completeResult.success) {
+        throw new Error(completeResult.error || '完成上传失败')
+      }
+
+      setIsChunkUploading(false)
+      setUploadProgress(0)
+      return completeResult.url
+
+    } catch (error) {
+      console.error('大文件上传失败:', error)
+      setIsChunkUploading(false)
+      setUploadProgress(0)
+      throw error
+    }
+  }
+
+  // ============================================================
   // ✅ 修改：上传完成后，使用后端返回的完整 URL
+  // ============================================================
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
     console.log('UploadArea 收到文件数量:', files.length)
-    
-    // 调用父组件的上传函数，并等待返回结果
-    const results = await onUpload(files, folder, storageType)
-    
-    // ✅ 如果 onUpload 返回了结果，更新显示
-    if (results && results.length > 0) {
-      results.forEach(result => {
-        if (result.success && result.url) {
-          console.log('上传成功，使用后端返回的 URL:', result.url)
-          // 这里可以根据需要更新 UI
+
+    const fileArray = Array.from(files)
+    const results = []
+
+    for (const file of fileArray) {
+      try {
+        let url
+
+        // ✅ 判断：大于 50MB 使用分片上传
+        if (file.size > 50 * 1024 * 1024) {
+          if (storageType !== 'telegram') {
+            throw new Error('大文件仅支持 Telegram 存储，请切换到 Telegram')
+          }
+          console.log(`📦 大文件 (${(file.size / 1024 / 1024).toFixed(1)}MB)，使用分片上传`)
+          url = await uploadLargeFile(file, folder, storageType)
+        } else {
+          // 小文件走原有逻辑（通过 onUpload 回调）
+          // 这里直接调用父组件的 onUpload 方法
+          const result = await onUpload([file], folder, storageType)
+          if (result && result.length > 0 && result[0].success) {
+            url = result[0].url
+          } else {
+            throw new Error(result?.[0]?.error || '上传失败')
+          }
         }
-      })
+
+        results.push({
+          success: true,
+          filename: file.name,
+          url: url,
+          folder: folder,
+          storage: storageType
+        })
+
+      } catch (error) {
+        console.error('上传失败:', error)
+        results.push({
+          success: false,
+          filename: file.name,
+          error: error.message,
+          folder: folder
+        })
+      }
+    }
+
+    // 更新父组件状态
+    if (onUpload && results.length > 0) {
+      await onUpload(results)
     }
   }
 
@@ -90,6 +185,9 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   }, [folder, storageType])
 
   const currentFolder = folderOptions.find(opt => opt.key === folder) || folderOptions[0]
+
+  // 是否在上传中（父组件加载状态 或 分片上传状态）
+  const isUploading = isLoading || isChunkUploading
 
   return (
     <div className="mb-4">
@@ -235,10 +333,23 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             </span>
           ) : (
             <span className="text-green-400">
-              <i className="fab fa-telegram-plane mr-1"></i>将存储到 Telegram 频道（最大 50MB）
+              <i className="fab fa-telegram-plane mr-1"></i>将存储到 Telegram 频道（最大 50MB，>50MB 自动分片）
             </span>
           )}
         </p>
+
+        {/* ✅ 上传进度条（分片上传时显示） */}
+        {isChunkUploading && (
+          <div className="mt-3">
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+              <div
+                className="bg-green-500 h-2.5 rounded-full transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              ></div>
+            </div>
+            <p className="text-xs text-white/60 mt-1">分片上传进度: {uploadProgress}%</p>
+          </div>
+        )}
 
         {convertToWebp && (
           <p className="text-xs text-green-600 dark:text-green-400 mt-2">
@@ -289,11 +400,11 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         onChange={handleFileSelect}
       />
 
-      {isLoading && (
+      {(isLoading || isChunkUploading) && (
         <div className="mt-3 text-center">
           <div className="inline-flex items-center gap-2 text-sm text-orange-600">
             <div className="w-3 h-3 border-2 border-orange-600 border-t-transparent rounded-full animate-spin" />
-            上传中，请稍候...
+            {isChunkUploading ? `分片上传中 ${uploadProgress}%...` : '上传中，请稍候...'}
           </div>
         </div>
       )}
