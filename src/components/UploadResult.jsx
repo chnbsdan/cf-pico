@@ -1,97 +1,104 @@
-import React, { useState, useEffect } from 'react'
-import { copyToClipboard } from '../lib/api'
+// src/components/UploadResult.jsx
+import React from 'react'
 
 export default function UploadResult({ results }) {
-  const [copied, setCopied] = useState(null)
+  console.log('=== UploadResult 组件渲染 ===')
+  console.log('接收到的 results 长度:', results?.length || 0)
 
-  // 添加调试日志
-  useEffect(() => {
-    console.log('=== UploadResult 组件渲染 ===')
-    console.log('接收到的 results 长度:', results.length)
-    if (results.length > 0) {
-      console.log('结果详情:', results.map(r => ({ filename: r.filename, success: r.success })))
-    }
-  }, [results])
-
-  const handleCopy = (url, id) => {
-    copyToClipboard(url)
-    setCopied(id)
-    setTimeout(() => setCopied(null), 2000)
+  // ✅ 即使 results 为空，也显示一个占位状态，避免闪退
+  if (!results || results.length === 0) {
+    return (
+      <div className="mt-4 text-center text-sm text-gray-400 dark:text-gray-500">
+        <i className="fas fa-info-circle mr-1"></i>
+        暂无上传结果
+      </div>
+    )
   }
 
-  const handlePreview = (url, id) => {
-    const container = document.getElementById(`preview-${id}`)
-    if (!container) return
-    
-    container.innerHTML = '<div class="text-xs text-gray-400 flex items-center gap-1"><div class="w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div> 加载中...</div>'
-    
-    const img = new Image()
-    img.onload = () => {
-      container.innerHTML = ''
-      container.appendChild(img)
-      img.className = 'max-w-full max-h-24 rounded-lg mt-2'
-    }
-    img.onerror = () => {
-      container.innerHTML = '<span class="text-xs text-red-500">加载失败</span>'
-    }
-    img.src = url + '?t=' + Date.now()
-  }
-
-  if (results.length === 0) return null
+  // 统计成功和失败数量
+  const successCount = results.filter(r => r.success).length
+  const failCount = results.filter(r => !r.success).length
 
   return (
-    <div className="space-y-3 mt-4 animate-slide-up">
-      <h4 className="text-sm font-medium text-green-500">上传结果 ({results.length})</h4>
-      {results.map((result, idx) => (
-        <div 
-          key={`${idx}-${result.filename}`}
-          className={`rounded-xl p-3 ${result.success ? 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800' : 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800'}`}
-          onClick={(e) => e.stopPropagation()}
+    <div className="mt-4 space-y-2 animate-fade-in">
+      {/* 统计信息 */}
+      <div className="flex items-center gap-4 px-2 py-1 text-sm">
+        <span className="text-green-500">
+          <i className="fas fa-check-circle mr-1"></i>成功: {successCount}
+        </span>
+        {failCount > 0 && (
+          <span className="text-red-500">
+            <i className="fas fa-exclamation-circle mr-1"></i>失败: {failCount}
+          </span>
+        )}
+        <span className="text-gray-400 text-xs">共 {results.length} 个</span>
+      </div>
+
+      {/* 结果列表 */}
+      {results.map((result, index) => (
+        <div
+          key={index}
+          className={`p-3 rounded-lg border ${
+            result.success
+              ? 'bg-green-50/80 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+              : 'bg-red-50/80 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+          }`}
         >
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className={`text-sm font-medium ${result.success ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
-                  {result.success ? '✓' : '✗'} {result.filename}
+          <div className="flex items-start justify-between gap-2 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                {result.success ? (
+                  <i className="fas fa-check-circle text-green-500 text-sm"></i>
+                ) : (
+                  <i className="fas fa-times-circle text-red-500 text-sm"></i>
+                )}
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">
+                  {result.filename || '未知文件'}
                 </span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">{result.folder === 'wallpaper' ? '横屏' : '竖屏'}</span>
+                {result.folder && (
+                  <span className="text-xs px-2 py-0.5 rounded bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                    {result.folder}
+                  </span>
+                )}
+                {result.storage && (
+                  <span className="text-xs px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300">
+                    {result.storage}
+                  </span>
+                )}
               </div>
               {result.success && result.url && (
-                <>
-                  <div className="mt-2 flex items-center gap-2 flex-wrap">
-                    <code className="text-xs bg-white dark:bg-gray-800 px-2 py-1 rounded flex-1 truncate text-gray-700 dark:text-gray-300">{result.url}</code>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleCopy(result.url, `url-${idx}`)
-                      }}
-                      className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition"
-                    >
-                      {copied === `url-${idx}` ? <i className="fas fa-check text-green-500"></i> : <i className="fas fa-copy text-gray-400"></i>}
-                    </button>
-                    <a 
-                      href={result.url} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <i className="fas fa-external-link-alt text-gray-400"></i>
-                    </a>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handlePreview(result.url, idx)
-                      }}
-                      className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition"
-                    >
-                      <i className="fas fa-eye text-gray-400"></i>
-                    </button>
-                  </div>
-                  <div id={`preview-${idx}`} className="mt-2"></div>
-                </>
+                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                  <code className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[200px] sm:max-w-[300px]">
+                    {result.url}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(result.url)
+                      const toast = document.createElement('div')
+                      toast.innerHTML = '<i class="fas fa-check-circle mr-1"></i> 已复制'
+                      toast.className = 'fixed bottom-20 left-1/2 -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-lg text-sm z-50 shadow-lg animate-fade-in-up'
+                      document.body.appendChild(toast)
+                      setTimeout(() => toast.remove(), 2000)
+                    }}
+                    className="text-xs text-blue-500 hover:text-blue-600 transition"
+                    title="复制链接"
+                  >
+                    <i className="fas fa-copy"></i>
+                  </button>
+                  <a
+                    href={result.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-500 hover:text-blue-600 transition"
+                    title="打开链接"
+                  >
+                    <i className="fas fa-external-link-alt"></i>
+                  </a>
+                </div>
               )}
-              {!result.success && <p className="text-xs text-red-500 mt-1">{result.error}</p>}
+              {!result.success && result.error && (
+                <p className="text-xs text-red-500 mt-1">{result.error}</p>
+              )}
             </div>
           </div>
         </div>
