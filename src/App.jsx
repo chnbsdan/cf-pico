@@ -21,6 +21,7 @@ function App() {
   const [isLoadingLogin, setIsLoadingLogin] = useState(false)
   const [loginBgImage, setLoginBgImage] = useState('')
   const [bgLoaded, setBgLoaded] = useState(false)
+  const isProcessing = useRef(false)
 
   const LOGIN_PASSWORD = import.meta.env.VITE_LOGIN_PASSWORD || 'admin123'
 
@@ -32,8 +33,6 @@ function App() {
   const [uploadResults, setUploadResults] = useState([])
   const [isUploading, setIsUploading] = useState(false)
   const [convertToWebp, setConvertToWebp] = useState(false)
-
-  const isUploadingRef = useRef(false)
 
   useEffect(() => {
     const savedAuth = localStorage.getItem('pico_auth')
@@ -188,22 +187,22 @@ function App() {
   }
 
   const handleUpload = async (files, folder, storage = 'github') => {
-    console.log('===== App.jsx handleUpload =====')
-    console.log('收到文件数量:', files?.length || 0)
-    console.log('存储方式:', storage)
-
     // ✅ 加锁：防止重复调用
-    if (isUploadingRef.current) {
+    if (isProcessing.current) {
       console.warn('上传进行中，跳过重复调用')
       return []
     }
+
+    console.log('===== App.jsx handleUpload =====')
+    console.log('收到文件数量:', files?.length || 0)
+    console.log('存储方式:', storage)
 
     if (!files || files.length === 0) {
       console.warn('没有文件，跳过上传')
       return []
     }
 
-    isUploadingRef.current = true
+    isProcessing.current = true
     setIsUploading(true)
     setUploadResults([])
 
@@ -298,14 +297,13 @@ function App() {
 
       setIsUploading(false)
       loadStats()
-      isUploadingRef.current = false
-
+      isProcessing.current = false
       return allResults
 
     } catch (error) {
       console.error('上传异常:', error)
       setIsUploading(false)
-      isUploadingRef.current = false
+      isProcessing.current = false
       return []
     }
   }
