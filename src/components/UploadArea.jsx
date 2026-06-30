@@ -30,9 +30,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     img.src = url
   }
 
-  // ============================================================
-  // 带重试的分片上传
-  // ============================================================
   const uploadChunkWithRetry = async (uploadId, chunkIndex, chunk, maxRetries = 3) => {
     let lastError
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -50,9 +47,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     throw new Error(`分片 ${chunkIndex} 上传失败: ${lastError}`)
   }
 
-  // ============================================================
-  // 大文件分片上传
-  // ============================================================
   const CHUNK_SIZE = 20 * 1024 * 1024
   const CONCURRENT = 3
 
@@ -122,15 +116,11 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     }
   }
 
-  // ============================================================
-  // 处理文件上传
-  // ============================================================
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
     console.log('UploadArea 收到文件数量:', files.length)
 
     const fileArray = Array.isArray(files) ? files : Array.from(files)
-    const results = []
 
     for (const file of fileArray) {
       if (!file) continue
@@ -138,7 +128,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       try {
         let url
 
-        // 大于 20MB 使用分片上传
         if (file.size > 20 * 1024 * 1024) {
           if (storageType !== 'telegram') {
             throw new Error('大文件仅支持 Telegram 存储，请切换到 Telegram')
@@ -146,7 +135,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           console.log(`📦 大文件 (${(file.size / 1024 / 1024).toFixed(1)}MB)，使用分片上传`)
           url = await uploadLargeFile(file, folder, storageType)
         } else {
-          // 小文件走原有逻辑
           const result = await onUpload([file], folder, storageType)
           if (result && result.length > 0 && result[0].success) {
             url = result[0].url
@@ -155,28 +143,12 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           }
         }
 
-        results.push({
-          success: true,
-          filename: file.name,
-          url: url,
-          folder: folder,
-          storage: storageType
-        })
+        // ✅ 直接更新父组件的结果（通过 props 传递）
+        // onUpload 已经在 App.jsx 中设置了 uploadResults，不需要在这里再调用
 
       } catch (error) {
         console.error('上传失败:', error)
-        results.push({
-          success: false,
-          filename: file.name,
-          error: error.message,
-          folder: folder
-        })
       }
-    }
-
-    // ✅ 关键修改：直接调用 onUpload 并传递 results
-    if (onUpload && results.length > 0) {
-      await onUpload(results)
     }
   }
 
@@ -255,7 +227,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         </div>
       </div>
 
-      {/* 存储方式选择 */}
       <div className="flex justify-center items-center mb-4">
         <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm rounded-lg px-4 py-2 flex-wrap justify-center">
           <span className="text-white/70 text-sm"><i className="fas fa-database mr-1"></i>存储方式：</span>
@@ -274,7 +245,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         </div>
       </div>
 
-      {/* WebP 转换 */}
       <div className="flex justify-center items-center mb-4">
         <label className="flex items-center gap-2 cursor-pointer group" onClick={(e) => e.stopPropagation()}>
           <input type="checkbox" checked={convertToWebp || false} onChange={(e) => onConvertChange?.(e.target.checked)} className="w-4 h-4 rounded border-gray-300 bg-white/80 checked:bg-blue-500 checked:border-blue-500 focus:ring-2 focus:ring-blue-400 focus:ring-offset-0 cursor-pointer" />
@@ -283,7 +253,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         </label>
       </div>
 
-      {/* 上传区域 */}
       <div
         className={`upload-area rounded-xl border-2 border-dashed p-8 text-center transition-all duration-200 cursor-pointer ${dragOver ? 'border-blue-500 bg-sky-100 dark:bg-sky-900/30' : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 hover:bg-sky-100 dark:hover:bg-sky-900/30 hover:border-sky-400'}`}
         onClick={() => fileInputRef.current?.click()}
@@ -306,7 +275,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           )}
         </p>
 
-        {/* 分片上传进度 */}
         {isChunkUploading && (
           <div className="mt-4 bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/10">
             <div className="flex justify-between items-center text-sm text-white/80 mb-2">
