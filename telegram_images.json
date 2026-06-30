@@ -94,5 +94,17 @@
     "time": "2026-06-30T08:17:59.083Z",
     "size": 1994160,
     "mimeType": "image/jpeg"
+  },
+  {
+    "id": 1782814754528,
+    "filename": "20260630_bonsai-2202769.jpg",
+    "originalName": "bonsai-2202769.jpg",
+    "fileId": "AgACAgUAAyEGAAMBBNJvJQADWGpDmCA2NqymbgzbW0wRaRFgyDkLAALgD2sbn0QgVng_8jMOXdaZAQADAgADdwADPAQ",
+    "messageId": 88,
+    "filePath": "photos/file_47.jpg",
+    "url": "https://pico.1356666.xyz/api/image?path=telegram/photos%2Ffile_47.jpg",
+    "time": "2026-06-30T10:19:14.528Z",
+    "size": 867360,
+    "mimeType": "image/jpeg"
   }
 ]
