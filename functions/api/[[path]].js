@@ -504,7 +504,7 @@ async function handleRandom(request, env) {
     const result = {
       code: 200,
       imgurl: imageUrl,
-      source: random.download_url || '',
+  //    source: random.download_url || '',返回不要爆露原始仓库地址，如果需要可以把前面的//去掉。
       total: allImages.length
     };
     return new Response(JSON.stringify(result, null, 2), {
