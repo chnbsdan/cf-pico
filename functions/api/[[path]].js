@@ -7,31 +7,22 @@ const GITHUB_REPO = 'cf-pico'
 const TELEGRAM_IMAGES_FILE = 'telegram_images.json'  // Telegram 图片列表存储文件
 
 // ============================================================
-// 大文件分片上传配置（写死在代码里）
+// 大文件分片上传配置
 // ============================================================
-const CHUNK_SIZE = 10 * 1024 * 1024;        // 10MB 一片
-const MAX_FILE_SIZE = 1024 * 1024 * 1024;   // 1GB 最大文件
+const CHUNK_SIZE = 10 * 1024 * 1024        // 10MB 一片
+const MAX_FILE_SIZE = 1024 * 1024 * 1024   // 1GB 最大文件
 
 // ============================================================
-// Telegram 存储相关函数（完整优化版）
+// Telegram 存储相关函数
 // ============================================================
 
-/**
- * 上传文件到 Telegram 频道
- * 自动选择最佳方法：sendPhoto / sendVideo / sendAudio / sendDocument
- * 兼容所有文件类型，包括 webp
- */
 async function uploadToTelegram(file, botToken, chatId) {
   const ext = file.name.split('.').pop().toLowerCase();
   const mimeType = file.type || '';
   
-  // ============================================================
-  // 1. 智能选择发送方法
-  // ============================================================
   let method = 'sendDocument';
   let fieldName = 'document';
   
-  // 图片（webp 用 document，因为 Telegram 的 sendPhoto 对 webp 支持不好）
   const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff'];
   if (imageExts.includes(ext) && mimeType.startsWith('image/')) {
     method = 'sendPhoto';
@@ -42,14 +33,8 @@ async function uploadToTelegram(file, botToken, chatId) {
   } else if (['mp3', 'wav', 'ogg', 'flac', 'aac'].includes(ext) && mimeType.startsWith('audio/')) {
     method = 'sendAudio';
     fieldName = 'audio';
-  } else if (ext === 'webp') {
-    method = 'sendDocument';
-    fieldName = 'document';
   }
 
-  // ============================================================
-  // 2. 构建请求
-  // ============================================================
   const formData = new FormData();
   formData.append('chat_id', chatId);
   formData.append(fieldName, file, file.name);
@@ -58,11 +43,6 @@ async function uploadToTelegram(file, botToken, chatId) {
     formData.append('caption', `📷 ${file.name}`);
   }
 
-  console.log(`📤 Telegram 上传: ${file.name} (${method})`);
-
-  // ============================================================
-  // 3. 发送请求
-  // ============================================================
   const response = await fetch(
     `https://api.telegram.org/bot${botToken}/${method}`,
     { method: 'POST', body: formData }
@@ -70,22 +50,14 @@ async function uploadToTelegram(file, botToken, chatId) {
 
   if (!response.ok) {
     const error = await response.json();
-    console.error('Telegram API 错误:', error);
     throw new Error(error.description || 'Telegram 上传失败');
   }
 
   const data = await response.json();
   const result = data.result;
 
-  // ============================================================
-  // 4. 提取 file_id
-  // ============================================================
   let fileId = null;
-  
-  const fields = [
-    'document', 'photo', 'video', 'audio', 
-    'animation', 'sticker', 'voice', 'video_note'
-  ];
+  const fields = ['document', 'photo', 'video', 'audio', 'animation', 'sticker', 'voice', 'video_note'];
   
   for (const field of fields) {
     if (result?.[field]) {
@@ -109,11 +81,6 @@ async function uploadToTelegram(file, botToken, chatId) {
     throw new Error(`Telegram 未返回 file_id (${method})`);
   }
 
-  console.log(`✅ Telegram 上传成功: ${file.name} → file_id: ${fileId}`);
-
-  // ============================================================
-  // 5. 获取文件路径
-  // ============================================================
   const filePathResponse = await fetch(
     `https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`
   );
@@ -139,15 +106,13 @@ async function uploadToTelegram(file, botToken, chatId) {
 }
 
 /**
- * ✅ 核心修改：通过 file_id 实时获取文件内容（兼容 file_path 过期）
- * 先调用 getFile 获取最新的 file_path，再下载文件
+ * ✅ 通过 file_id 实时获取文件内容
  */
 async function getTelegramFileContentByFileId(botToken, fileId) {
   if (!fileId) {
     throw new Error('缺少 fileId');
   }
 
-  // 1. 用 file_id 获取最新的 file_path
   const getFilePathUrl = `https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`;
   const filePathRes = await fetch(getFilePathUrl);
   
@@ -163,7 +128,6 @@ async function getTelegramFileContentByFileId(botToken, fileId) {
     throw new Error('Telegram 未返回 file_path');
   }
 
-  // 2. 用最新的 file_path 下载文件
   const downloadUrl = `https://api.telegram.org/file/bot${botToken}/${currentFilePath}`;
   const response = await fetch(downloadUrl);
   
@@ -173,21 +137,13 @@ async function getTelegramFileContentByFileId(botToken, fileId) {
   
   const fileData = await response.arrayBuffer();
   
-  // 3. 根据文件扩展名设置正确的 MIME 类型
   const ext = currentFilePath.split('.').pop().toLowerCase();
   const mimeTypes = {
-    'jpg': 'image/jpeg',
-    'jpeg': 'image/jpeg',
-    'png': 'image/png',
-    'gif': 'image/gif',
-    'webp': 'image/webp',
-    'bmp': 'image/bmp',
-    'svg': 'image/svg+xml',
-    'ico': 'image/x-icon',
-    'mp4': 'video/mp4',
-    'webm': 'video/webm',
-    'mp3': 'audio/mpeg',
-    'wav': 'audio/wav',
+    'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+    'gif': 'image/gif', 'webp': 'image/webp', 'bmp': 'image/bmp',
+    'svg': 'image/svg+xml', 'ico': 'image/x-icon',
+    'mp4': 'video/mp4', 'webm': 'video/webm',
+    'mp3': 'audio/mpeg', 'wav': 'audio/wav',
     'pdf': 'application/pdf'
   };
   
@@ -205,9 +161,6 @@ async function getTelegramFileContentByFileId(botToken, fileId) {
   });
 }
 
-/**
- * 从 Telegram 删除文件（通过消息ID）
- */
 async function deleteTelegramFile(botToken, chatId, messageId) {
   const response = await fetch(
     `https://api.telegram.org/bot${botToken}/deleteMessage?chat_id=${chatId}&message_id=${messageId}`
@@ -278,20 +231,74 @@ async function saveTelegramImages(token, images, sha = null) {
 }
 
 // ============================================================
-// ✅ 新增：生成上传 ID
+// ✅ 生成上传 ID
 // ============================================================
 function generateUploadId() {
   return Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9);
 }
 
 // ============================================================
-// ✅ 新增：初始化分片上传
+// ✅ 后台合并分片（异步执行，不阻塞响应）
+// ============================================================
+async function mergeChunksInBackground(uploadId, folder, env) {
+  console.log(`🔄 开始后台合并: ${uploadId}`);
+  
+  try {
+    // 1. 获取上传状态
+    const uploadDataRaw = await env.CHUNK_STORE.get(`upload:${uploadId}`);
+    if (!uploadDataRaw) {
+      console.error(`❌ 上传会话不存在: ${uploadId}`);
+      return;
+    }
+    
+    const upload = JSON.parse(uploadDataRaw);
+    
+    // 2. 检查是否所有分片都已上传
+    if (upload.uploadedChunks.length !== upload.chunkCount) {
+      console.error(`❌ 分片未完整上传：${upload.uploadedChunks.length}/${upload.chunkCount}`);
+      return;
+    }
+    
+    // 3. 保存大文件记录
+    const fileRecord = {
+      id: Date.now(),
+      filename: upload.filename,
+      originalName: upload.filename,
+      size: upload.totalSize,
+      chunks: upload.uploadedChunks,
+      chunkCount: upload.chunkCount,
+      folder: folder || 'large',
+      storageType: 'telegram_chunks',
+      time: new Date().toISOString(),
+      status: 'ready'  // ✅ 标记为已完成
+    };
+    
+    const fileId = `large_${uploadId}`;
+    await env.CHUNK_STORE.put(`file:${fileId}`, JSON.stringify(fileRecord));
+    
+    // 4. 删除临时上传状态
+    await env.CHUNK_STORE.delete(`upload:${uploadId}`);
+    
+    console.log(`✅ 后台合并完成: ${uploadId} → ${fileId}`);
+    
+  } catch (error) {
+    console.error(`❌ 后台合并失败 ${uploadId}:`, error);
+    // 记录失败状态，供前端查询
+    await env.CHUNK_STORE.put(`upload:${uploadId}`, JSON.stringify({
+      ...JSON.parse(uploadDataRaw || '{}'),
+      status: 'failed',
+      error: error.message
+    }));
+  }
+}
+
+// ============================================================
+// ✅ 初始化分片上传
 // ============================================================
 async function handleInitUpload(request, env) {
   try {
     const { filename, totalSize } = await request.json();
     
-    // 检查文件大小
     if (totalSize > MAX_FILE_SIZE) {
       return new Response(JSON.stringify({ 
         error: `文件太大，最大支持 ${MAX_FILE_SIZE / 1024 / 1024}MB` 
@@ -304,14 +311,13 @@ async function handleInitUpload(request, env) {
     const uploadId = generateUploadId();
     const chunkCount = Math.ceil(totalSize / CHUNK_SIZE);
     
-    // 保存到 KV
     const uploadData = {
       filename,
       totalSize,
       chunkSize: CHUNK_SIZE,
       chunkCount,
       uploadedChunks: [],
-      status: 'pending',
+      status: 'uploading',
       createdAt: Date.now()
     };
     
@@ -334,7 +340,7 @@ async function handleInitUpload(request, env) {
 }
 
 // ============================================================
-// ✅ 新增：上传单个分片
+// ✅ 上传单个分片
 // ============================================================
 async function handleUploadChunk(request, env) {
   try {
@@ -350,7 +356,6 @@ async function handleUploadChunk(request, env) {
       });
     }
     
-    // 获取上传状态
     const uploadDataRaw = await env.CHUNK_STORE.get(`upload:${uploadId}`);
     if (!uploadDataRaw) {
       return new Response(JSON.stringify({ error: '上传会话不存在或已过期' }), {
@@ -361,7 +366,6 @@ async function handleUploadChunk(request, env) {
     
     const upload = JSON.parse(uploadDataRaw);
     
-    // 检查是否已上传该分片
     if (upload.uploadedChunks.some(c => c.index === chunkIndex)) {
       return new Response(JSON.stringify({ 
         success: true, 
@@ -372,7 +376,6 @@ async function handleUploadChunk(request, env) {
       });
     }
     
-    // 上传分片到 Telegram
     const botToken = env.TG_BOT_TOKEN;
     const chatId = env.TG_CHAT_ID;
     
@@ -393,7 +396,6 @@ async function handleUploadChunk(request, env) {
     const tgData = await tgResponse.json();
     const fileId = tgData.result.document.file_id;
     
-    // 记录分片信息
     upload.uploadedChunks.push({ index: chunkIndex, fileId });
     await env.CHUNK_STORE.put(`upload:${uploadId}`, JSON.stringify(upload));
     
@@ -418,7 +420,7 @@ async function handleUploadChunk(request, env) {
 }
 
 // ============================================================
-// ✅ 新增：完成分片上传
+// ✅ 完成上传（异步合并，立即返回）
 // ============================================================
 async function handleCompleteUpload(request, env) {
   try {
@@ -431,7 +433,6 @@ async function handleCompleteUpload(request, env) {
       });
     }
     
-    // 获取上传状态
     const uploadDataRaw = await env.CHUNK_STORE.get(`upload:${uploadId}`);
     if (!uploadDataRaw) {
       return new Response(JSON.stringify({ error: '上传会话不存在或已过期' }), {
@@ -442,7 +443,6 @@ async function handleCompleteUpload(request, env) {
     
     const upload = JSON.parse(uploadDataRaw);
     
-    // 检查是否所有分片都已上传
     if (upload.uploadedChunks.length !== upload.chunkCount) {
       return new Response(JSON.stringify({ 
         error: `分片未完整上传：${upload.uploadedChunks.length}/${upload.chunkCount}` 
@@ -452,36 +452,27 @@ async function handleCompleteUpload(request, env) {
       });
     }
     
-    // 保存大文件记录
-    const fileRecord = {
-      id: Date.now(),
-      filename: upload.filename,
-      originalName: upload.filename,
-      size: upload.totalSize,
-      chunks: upload.uploadedChunks,
-      chunkCount: upload.chunkCount,
-      folder: folder || 'large',
-      storageType: 'telegram_chunks',
-      time: new Date().toISOString()
-    };
-    
+    // ✅ 关键：立即返回，后台异步合并
+    // 使用 ctx.waitUntil 让后台任务继续执行
     const fileId = `large_${uploadId}`;
-    await env.CHUNK_STORE.put(`file:${fileId}`, JSON.stringify(fileRecord));
-    
-    // 删除临时上传状态
-    await env.CHUNK_STORE.delete(`upload:${uploadId}`);
-    
     const baseUrl = new URL(request.url).origin;
     const fileUrl = `${baseUrl}/api/large/${fileId}`;
+    
+    // 启动后台合并任务（不阻塞响应）
+    const ctx = request.cf?.ctx || { waitUntil: (cb) => { setTimeout(cb, 0); } };
+    ctx.waitUntil(mergeChunksInBackground(uploadId, folder, env));
     
     return new Response(JSON.stringify({ 
       success: true, 
       url: fileUrl,
       filename: upload.filename,
-      size: upload.totalSize
+      size: upload.totalSize,
+      status: 'merging',  // ✅ 告诉前端正在合并
+      message: '文件已接收，正在后台合并，请稍后刷新查看'
     }), {
       headers: { 'Content-Type': 'application/json' }
     });
+    
   } catch (error) {
     console.error('Complete upload error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
@@ -492,7 +483,7 @@ async function handleCompleteUpload(request, env) {
 }
 
 // ============================================================
-// ✅ 新增：下载大文件（重组所有分片）
+// ✅ 下载大文件
 // ============================================================
 async function handleDownloadLarge(request, env) {
   try {
@@ -514,7 +505,6 @@ async function handleDownloadLarge(request, env) {
     // 按顺序获取所有分片
     const chunks = [];
     for (const chunkInfo of file.chunks) {
-      // 获取文件路径
       const filePathResponse = await fetch(
         `https://api.telegram.org/bot${botToken}/getFile?file_id=${chunkInfo.fileId}`
       );
@@ -544,7 +534,6 @@ async function handleDownloadLarge(request, env) {
       offset += chunk.byteLength;
     }
     
-    // 判断 MIME 类型
     const ext = file.filename.split('.').pop().toLowerCase();
     const mimeTypes = {
       'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
@@ -570,7 +559,7 @@ async function handleDownloadLarge(request, env) {
 }
 
 // ============================================================
-// ✅ 新增：处理 /api/tg 随机 Telegram 图片请求
+// ✅ /api/tg 随机 Telegram 图片
 // ============================================================
 async function handleTelegramRandom(env, request) {
   const token = env.GITHUB_TOKEN;
@@ -578,25 +567,20 @@ async function handleTelegramRandom(env, request) {
     return new Response('GITHUB_TOKEN not configured', { status: 500 });
   }
 
-  // 从 GitHub 读取 Telegram 图片列表
   const telegramImages = await getTelegramImages(token);
   if (!telegramImages || telegramImages.length === 0) {
     return new Response('No Telegram images found', { status: 404 });
   }
 
-  // 随机选择一张图片
   const randomImage = telegramImages[Math.floor(Math.random() * telegramImages.length)];
   const baseUrl = 'https://pico.1356666.xyz';
   const imageUrl = `${baseUrl}/api/image?path=telegram/${encodeURIComponent(randomImage.filePath)}`;
 
-  // ============================================================
-  // ✅ 判断是否返回 HTML 页面
-  // ============================================================
   const url = new URL(request.url);
   const format = url.searchParams.get('format');
 
   if (format === 'html') {
-  const html = `<!DOCTYPE html>
+    const html = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -604,47 +588,26 @@ async function handleTelegramRandom(env, request) {
   <title>TG 壁纸</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      background: #000;
-    }
-    img {
-      width: 100vw;
-      height: 100vh;
-      object-fit: cover;
-      display: block;
-    }
+    body { width: 100vw; height: 100vh; overflow: hidden; background: #000; }
+    img { width: 100vw; height: 100vh; object-fit: cover; display: block; }
   </style>
 </head>
 <body>
   <img id="tgImage" src="${imageUrl}" alt="TG壁纸">
   <script>
-    // ✅ 使用 setTimeout 递归，确保每次都刷新
     function refreshImage() {
-      const img = document.getElementById('tgImage');
-      img.src = '/api/tg?t=' + Date.now();
-      // 60秒后再次刷新
+      document.getElementById('tgImage').src = '/api/tg?t=' + Date.now();
       setTimeout(refreshImage, 3600000);
     }
-    // 60秒后开始第一次刷新
     setTimeout(refreshImage, 3600000);
   </script>
 </body>
 </html>`;
-
-  return new Response(html, {
-    headers: {
-      'Content-Type': 'text/html;charset=UTF-8',
-      'Cache-Control': 'no-cache'
-    }
-  });
+    return new Response(html, {
+      headers: { 'Content-Type': 'text/html;charset=UTF-8', 'Cache-Control': 'no-cache' }
+    });
   }
 
-  // ============================================================
-  // 默认：返回图片
-  // ============================================================
   try {
     const response = await fetch(imageUrl);
     if (!response.ok) {
@@ -723,7 +686,6 @@ function generateFilename(originalName) {
 // API 处理函数
 // ============================================================
 
-// GET /api/stats
 async function handleStats(env) {
   const folders = ['wallpaper', 'cover', 'sh', 'sd']
   const githubFolders = {}
@@ -774,12 +736,10 @@ async function handleStats(env) {
   })
 }
 
-// GET /api/random - 支持 format=json 参数
 async function handleRandom(request, env) {
   const url = new URL(request.url);
   const format = url.searchParams.get('format');
   
-  // 从所有文件夹中获取图片列表
   const folders = ['wallpaper', 'cover', 'sh', 'sd'];
   let allImages = [];
   
@@ -792,17 +752,14 @@ async function handleRandom(request, env) {
     return new Response('No images found', { status: 404 });
   }
   
-  // 随机选择一张图片
   const random = allImages[Math.floor(Math.random() * allImages.length)];
   const baseUrl = new URL(request.url).origin;
   const imageUrl = `${baseUrl}/api/image?path=${random.folder}/${random.name}`;
   
-  // ✅ 如果 format=json，返回 JSON 格式
   if (format === 'json') {
     const result = {
       code: 200,
       imgurl: imageUrl,
-  //    source: random.download_url || '',返回不要爆露原始仓库地址，如果需要可以把前面的//去掉。
       total: allImages.length
     };
     return new Response(JSON.stringify(result, null, 2), {
@@ -814,7 +771,6 @@ async function handleRandom(request, env) {
     });
   }
   
-  // 默认返回图片
   const response = await fetch(random.download_url);
   return new Response(response.body, {
     headers: {
@@ -825,7 +781,6 @@ async function handleRandom(request, env) {
   });
 }
 
-// GET /api/wallpaper
 async function handleWallpaper(request, env) {
   const url = new URL(request.url)
   const folder = url.searchParams.get('folder') || 'wallpaper'
@@ -840,7 +795,6 @@ async function handleWallpaper(request, env) {
   })
 }
 
-// GET /api/cover
 async function handleCover(request, env) {
   const url = new URL(request.url)
   const folder = url.searchParams.get('folder') || 'cover'
@@ -855,7 +809,6 @@ async function handleCover(request, env) {
   })
 }
 
-// GET /api/list
 async function handleList(env) {
   const folders = ['wallpaper', 'cover', 'sh', 'sd']
   const bucket = env.IMAGES_BUCKET
@@ -864,7 +817,6 @@ async function handleList(env) {
   const results = {}
   let total = 0
 
-  // Telegram 图片列表
   let telegramImages = []
   if (token) {
     telegramImages = await getTelegramImages(token)
@@ -884,7 +836,6 @@ async function handleList(env) {
   }))
   total += results['telegram'].length
 
-  // GitHub/R2/External
   let externalImages = {}
   if (token) {
     try {
@@ -990,7 +941,7 @@ async function handleList(env) {
 }
 
 // ============================================================
-// GET /api/image - 核心代理（✅ 核心修改：改用 file_id 实时获取）
+// GET /api/image - 核心代理
 // ============================================================
 async function handleImage(request, env) {
   const url = new URL(request.url)
@@ -1011,7 +962,7 @@ async function handleImage(request, env) {
   }
 
   // ============================================================
-  // ✅ 核心修改：Telegram 改用 file_id 实时获取
+  // Telegram：改用 file_id 实时获取
   // ============================================================
   if (folder === 'telegram') {
     const botToken = env.TG_BOT_TOKEN;
@@ -1023,7 +974,6 @@ async function handleImage(request, env) {
     }
 
     try {
-      // 1. 从 telegram_images.json 查找记录
       const images = await getTelegramImages(token);
       const record = images.find(img => img.filePath === filename);
       
@@ -1032,7 +982,6 @@ async function handleImage(request, env) {
         return new Response('未找到对应的 fileId', { status: 404 });
       }
 
-      // 2. 用 file_id 实时获取文件（自动处理 file_path 过期）
       return await getTelegramFileContentByFileId(botToken, record.fileId);
       
     } catch (error) {
@@ -1041,9 +990,7 @@ async function handleImage(request, env) {
     }
   }
 
-  // ============================================================
   // R2
-  // ============================================================
   if (bucket) {
     try {
       const object = await bucket.get(path)
@@ -1065,9 +1012,7 @@ async function handleImage(request, env) {
     }
   }
 
-  // ============================================================
   // GitHub
-  // ============================================================
   if (!token) {
     return new Response('GITHUB_TOKEN not configured', { status: 500 })
   }
@@ -1149,7 +1094,6 @@ async function handleUpload(request, env) {
     let tgFileId = null
     let tgFilePath = null
 
-    // === Telegram 存储 ===
     if (storageType === 'telegram') {
       const botToken = env.TG_BOT_TOKEN;
       const chatId = env.TG_CHAT_ID;
@@ -1208,7 +1152,6 @@ async function handleUpload(request, env) {
         });
       }
 
-    // === R2 存储 ===
     } else if (storageType === 'r2') {
       if (!bucket) {
         return new Response(JSON.stringify({ error: 'R2 bucket not configured' }), {
@@ -1224,7 +1167,6 @@ async function handleUpload(request, env) {
       uploadedUrl = `${baseUrl}/api/image?path=${key}`
       usedStorage = 'r2'
 
-    // === GitHub 存储 ===
     } else {
       if (!token) {
         return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
@@ -1286,7 +1228,6 @@ async function handleUpload(request, env) {
 // 历史记录
 // ============================================================
 
-// GET /api/history
 async function handleHistory(request, env) {
   const token = env.GITHUB_TOKEN
   if (!token) {
@@ -1329,7 +1270,6 @@ async function handleHistory(request, env) {
   }
 }
 
-// POST /api/history
 async function addHistory(request, env) {
   const token = env.GITHUB_TOKEN
   if (!token) {
@@ -1412,7 +1352,6 @@ async function addHistory(request, env) {
   }
 }
 
-// DELETE /api/history
 async function deleteHistory(request, env) {
   const token = env.GITHUB_TOKEN
   if (!token) {
@@ -1492,7 +1431,7 @@ async function deleteHistory(request, env) {
 }
 
 // ============================================================
-// POST /api/admin/delete - ✅ 优化：Telegram 删除失败时仍清理记录
+// POST /api/admin/delete
 // ============================================================
 async function handleDelete(request, env) {
   const bucket = env.IMAGES_BUCKET
@@ -1512,33 +1451,25 @@ async function handleDelete(request, env) {
     let deleted = false
     let deleteErrors = []
 
-    // ============================================================
-    // ✅ Telegram 删除：即使文件已过期也清理记录
-    // ============================================================
     if (source === 'telegram' && tgMessageId) {
       const botToken = env.TG_BOT_TOKEN;
       const chatId = env.TG_CHAT_ID;
-      let tgDeleted = false;
       
       if (botToken && chatId) {
         try {
           const result = await deleteTelegramFile(botToken, chatId, tgMessageId);
           if (result) {
-            tgDeleted = true;
             console.log(`✅ Telegram 消息已删除: ${tgMessageId}`);
           } else {
             console.warn(`⚠️ Telegram 消息删除失败（可能已不存在）: ${tgMessageId}`);
-            // 不报错，继续清理记录
           }
         } catch (e) {
           console.warn(`⚠️ Telegram 删除异常（可能已过期）: ${e.message}`);
-          // 不中断，继续清理记录
         }
       } else {
         deleteErrors.push('Telegram 未配置');
       }
       
-      // ✅ 关键：无论 Telegram 删除是否成功，都清理记录
       if (token) {
         try {
           const images = await getTelegramImages(token);
@@ -1548,7 +1479,6 @@ async function handleDelete(request, env) {
             deleted = true;
             console.log(`✅ Telegram 图片记录已移除: ${tgMessageId}`);
           } else {
-            // 记录中找不到该 messageId，说明已经被清理了
             deleted = true;
             console.log(`ℹ️ 记录中已无该 messageId: ${tgMessageId}`);
           }
@@ -1559,7 +1489,6 @@ async function handleDelete(request, env) {
       }
     }
 
-    // R2 删除（非 Telegram 图片）
     if (source === 'r2' || (!source && !tgMessageId)) {
       if (bucket) {
         try {
@@ -1574,7 +1503,6 @@ async function handleDelete(request, env) {
       }
     }
 
-    // GitHub 删除（非 Telegram 图片）
     if (source === 'github' || (!source && !tgMessageId)) {
       if (token && sha) {
         try {
@@ -1652,52 +1580,42 @@ export async function onRequest(context) {
   // ============================================================
   // ✅ 大文件分片上传路由
   // ============================================================
-  // POST /api/upload/init
   if (path === 'upload/init' && method === 'POST') {
     return handleInitUpload(request, env);
   }
 
-  // POST /api/upload/chunk
   if (path === 'upload/chunk' && method === 'POST') {
     return handleUploadChunk(request, env);
   }
 
-  // POST /api/upload/complete
   if (path === 'upload/complete' && method === 'POST') {
     return handleCompleteUpload(request, env);
   }
 
-  // GET /api/large/*
   if (path.startsWith('large/') && method === 'GET') {
     return handleDownloadLarge(request, env);
   }
 
-  // POST /api/upload
   if (path === 'upload' && method === 'POST') {
     return handleUpload(request, env)
   }
 
-  // POST /api/history
   if (path === 'history' && method === 'POST') {
     return addHistory(request, env)
   }
 
-  // DELETE /api/history
   if (path === 'history' && method === 'DELETE') {
     return deleteHistory(request, env)
   }
 
-  // GET /api/history
   if (path === 'history' && method === 'GET') {
     return handleHistory(request, env)
   }
 
-  // POST /api/admin/delete
   if (path === 'admin/delete' && method === 'POST') {
     return handleDelete(request, env)
   }
 
-  // GET 其他接口
   if (path === 'tg') {
     return handleTelegramRandom(env, request);
   }
@@ -1705,8 +1623,8 @@ export async function onRequest(context) {
     return handleStats(env)
   }
   if (path === 'random') {
-  return handleRandom(request, env); // ✅ 传入 request
-}
+    return handleRandom(request, env);
+  }
   if (path === 'wallpaper') {
     return handleWallpaper(request, env)
   }
