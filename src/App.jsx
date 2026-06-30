@@ -198,6 +198,7 @@ function App() {
     }
   }
 
+  // ✅ 修改：添加 return allResults，供 UploadArea 使用
   const handleUpload = async (files, folder, storage = 'github') => {
     console.log('===== App.jsx handleUpload =====')
     console.log('收到文件数量:', files.length)
@@ -288,6 +289,9 @@ function App() {
 
     setIsUploading(false)
     loadStats()
+
+    // ✅ 关键：返回结果给 UploadArea 使用
+    return allResults
   }
 
   // ============================================================
