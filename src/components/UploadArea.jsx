@@ -47,7 +47,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     throw new Error(`分片 ${chunkIndex} 上传失败: ${lastError}`)
   }
 
-  const CHUNK_SIZE = 20 * 1024 * 1024
+  const CHUNK_SIZE = 16 * 1024 * 1024
   const CONCURRENT = 3
 
   const uploadLargeFile = async (file, folder, storage) => {
