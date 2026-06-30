@@ -333,7 +333,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             </span>
           ) : (
             <span className="text-green-400">
-              <i className="fab fa-telegram-plane mr-1"></i>将存储到 Telegram 频道（最大 50MB，>50MB 自动分片）
+              <i className="fab fa-telegram-plane mr-1"></i>将存储到 Telegram 频道（最大 10MB，>10MB 自动分片）
             </span>
           )}
         </p>
