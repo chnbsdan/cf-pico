@@ -375,10 +375,12 @@ async function handleCompleteUpload(request, env) {
       }), { status: 400 })
     }
     
-    // 保存大文件记录
-    const fileId = `large_${uploadId}`
+    // ✅ 保存大文件记录，使用纯数字ID
+    const timestamp = Date.now()
+    const random = Math.random().toString(36).substring(2, 8)
+    const fileId = `${timestamp}_${random}`
     const fileRecord = {
-      id: Date.now(),
+      id: fileId,
       filename: upload.filename,
       originalName: upload.filename,
       size: upload.totalSize,
@@ -393,7 +395,8 @@ async function handleCompleteUpload(request, env) {
     await env.CHUNK_STORE.delete(`upload:${uploadId}`)
     
     const baseUrl = new URL(request.url).origin
-    const fileUrl = `${baseUrl}/api/large/${fileId}`
+    // ✅ 使用 /file/ 前缀，不包含 large
+    const fileUrl = `${baseUrl}/file/${fileId}`
     
     return new Response(JSON.stringify({
       success: true,
@@ -414,23 +417,32 @@ async function handleCompleteUpload(request, env) {
 }
 
 // ============================================================
-// ✅ 修复：下载大文件（合并所有分片返回）
+// ✅ 下载大文件 - 使用 /file/ 前缀
 // ============================================================
 async function handleDownloadLarge(request, env) {
   try {
     const url = new URL(request.url)
     const fileId = url.pathname.split('/').pop()
+    console.log('📥 下载请求 fileId:', fileId)
+    
     if (!fileId) {
       return new Response('Missing file ID', { status: 400 })
     }
     
+    // 从 KV 读取文件记录
     const fileDataRaw = await env.CHUNK_STORE.get(`file:${fileId}`)
     if (!fileDataRaw) {
+      console.error('❌ KV 中未找到记录:', fileId)
       return new Response('File not found', { status: 404 })
     }
     
     const file = JSON.parse(fileDataRaw)
+    console.log('📥 找到文件记录:', file.filename, '分片数:', file.chunks.length)
+    
     const botToken = env.TG_BOT_TOKEN
+    if (!botToken) {
+      return new Response('TG bot token not configured', { status: 500 })
+    }
     
     // 按顺序获取所有分片
     const chunks = []
@@ -439,13 +451,13 @@ async function handleDownloadLarge(request, env) {
         `https://api.telegram.org/bot${botToken}/getFile?file_id=${chunkInfo.fileId}`
       )
       if (!filePathResponse.ok) {
-        throw new Error(`获取分片 ${chunkInfo.index} 失败`)
+        throw new Error(`获取分片 ${chunkInfo.index} 失败: ${filePathResponse.status}`)
       }
       const filePathData = await filePathResponse.json()
       const fileUrl = `https://api.telegram.org/file/bot${botToken}/${filePathData.result.file_path}`
       const chunkResponse = await fetch(fileUrl)
       if (!chunkResponse.ok) {
-        throw new Error(`下载分片 ${chunkInfo.index} 失败`)
+        throw new Error(`下载分片 ${chunkInfo.index} 失败: ${chunkResponse.status}`)
       }
       const chunkData = await chunkResponse.arrayBuffer()
       chunks.push(chunkData)
@@ -471,12 +483,10 @@ async function handleDownloadLarge(request, env) {
     }
     const contentType = mimeTypes[ext] || 'application/octet-stream'
     
-    // ✅ 视频用 inline 可以播放
     const isVideo = ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)
     const isAudio = ['mp3', 'wav', 'ogg', 'flac', 'aac'].includes(ext)
     const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp', 'ico'].includes(ext)
     
-    // ✅ 视频和音频用 inline 可以播放，其他用 attachment 下载
     let disposition = 'attachment'
     if (isVideo || isAudio || isImage) {
       disposition = 'inline'
@@ -1494,7 +1504,16 @@ export async function onRequest(context) {
 
   console.log(`API 请求: ${method} ${path}`)
 
+  // ============================================================
+  // ✅ 文件下载路由 - 放最前面
+  // ============================================================
+  if (path.startsWith('file/') && method === 'GET') {
+    return handleDownloadLarge(request, env)
+  }
+
+  // ============================================================
   // 分片上传路由
+  // ============================================================
   if (path === 'upload/init' && method === 'POST') {
     return handleInitUpload(request, env)
   }
@@ -1504,11 +1523,10 @@ export async function onRequest(context) {
   if (path === 'upload/complete' && method === 'POST') {
     return handleCompleteUpload(request, env)
   }
-  if (path.startsWith('large/') && method === 'GET') {
-    return handleDownloadLarge(request, env)
-  }
 
+  // ============================================================
   // 普通路由
+  // ============================================================
   if (path === 'upload' && method === 'POST') {
     return handleUpload(request, env)
   }
