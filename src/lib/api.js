@@ -104,7 +104,7 @@ export async function uploadChunk(uploadId, chunkIndex, chunk) {
 }
 
 /**
- * 完成分片上传
+ * 完成分片上传（异步合并）
  */
 export async function completeChunkUpload(uploadId, folder) {
   const res = await fetch('/api/upload/complete', {
