@@ -70,3 +70,47 @@ export async function deleteHistoryRecord(id) {
   const res = await fetch(`/api/history?id=${id}`, { method: 'DELETE' })
   return res.json()
 }
+
+// ============================================================
+// 大文件分片上传
+// ============================================================
+
+/**
+ * 初始化分片上传
+ */
+export async function initChunkUpload(filename, totalSize) {
+  const res = await fetch('/api/upload/init', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, totalSize })
+  });
+  return res.json();
+}
+
+/**
+ * 上传单个分片
+ */
+export async function uploadChunk(uploadId, chunkIndex, chunk) {
+  const formData = new FormData();
+  formData.append('uploadId', uploadId);
+  formData.append('chunkIndex', chunkIndex);
+  formData.append('file', chunk);
+  
+  const res = await fetch('/api/upload/chunk', {
+    method: 'POST',
+    body: formData
+  });
+  return res.json();
+}
+
+/**
+ * 完成分片上传
+ */
+export async function completeChunkUpload(uploadId, folder) {
+  const res = await fetch('/api/upload/complete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ uploadId, folder })
+  });
+  return res.json();
+}
