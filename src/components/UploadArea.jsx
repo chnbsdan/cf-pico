@@ -173,6 +173,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     })
   }
 
+  // ✅ 核心修复：检测文件类型，MP3/视频强制使用 Telegram
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
 
@@ -183,9 +184,24 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       if (!file) continue
 
       try {
-        // ✅ 16MB 以上走分片（返回 /api/large/xxx.mp4）
-        // 16MB 以下走普通上传（返回 /api/short/xxx.jpg）
-        const needChunk = storageType === 'telegram' && file.size > 16 * 1024 * 1024
+        // 检测文件类型
+        const ext = file.name.split('.').pop().toLowerCase()
+        const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a']
+        const videoExts = ['mp4', 'webm', 'avi', 'mov', 'mkv']
+        const isAudio = audioExts.includes(ext)
+        const isVideo = videoExts.includes(ext)
+        
+        // 音频和视频强制使用 Telegram 存储
+        let actualStorage = storageType
+        if (isAudio || isVideo) {
+          actualStorage = 'telegram'
+          if (storageType !== 'telegram') {
+            setUploadStatus(`🎵 媒体文件自动切换到 Telegram 存储...`)
+            await new Promise(r => setTimeout(r, 300))
+          }
+        }
+
+        const needChunk = actualStorage === 'telegram' && file.size > 16 * 1024 * 1024
 
         let url
         if (needChunk) {
@@ -195,19 +211,18 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           console.log(`📦 大文件 (${(file.size / 1024 / 1024).toFixed(1)}MB)，使用分片上传`)
           url = await uploadLargeFile(file, folder)
         } else {
-          // 普通上传
-          if (storageType === 'telegram' && file.size > 50 * 1024 * 1024) {
+          if (actualStorage === 'telegram' && file.size > 50 * 1024 * 1024) {
             throw new Error('Telegram 直接上传限制 50MB')
           }
-          if (storageType !== 'telegram' && file.size > 10 * 1024 * 1024) {
-            throw new Error(`${storageType === 'github' ? 'GitHub' : 'R2'} 限制 10MB，请切换到 Telegram`)
+          if (actualStorage !== 'telegram' && file.size > 10 * 1024 * 1024) {
+            throw new Error(`${actualStorage === 'github' ? 'GitHub' : 'R2'} 限制 10MB，请切换到 Telegram`)
           }
           
           setIsNormalUploading(true)
           setUploadStatus('准备上传...')
           setUploadProgress(0)
           
-          const result = await uploadNormalFile(file, folder, storageType)
+          const result = await uploadNormalFile(file, folder, actualStorage)
           if (!result.success) {
             throw new Error(result.error || '上传失败')
           }
@@ -220,7 +235,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           filename: file.name,
           url: url,
           folder: folder,
-          storage: storageType
+          storage: actualStorage
         })
 
         if (fileArray.length === 1 && url) {
@@ -339,17 +354,17 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="radio" name="storageType" value="github" checked={storageType === 'github'} onChange={(e) => setStorageType(e.target.value)} className="w-3.5 h-3.5 accent-blue-500" />
             <span className="text-white/80 text-sm"><i className="fab fa-github mr-1"></i>GitHub</span>
-            <span className="text-white/30 text-[10px]">(&lt;10MB)</span>
+            <span className="text-white/30 text-[10px]">(仅图片)</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="radio" name="storageType" value="r2" checked={storageType === 'r2'} onChange={(e) => setStorageType(e.target.value)} className="w-3.5 h-3.5 accent-orange-500" />
             <span className="text-white/80 text-sm"><i className="fas fa-cloud-upload-alt mr-1"></i>R2</span>
-            <span className="text-white/30 text-[10px]">(&lt;10MB)</span>
+            <span className="text-white/30 text-[10px]">(仅图片)</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="radio" name="storageType" value="telegram" checked={storageType === 'telegram'} onChange={(e) => setStorageType(e.target.value)} className="w-3.5 h-3.5 accent-green-500" />
             <span className="text-white/80 text-sm"><i className="fab fa-telegram-plane mr-1"></i>Telegram</span>
-            <span className="text-white/30 text-[10px]">(&gt;16MB 分片 / &lt;16MB 短链接)</span>
+            <span className="text-white/30 text-[10px]">(支持所有文件)</span>
           </label>
         </div>
       </div>
@@ -371,16 +386,16 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       >
         <i className="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-3 block"></i>
         <p className="text-gray-600 dark:text-gray-300 text-base mb-2">点击或拖拽文件到此处上传</p>
-        <p className="text-xs text-gray-400 dark:text-gray-500">支持图片、音频、视频 | 大图自动压缩</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">支持图片、音频、视频 | 媒体文件自动切换到 Telegram</p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-1"><i className="fas fa-paste mr-1"></i>也可直接 Ctrl+V 粘贴截图上传</p>
 
         <p className="text-xs mt-2 flex items-center justify-center gap-1 flex-wrap">
           {storageType === 'github' ? (
-            <span className="text-blue-400"><i className="fab fa-github mr-1"></i>存储到 GitHub 私有仓库</span>
+            <span className="text-blue-400"><i className="fab fa-github mr-1"></i>存储到 GitHub 私有仓库（仅图片）</span>
           ) : storageType === 'r2' ? (
-            <span className="text-orange-400"><i className="fas fa-cloud-upload-alt mr-1"></i>存储到 Cloudflare R2</span>
+            <span className="text-orange-400"><i className="fas fa-cloud-upload-alt mr-1"></i>存储到 Cloudflare R2（仅图片）</span>
           ) : (
-            <span className="text-green-400"><i className="fab fa-telegram-plane mr-1"></i>存储到 Telegram（&gt;16MB 分片 / &lt;16MB 短链接）</span>
+            <span className="text-green-400"><i className="fab fa-telegram-plane mr-1"></i>存储到 Telegram（支持所有文件）</span>
           )}
         </p>
 
