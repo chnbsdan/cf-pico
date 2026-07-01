@@ -1,19 +1,100 @@
 // functions/api/[[path]].js - Cloudflare Pages API 完整入口
 // 支持：stats, random, wallpaper, cover, list, image, upload, history, admin/delete
 // 支持 GitHub、R2、Telegram 三种存储
+// ✅ 大文件分片上传：支持最大 500MB，R2 仅存元数据，每片 16MB
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
 const TELEGRAM_IMAGES_FILE = 'telegram_images.json'
 
 // ============================================================
-// 大文件分片上传配置
+// 分片配置
 // ============================================================
-const CHUNK_SIZE = 20 * 1024 * 1024
-const MAX_FILE_SIZE = 1024 * 1024 * 1024
+const CHUNK_SIZE = 16 * 1024 * 1024  // 16MB 每片
+const MAX_FILE_SIZE = 500 * 1024 * 1024  // 500MB 最大支持
 
-function generateUploadId() {
-  return Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9)
+// ============================================================
+// R2 元数据操作（存储分片信息）
+// ============================================================
+
+async function saveChunkSession(bucket, uploadId, data) {
+  if (!bucket) return false
+  const key = `chunk_sessions/${uploadId}.json`
+  try {
+    await bucket.put(key, JSON.stringify(data, null, 2), {
+      httpMetadata: { contentType: 'application/json' }
+    })
+    return true
+  } catch (e) {
+    console.error('保存分片会话失败:', e)
+    return false
+  }
+}
+
+async function getChunkSession(bucket, uploadId) {
+  if (!bucket) return null
+  const key = `chunk_sessions/${uploadId}.json`
+  try {
+    const object = await bucket.get(key)
+    if (!object) return null
+    const content = await object.text()
+    return JSON.parse(content)
+  } catch (e) {
+    console.error('获取分片会话失败:', e)
+    return null
+  }
+}
+
+async function deleteChunkSession(bucket, uploadId) {
+  if (!bucket) return false
+  const key = `chunk_sessions/${uploadId}.json`
+  try {
+    await bucket.delete(key)
+    return true
+  } catch (e) {
+    console.error('删除分片会话失败:', e)
+    return false
+  }
+}
+
+async function saveCompletedFile(bucket, fileId, metadata) {
+  if (!bucket) return false
+  const key = `completed_files/${fileId}.json`
+  try {
+    await bucket.put(key, JSON.stringify(metadata, null, 2), {
+      httpMetadata: { contentType: 'application/json' }
+    })
+    return true
+  } catch (e) {
+    console.error('保存文件元数据失败:', e)
+    return false
+  }
+}
+
+async function getCompletedFile(bucket, fileId) {
+  if (!bucket) return null
+  const key = `completed_files/${fileId}.json`
+  try {
+    const object = await bucket.get(key)
+    if (!object) return null
+    const content = await object.text()
+    return JSON.parse(content)
+  } catch (e) {
+    console.error('获取文件元数据失败:', e)
+    return null
+  }
+}
+
+async function deleteCompletedFile(bucket, fileId) {
+  if (!bucket) return false
+  const key = `completed_files/${fileId}.json`
+  try {
+    await bucket.delete(key)
+    return true
+  } catch (e) {
+    console.error('删除文件元数据失败:', e)
+    return false
+  }
 }
 
 // ============================================================
@@ -27,16 +108,19 @@ async function uploadToTelegram(file, botToken, chatId) {
   let method = 'sendDocument';
   let fieldName = 'document';
   
-  const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff'];
+  const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp', 'svg', 'ico'];
   if (imageExts.includes(ext) && mimeType.startsWith('image/')) {
     method = 'sendPhoto';
     fieldName = 'photo';
   } else if (['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext) && mimeType.startsWith('video/')) {
     method = 'sendVideo';
     fieldName = 'video';
-  } else if (['mp3', 'wav', 'ogg', 'flac', 'aac'].includes(ext) && mimeType.startsWith('audio/')) {
+  } else if (['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'].includes(ext) && mimeType.startsWith('audio/')) {
     method = 'sendAudio';
     fieldName = 'audio';
+  } else {
+    method = 'sendDocument';
+    fieldName = 'document';
   }
 
   const formData = new FormData();
@@ -45,6 +129,8 @@ async function uploadToTelegram(file, botToken, chatId) {
   
   if (method === 'sendPhoto') {
     formData.append('caption', `📷 ${file.name}`);
+  } else if (method === 'sendDocument') {
+    formData.append('caption', `📄 ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
   }
 
   const response = await fetch(
@@ -105,8 +191,69 @@ async function uploadToTelegram(file, botToken, chatId) {
     messageId,
     filePath,
     storageType: 'telegram',
-    method: method
+    method: method,
+    fileSize: file.size,
+    mimeType: mimeType || 'application/octet-stream'
   };
+}
+
+async function uploadChunkToTelegram(chunkData, botToken, chatId, chunkIndex, filename) {
+  const formData = new FormData()
+  formData.append('chat_id', chatId)
+  formData.append('document', new Blob([chunkData]), `chunk_${String(chunkIndex).padStart(4, '0')}_${filename}`)
+  formData.append('caption', `📦 分片 ${chunkIndex + 1}`)
+
+  const response = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
+    method: 'POST',
+    body: formData
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.description || 'Telegram 分片上传失败')
+  }
+
+  const data = await response.json()
+  const fileId = data.result?.document?.file_id
+  
+  if (!fileId) {
+    throw new Error('Telegram 未返回 file_id')
+  }
+
+  return fileId
+}
+
+async function downloadChunkFromTelegram(botToken, fileId) {
+  const filePathRes = await fetch(
+    `https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`
+  )
+  if (!filePathRes.ok) {
+    throw new Error('获取文件路径失败')
+  }
+  const filePathData = await filePathRes.json()
+  const filePath = filePathData.result?.file_path
+  if (!filePath) {
+    throw new Error('未获取到文件路径')
+  }
+
+  const downloadUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`
+  const response = await fetch(downloadUrl)
+  if (!response.ok) {
+    throw new Error(`下载分片失败: ${response.status}`)
+  }
+
+  return await response.arrayBuffer()
+}
+
+async function deleteTelegramMessage(botToken, chatId, messageId) {
+  try {
+    const response = await fetch(
+      `https://api.telegram.org/bot${botToken}/deleteMessage?chat_id=${chatId}&message_id=${messageId}`
+    )
+    return response.ok
+  } catch (e) {
+    return false
+  }
 }
 
 async function getTelegramFileContentByFileId(botToken, fileId) {
@@ -143,9 +290,11 @@ async function getTelegramFileContentByFileId(botToken, fileId) {
     'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
     'gif': 'image/gif', 'webp': 'image/webp', 'bmp': 'image/bmp',
     'svg': 'image/svg+xml', 'ico': 'image/x-icon',
-    'mp4': 'video/mp4', 'webm': 'video/webm',
-    'mp3': 'audio/mpeg', 'wav': 'audio/wav',
-    'pdf': 'application/pdf'
+    'mp4': 'video/mp4', 'webm': 'video/webm', 'avi': 'video/x-msvideo',
+    'mov': 'video/quicktime', 'mkv': 'video/x-matroska',
+    'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'ogg': 'audio/ogg',
+    'flac': 'audio/flac', 'aac': 'audio/aac', 'm4a': 'audio/mp4',
+    'pdf': 'application/pdf', 'zip': 'application/zip'
   };
   
   const contentType = mimeTypes[ext] || response.headers.get('Content-Type') || 'application/octet-stream';
@@ -157,7 +306,8 @@ async function getTelegramFileContentByFileId(botToken, fileId) {
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      'Access-Control-Allow-Origin': '*'
+      'Access-Control-Allow-Origin': '*',
+      'Content-Disposition': `inline; filename="${encodeURIComponent(currentFilePath.split('/').pop())}"`
     }
   });
 }
@@ -170,7 +320,7 @@ async function deleteTelegramFile(botToken, chatId, messageId) {
 }
 
 // ============================================================
-// Telegram 图片列表管理
+// Telegram 图片列表管理（存于 GitHub 仓库）
 // ============================================================
 
 async function getTelegramImages(token) {
@@ -232,271 +382,6 @@ async function saveTelegramImages(token, images, sha = null) {
 }
 
 // ============================================================
-// 分片上传相关函数
-// ============================================================
-
-async function handleInitUpload(request, env) {
-  try {
-    const { filename, totalSize } = await request.json()
-    if (totalSize > MAX_FILE_SIZE) {
-      return new Response(JSON.stringify({ error: `文件太大，最大支持 ${MAX_FILE_SIZE / 1024 / 1024}MB` }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-    const uploadId = generateUploadId()
-    const chunkCount = Math.ceil(totalSize / CHUNK_SIZE)
-    const uploadData = {
-      filename,
-      totalSize,
-      chunkSize: CHUNK_SIZE,
-      chunkCount,
-      uploadedChunks: [],
-      status: 'uploading',
-      createdAt: Date.now()
-    }
-    await env.CHUNK_STORE.delete(`upload:${uploadId}`)
-    await env.CHUNK_STORE.put(`upload:${uploadId}`, JSON.stringify(uploadData))
-    return new Response(JSON.stringify({ uploadId, chunkCount, chunkSize: CHUNK_SIZE }), {
-      headers: { 'Content-Type': 'application/json' }
-    })
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    })
-  }
-}
-
-async function uploadChunkToTelegram(fileData, botToken, chatId, chunkIndex, filename) {
-  const formData = new FormData()
-  formData.append('chat_id', chatId)
-  formData.append('document', new Blob([fileData]), `chunk_${chunkIndex}_${filename}`)
-  
-  const response = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
-    method: 'POST',
-    body: formData
-  })
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.description || 'Telegram 上传分片失败')
-  }
-  const data = await response.json()
-  return data.result.document.file_id
-}
-
-async function handleUploadChunk(request, env) {
-  try {
-    const formData = await request.formData()
-    const uploadId = formData.get('uploadId')
-    const chunkIndex = parseInt(formData.get('chunkIndex'))
-    const chunk = formData.get('file')
-    
-    if (!uploadId || !chunk) {
-      return new Response(JSON.stringify({ error: '缺少必要参数' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-    
-    const uploadDataRaw = await env.CHUNK_STORE.get(`upload:${uploadId}`)
-    if (!uploadDataRaw) {
-      return new Response(JSON.stringify({ error: '上传会话不存在或已过期' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-    
-    const upload = JSON.parse(uploadDataRaw)
-    
-    if (upload.uploadedChunks.some(c => c.index === chunkIndex)) {
-      return new Response(JSON.stringify({ success: true, chunkIndex, message: '分片已上传' }), {
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-    
-    const botToken = env.TG_BOT_TOKEN
-    const chatId = env.TG_CHAT_ID
-    const fileData = await chunk.arrayBuffer()
-    const fileId = await uploadChunkToTelegram(fileData, botToken, chatId, chunkIndex, upload.filename)
-    
-    upload.uploadedChunks.push({ index: chunkIndex, fileId })
-    await env.CHUNK_STORE.put(`upload:${uploadId}`, JSON.stringify(upload))
-    
-    return new Response(JSON.stringify({
-      success: true,
-      chunkIndex,
-      progress: upload.uploadedChunks.length / upload.chunkCount,
-      uploaded: upload.uploadedChunks.length,
-      total: upload.chunkCount
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    })
-  } catch (error) {
-    console.error('Upload chunk error:', error)
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    })
-  }
-}
-
-async function handleCompleteUpload(request, env) {
-  try {
-    const { uploadId, folder } = await request.json()
-    if (!uploadId) {
-      return new Response(JSON.stringify({ error: '缺少 uploadId' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-    
-    const uploadDataRaw = await env.CHUNK_STORE.get(`upload:${uploadId}`)
-    if (!uploadDataRaw) {
-      return new Response(JSON.stringify({ error: '上传会话不存在或已过期' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-    
-    const upload = JSON.parse(uploadDataRaw)
-    
-    // 检查缺失分片
-    const expectedChunks = new Set()
-    for (let i = 0; i < upload.chunkCount; i++) {
-      expectedChunks.add(i)
-    }
-    const uploadedChunks = new Set(upload.uploadedChunks.map(c => c.index))
-    const missingChunks = [...expectedChunks].filter(i => !uploadedChunks.has(i))
-    
-    if (missingChunks.length > 0) {
-      return new Response(JSON.stringify({
-        error: `缺少分片: ${missingChunks.join(', ')}`
-      }), { status: 400 })
-    }
-    
-    // 保存大文件记录
-    const fileId = `large_${uploadId}`
-    const fileRecord = {
-      id: Date.now(),
-      filename: upload.filename,
-      originalName: upload.filename,
-      size: upload.totalSize,
-      chunks: upload.uploadedChunks,
-      chunkCount: upload.chunkCount,
-      folder: folder || 'large',
-      storageType: 'telegram_chunks',
-      time: new Date().toISOString(),
-      status: 'ready'
-    }
-    await env.CHUNK_STORE.put(`file:${fileId}`, JSON.stringify(fileRecord))
-    await env.CHUNK_STORE.delete(`upload:${uploadId}`)
-    
-    const baseUrl = new URL(request.url).origin
-    const fileUrl = `${baseUrl}/api/large/${fileId}`
-    
-    return new Response(JSON.stringify({
-      success: true,
-      url: fileUrl,
-      filename: upload.filename,
-      size: upload.totalSize,
-      message: '上传成功'
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    })
-  } catch (error) {
-    console.error('Complete upload error:', error)
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    })
-  }
-}
-
-// ============================================================
-// ✅ 修复：下载大文件（合并所有分片返回）
-// ============================================================
-async function handleDownloadLarge(request, env) {
-  try {
-    const url = new URL(request.url)
-    const fileId = url.pathname.split('/').pop()
-    if (!fileId) {
-      return new Response('Missing file ID', { status: 400 })
-    }
-    
-    const fileDataRaw = await env.CHUNK_STORE.get(`file:${fileId}`)
-    if (!fileDataRaw) {
-      return new Response('File not found', { status: 404 })
-    }
-    
-    const file = JSON.parse(fileDataRaw)
-    const botToken = env.TG_BOT_TOKEN
-    
-    // 按顺序获取所有分片
-    const chunks = []
-    for (const chunkInfo of file.chunks) {
-      const filePathResponse = await fetch(
-        `https://api.telegram.org/bot${botToken}/getFile?file_id=${chunkInfo.fileId}`
-      )
-      if (!filePathResponse.ok) {
-        throw new Error(`获取分片 ${chunkInfo.index} 失败`)
-      }
-      const filePathData = await filePathResponse.json()
-      const fileUrl = `https://api.telegram.org/file/bot${botToken}/${filePathData.result.file_path}`
-      const chunkResponse = await fetch(fileUrl)
-      if (!chunkResponse.ok) {
-        throw new Error(`下载分片 ${chunkInfo.index} 失败`)
-      }
-      const chunkData = await chunkResponse.arrayBuffer()
-      chunks.push(chunkData)
-    }
-    
-    // 合并所有分片
-    const totalSize = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0)
-    const merged = new Uint8Array(totalSize)
-    let offset = 0
-    for (const chunk of chunks) {
-      merged.set(new Uint8Array(chunk), offset)
-      offset += chunk.byteLength
-    }
-    
-    // 判断文件类型
-    const ext = file.filename.split('.').pop().toLowerCase()
-    const mimeTypes = {
-      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
-      'webp': 'image/webp', 'gif': 'image/gif', 'mp4': 'video/mp4',
-      'webm': 'video/webm', 'mp3': 'audio/mpeg', 'wav': 'audio/wav',
-      'ogg': 'audio/ogg', 'flac': 'audio/flac', 'aac': 'audio/aac',
-      'pdf': 'application/pdf', 'zip': 'application/zip'
-    }
-    const contentType = mimeTypes[ext] || 'application/octet-stream'
-    
-    // ✅ 视频用 inline 可以播放
-    const isVideo = ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext)
-    const isAudio = ['mp3', 'wav', 'ogg', 'flac', 'aac'].includes(ext)
-    const isImage = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp', 'ico'].includes(ext)
-    
-    // ✅ 视频和音频用 inline 可以播放，其他用 attachment 下载
-    let disposition = 'attachment'
-    if (isVideo || isAudio || isImage) {
-      disposition = 'inline'
-    }
-    
-    return new Response(merged, {
-      headers: {
-        'Content-Type': contentType,
-        'Content-Disposition': disposition,
-        'Cache-Control': 'public, max-age=86400',
-        'Access-Control-Allow-Origin': '*'
-      }
-    })
-  } catch (error) {
-    console.error('Download large file error:', error)
-    return new Response('Download failed: ' + error.message, { status: 500 })
-  }
-}
-
-// ============================================================
 // 工具函数
 // ============================================================
 
@@ -530,16 +415,6 @@ async function getFolderImages(folder, env) {
   }
 }
 
-async function getAllImages(env) {
-  const folders = ['wallpaper', 'cover', 'sh', 'sd']
-  let allImages = []
-  for (const folder of folders) {
-    const images = await getFolderImages(folder, env)
-    allImages = allImages.concat(images.map(f => ({ ...f, folder })))
-  }
-  return allImages
-}
-
 function generateFilename(originalName) {
   const now = new Date()
   const datePrefix = now.getFullYear() +
@@ -548,8 +423,355 @@ function generateFilename(originalName) {
   const safeName = originalName
     .replace(/\.[^/.]+$/, '')
     .replace(/[^a-zA-Z0-9\u4e00-\u9fa5_-]/g, '_')
+    .slice(0, 100)
   const ext = originalName.split('.').pop().toLowerCase()
   return `${datePrefix}_${safeName}.${ext}`
+}
+
+// ============================================================
+// 分片上传 API
+// ============================================================
+
+async function handleInitChunkUpload(request, env) {
+  try {
+    const { filename, totalSize } = await request.json()
+    
+    if (totalSize > MAX_FILE_SIZE) {
+      return new Response(JSON.stringify({ 
+        error: `文件太大，最大支持 ${MAX_FILE_SIZE / 1024 / 1024}MB` 
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    const uploadId = Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9)
+    const chunkCount = Math.ceil(totalSize / CHUNK_SIZE)
+
+    const session = {
+      uploadId,
+      filename,
+      totalSize,
+      chunkSize: CHUNK_SIZE,
+      chunkCount,
+      uploadedChunks: [],
+      status: 'uploading',
+      createdAt: Date.now()
+    }
+
+    const bucket = env.IMAGES_BUCKET
+    if (!bucket) {
+      return new Response(JSON.stringify({ error: 'R2 未配置' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    await saveChunkSession(bucket, uploadId, session)
+
+    return new Response(JSON.stringify({
+      uploadId,
+      chunkCount,
+      chunkSize: CHUNK_SIZE,
+      totalSize
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+}
+
+async function handleUploadChunk(request, env) {
+  try {
+    const formData = await request.formData()
+    const uploadId = formData.get('uploadId')
+    const chunkIndex = parseInt(formData.get('chunkIndex'))
+    const chunk = formData.get('file')
+
+    if (!uploadId || chunkIndex === undefined || !chunk) {
+      return new Response(JSON.stringify({ error: '缺少必要参数' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    const bucket = env.IMAGES_BUCKET
+    if (!bucket) {
+      return new Response(JSON.stringify({ error: 'R2 未配置' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    const session = await getChunkSession(bucket, uploadId)
+    if (!session) {
+      return new Response(JSON.stringify({ error: '上传会话不存在或已过期' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    if (session.uploadedChunks.some(c => c.index === chunkIndex)) {
+      return new Response(JSON.stringify({
+        success: true,
+        chunkIndex,
+        message: '分片已上传'
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    const botToken = env.TG_BOT_TOKEN
+    const chatId = env.TG_CHAT_ID
+    if (!botToken || !chatId) {
+      return new Response(JSON.stringify({ error: 'Telegram 未配置' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    const chunkData = await chunk.arrayBuffer()
+    const fileId = await uploadChunkToTelegram(
+      chunkData, 
+      botToken, 
+      chatId, 
+      chunkIndex, 
+      session.filename
+    )
+
+    session.uploadedChunks.push({ index: chunkIndex, fileId })
+    await saveChunkSession(bucket, uploadId, session)
+
+    const progress = Math.round((session.uploadedChunks.length / session.chunkCount) * 100)
+
+    return new Response(JSON.stringify({
+      success: true,
+      chunkIndex,
+      progress,
+      uploaded: session.uploadedChunks.length,
+      total: session.chunkCount
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+  } catch (error) {
+    console.error('Upload chunk error:', error)
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+}
+
+async function handleCompleteChunkUpload(request, env) {
+  try {
+    const { uploadId, folder } = await request.json()
+
+    if (!uploadId) {
+      return new Response(JSON.stringify({ error: '缺少 uploadId' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    const bucket = env.IMAGES_BUCKET
+    if (!bucket) {
+      return new Response(JSON.stringify({ error: 'R2 未配置' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    const session = await getChunkSession(bucket, uploadId)
+    if (!session) {
+      return new Response(JSON.stringify({ error: '上传会话不存在' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    const expectedChunks = new Set()
+    for (let i = 0; i < session.chunkCount; i++) {
+      expectedChunks.add(i)
+    }
+    const uploadedChunks = new Set(session.uploadedChunks.map(c => c.index))
+    const missingChunks = [...expectedChunks].filter(i => !uploadedChunks.has(i))
+
+    if (missingChunks.length > 0) {
+      return new Response(JSON.stringify({
+        error: `缺少分片: ${missingChunks.join(', ')}`,
+        missing: missingChunks
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    const fileId = `file_${uploadId}`
+    const now = new Date()
+    const datePrefix = now.getFullYear() +
+      String(now.getMonth() + 1).padStart(2, '0') +
+      String(now.getDate()).padStart(2, '0')
+    const finalFilename = `${datePrefix}_${session.filename}`
+
+    const fileMetadata = {
+      fileId,
+      filename: finalFilename,
+      originalName: session.filename,
+      totalSize: session.totalSize,
+      chunkSize: session.chunkSize,
+      chunkCount: session.chunkCount,
+      chunks: session.uploadedChunks.sort((a, b) => a.index - b.index),
+      folder: folder || 'telegram',
+      storageType: 'telegram_chunks',
+      uploadedAt: new Date().toISOString(),
+      createdAt: session.createdAt
+    }
+
+    await saveCompletedFile(bucket, fileId, fileMetadata)
+    await deleteChunkSession(bucket, uploadId)
+
+    const baseUrl = new URL(request.url).origin
+    const fileUrl = `${baseUrl}/api/large/${fileId}`
+
+    return new Response(JSON.stringify({
+      success: true,
+      url: fileUrl,
+      filename: finalFilename,
+      originalName: session.filename,
+      size: session.totalSize,
+      chunkCount: session.chunkCount,
+      message: '上传成功'
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+  } catch (error) {
+    console.error('Complete upload error:', error)
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
+}
+
+async function handleDownloadLarge(request, env) {
+  try {
+    const url = new URL(request.url)
+    const fileId = url.pathname.split('/').pop()
+    if (!fileId) {
+      return new Response('Missing file ID', { status: 400 })
+    }
+
+    const bucket = env.IMAGES_BUCKET
+    if (!bucket) {
+      return new Response('R2 未配置', { status: 500 })
+    }
+
+    const fileMeta = await getCompletedFile(bucket, fileId)
+    if (!fileMeta) {
+      return new Response('文件不存在', { status: 404 })
+    }
+
+    const botToken = env.TG_BOT_TOKEN
+    if (!botToken) {
+      return new Response('Telegram 未配置', { status: 500 })
+    }
+
+    const chunks = []
+    for (const chunkInfo of fileMeta.chunks) {
+      try {
+        const chunkData = await downloadChunkFromTelegram(botToken, chunkInfo.fileId)
+        chunks.push(chunkData)
+      } catch (e) {
+        console.error(`下载分片 ${chunkInfo.index} 失败:`, e)
+        return new Response(`下载分片 ${chunkInfo.index} 失败: ${e.message}`, { status: 500 })
+      }
+    }
+
+    const totalSize = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0)
+    const merged = new Uint8Array(totalSize)
+    let offset = 0
+    for (const chunk of chunks) {
+      merged.set(new Uint8Array(chunk), offset)
+      offset += chunk.byteLength
+    }
+
+    const ext = fileMeta.filename.split('.').pop().toLowerCase()
+    const mimeTypes = {
+      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+      'webp': 'image/webp', 'gif': 'image/gif', 'mp4': 'video/mp4',
+      'webm': 'video/webm', 'mp3': 'audio/mpeg', 'wav': 'audio/wav',
+      'ogg': 'audio/ogg', 'flac': 'audio/flac', 'aac': 'audio/aac',
+      'pdf': 'application/pdf', 'zip': 'application/zip',
+      'mov': 'video/quicktime', 'mkv': 'video/x-matroska',
+      'm4a': 'audio/mp4', 'm4v': 'video/mp4'
+    }
+    const contentType = mimeTypes[ext] || 'application/octet-stream'
+
+    const inlineExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'mp4', 'webm', 'mov', 'mkv', 'm4v', 'jpg', 'jpeg', 'png', 'webp', 'gif']
+    const isInline = inlineExts.includes(ext)
+    const disposition = isInline ? 'inline' : 'attachment'
+
+    return new Response(merged, {
+      headers: {
+        'Content-Type': contentType,
+        'Content-Disposition': `${disposition}; filename="${encodeURIComponent(fileMeta.filename)}"`,
+        'Content-Length': String(totalSize),
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*',
+        'Accept-Ranges': 'bytes'
+      }
+    })
+
+  } catch (error) {
+    console.error('Download large file error:', error)
+    return new Response('Download failed: ' + error.message, { status: 500 })
+  }
+}
+
+async function handleDeleteLarge(request, env) {
+  try {
+    const url = new URL(request.url)
+    const fileId = url.pathname.split('/').pop()
+    if (!fileId) {
+      return new Response(JSON.stringify({ error: 'Missing file ID' }), { status: 400 })
+    }
+
+    const bucket = env.IMAGES_BUCKET
+    if (!bucket) {
+      return new Response(JSON.stringify({ error: 'R2 未配置' }), { status: 500 })
+    }
+
+    const fileMeta = await getCompletedFile(bucket, fileId)
+    if (!fileMeta) {
+      return new Response(JSON.stringify({ error: '文件不存在' }), { status: 404 })
+    }
+
+    await deleteCompletedFile(bucket, fileId)
+
+    const uploadId = fileId.replace('file_', '')
+    await deleteChunkSession(bucket, uploadId)
+
+    return new Response(JSON.stringify({
+      success: true,
+      message: '文件元数据已删除'
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+
+  } catch (error) {
+    console.error('Delete large file error:', error)
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
 }
 
 // ============================================================
@@ -573,6 +795,14 @@ async function handleStats(env) {
   if (token) {
     const telegramImages = await getTelegramImages(token)
     telegramTotal = telegramImages.length
+    
+    const bucket = env.IMAGES_BUCKET
+    if (bucket) {
+      try {
+        const objects = await bucket.list({ prefix: 'completed_files/' })
+        telegramTotal += objects.objects.length
+      } catch (e) {}
+    }
     
     try {
       const extUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/external.json`
@@ -687,25 +917,54 @@ async function handleList(env) {
   const results = {}
   let total = 0
 
+  // Telegram 图片
   let telegramImages = []
   if (token) {
     telegramImages = await getTelegramImages(token)
   }
-  results['telegram'] = telegramImages.map(img => ({
+  
+  // 从 R2 获取分片文件
+  let chunkFiles = []
+  if (bucket) {
+    try {
+      const objects = await bucket.list({ prefix: 'completed_files/' })
+      for (const obj of objects.objects) {
+        try {
+          const object = await bucket.get(obj.key)
+          if (object) {
+            const content = await object.text()
+            const meta = JSON.parse(content)
+            chunkFiles.push({
+              ...meta,
+              fromR2: true,
+              name: meta.filename || 'unknown'
+            })
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+  }
+  
+  const allTelegramImages = [...telegramImages, ...chunkFiles]
+  
+  results['telegram'] = allTelegramImages.map(img => ({
     name: img.filename || img.originalName || 'unknown',
-    url: img.url || '',
-    path: `telegram/${img.filePath}`,
+    url: img.url || (img.fileId ? `/api/large/${img.fileId}` : ''),
+    path: `telegram/${img.fileId || ''}`,
     sha: img.fileId || '',
-    size: img.size || 0,
+    size: img.totalSize || img.size || 0,
     folder: 'telegram',
-    source: 'telegram',
+    source: img.storageType === 'telegram_chunks' ? 'telegram_chunks' : 'telegram',
     fileId: img.fileId,
     messageId: img.messageId,
     filePath: img.filePath,
-    time: img.time
+    time: img.uploadedAt || img.time,
+    fromR2: !!img.fromR2,
+    chunkCount: img.chunkCount
   }))
   total += results['telegram'].length
 
+  // 外部图片
   let externalImages = {}
   if (token) {
     try {
@@ -719,13 +978,17 @@ async function handleList(env) {
       if (response.ok) {
         const data = await response.json()
         const content = atob(data.content)
-        externalImages = JSON.parse(content)
+        const external = JSON.parse(content)
+        for (const folder of folders) {
+          externalTotal += (external[folder] || []).length
+        }
       }
     } catch (e) {
       console.error('Failed to fetch external.json:', e)
     }
   }
 
+  // GitHub + R2 图片
   for (const folder of folders) {
     const images = []
     const seen = new Set()
@@ -833,21 +1096,39 @@ async function handleImage(request, env) {
     if (!botToken) {
       return new Response('Telegram 未配置', { status: 500 });
     }
-    if (!token) {
-      return new Response('GITHUB_TOKEN not configured', { status: 500 });
+
+    let fileId = null
+
+    if (bucket) {
+      const metaKey = `completed_files/${filename}.json`
+      try {
+        const object = await bucket.get(metaKey)
+        if (object) {
+          const content = await object.text()
+          const meta = JSON.parse(content)
+          if (meta.fileId) {
+            fileId = meta.fileId
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (!fileId && token) {
+      try {
+        const images = await getTelegramImages(token)
+        const record = images.find(img => img.filePath === filename || img.fileId === filename)
+        if (record) {
+          fileId = record.fileId
+        }
+      } catch (e) {}
+    }
+
+    if (!fileId) {
+      fileId = filename
     }
 
     try {
-      const images = await getTelegramImages(token);
-      const record = images.find(img => img.filePath === filename);
-      
-      if (!record || !record.fileId) {
-        console.error(`未找到记录: ${filename}`);
-        return new Response('未找到对应的 fileId', { status: 404 });
-      }
-
-      return await getTelegramFileContentByFileId(botToken, record.fileId);
-      
+      return await getTelegramFileContentByFileId(botToken, fileId)
     } catch (error) {
       console.error('Telegram fetch error:', error)
       return new Response(`Telegram 文件获取失败: ${error.message}`, { status: 404 })
@@ -896,7 +1177,9 @@ async function handleImage(request, env) {
     const ext = filename.split('.').pop().toLowerCase()
     const contentTypes = {
       'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
-      'webp': 'image/webp', 'gif': 'image/gif', 'avif': 'image/avif'
+      'webp': 'image/webp', 'gif': 'image/gif', 'avif': 'image/avif',
+      'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'ogg': 'audio/ogg',
+      'mp4': 'video/mp4', 'webm': 'video/webm'
     }
     const contentType = contentTypes[ext] || 'image/jpeg'
     const body = await response.arrayBuffer()
@@ -931,8 +1214,23 @@ async function handleUpload(request, env) {
       })
     }
 
-    if (file.size > 50 * 1024 * 1024) {
-      return new Response(JSON.stringify({ error: 'File too large (max 50MB)' }), {
+    // 文件大小检查
+    if (storageType === 'telegram' && file.size > 50 * 1024 * 1024) {
+      return new Response(JSON.stringify({ 
+        error: '文件超过 50MB，请使用分片上传',
+        needChunkUpload: true,
+        maxDirectSize: 50 * 1024 * 1024
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    if (storageType !== 'telegram' && file.size > 10 * 1024 * 1024) {
+      return new Response(JSON.stringify({ 
+        error: `${storageType === 'github' ? 'GitHub' : 'R2'} 不支持超过 10MB 的文件，请切换到 Telegram`,
+        maxSize: 10 * 1024 * 1024
+      }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       })
@@ -972,12 +1270,12 @@ async function handleUpload(request, env) {
         usedStorage = 'telegram';
         
         const baseUrl = new URL(request.url).origin;
-        const tgProxyPath = `telegram/${encodeURIComponent(tgFilePath)}`;
+        const tgProxyPath = `telegram/${encodeURIComponent(tgFileId)}`;
         uploadedUrl = `${baseUrl}/api/image?path=${tgProxyPath}`;
         
         if (token) {
           const existingImages = await getTelegramImages(token);
-          const exists = existingImages.some(img => img.filePath === tgFilePath);
+          const exists = existingImages.some(img => img.fileId === tgFileId);
           if (!exists) {
             existingImages.push({
               id: Date.now(),
@@ -992,7 +1290,7 @@ async function handleUpload(request, env) {
               mimeType: file.type || 'image/jpeg'
             });
             await saveTelegramImages(token, existingImages);
-            console.log(`✅ Telegram 图片已记录: ${filename}`);
+            console.log(`✅ Telegram 图片已记录到 GitHub: ${filename}`);
           }
         }
         
@@ -1000,7 +1298,8 @@ async function handleUpload(request, env) {
           fileId: tgFileId,
           messageId: tgMessageId,
           filePath: tgFilePath,
-          url: uploadedUrl
+          url: uploadedUrl,
+          size: file.size
         });
         
       } catch (error) {
@@ -1070,7 +1369,8 @@ async function handleUpload(request, env) {
       rawUrl: uploadedUrl,
       tgMessageId: tgMessageId,
       tgFileId: tgFileId,
-      tgFilePath: tgFilePath
+      tgFilePath: tgFilePath,
+      fileSize: file.size
     }), {
       headers: { 'Content-Type': 'application/json' }
     })
@@ -1303,36 +1603,40 @@ async function handleDelete(request, env) {
     let deleted = false
     let deleteErrors = []
 
-    if (source === 'telegram' && tgMessageId) {
+    // 删除 Telegram 文件（包括分片文件）
+    if (source === 'telegram' || source === 'telegram_chunks') {
       const botToken = env.TG_BOT_TOKEN;
       const chatId = env.TG_CHAT_ID;
       
-      if (botToken && chatId) {
+      if (source === 'telegram_chunks' && fileId) {
+        // 删除分片文件的元数据
+        if (bucket) {
+          const deletedMeta = await deleteCompletedFile(bucket, fileId)
+          if (deletedMeta) {
+            deleted = true
+            console.log(`✅ 分片文件元数据已删除: ${fileId}`)
+          }
+        }
+      } else if (botToken && chatId && tgMessageId) {
         try {
           const result = await deleteTelegramFile(botToken, chatId, tgMessageId);
           if (result) {
             console.log(`✅ Telegram 消息已删除: ${tgMessageId}`);
-          } else {
-            console.warn(`⚠️ Telegram 消息删除失败（可能已不存在）: ${tgMessageId}`);
+            deleted = true;
           }
         } catch (e) {
-          console.warn(`⚠️ Telegram 删除异常（可能已过期）: ${e.message}`);
+          console.warn(`⚠️ Telegram 删除异常: ${e.message}`);
         }
-      } else {
-        deleteErrors.push('Telegram 未配置');
       }
       
+      // 删除 GitHub 记录
       if (token) {
         try {
           const images = await getTelegramImages(token);
-          const newImages = images.filter(img => img.messageId !== tgMessageId);
+          const newImages = images.filter(img => img.messageId !== tgMessageId && img.fileId !== fileId);
           if (newImages.length !== images.length) {
             await saveTelegramImages(token, newImages);
             deleted = true;
-            console.log(`✅ Telegram 图片记录已移除: ${tgMessageId}`);
-          } else {
-            deleted = true;
-            console.log(`ℹ️ 记录中已无该 messageId: ${tgMessageId}`);
           }
         } catch (e) {
           console.error('清理 Telegram 记录失败:', e)
@@ -1341,7 +1645,8 @@ async function handleDelete(request, env) {
       }
     }
 
-    if (source === 'r2' || (!source && !tgMessageId)) {
+    // 删除 R2 存储的文件
+    if (source === 'r2' || (!source && !tgMessageId && source !== 'telegram_chunks')) {
       if (bucket) {
         try {
           const key = `${folder}/${filename}`
@@ -1355,7 +1660,8 @@ async function handleDelete(request, env) {
       }
     }
 
-    if (source === 'github' || (!source && !tgMessageId)) {
+    // 删除 GitHub 存储的文件
+    if (source === 'github' || (!source && !tgMessageId && source !== 'telegram_chunks')) {
       if (token && sha) {
         try {
           const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}/${filename}`
@@ -1414,18 +1720,39 @@ async function handleDelete(request, env) {
 
 async function handleTelegramRandom(env, request) {
   const token = env.GITHUB_TOKEN;
-  if (!token) {
-    return new Response('GITHUB_TOKEN not configured', { status: 500 });
+  const bucket = env.IMAGES_BUCKET;
+  
+  let allTelegramItems = []
+  
+  if (bucket) {
+    try {
+      const objects = await bucket.list({ prefix: 'completed_files/' })
+      for (const obj of objects.objects) {
+        try {
+          const object = await bucket.get(obj.key)
+          if (object) {
+            const content = await object.text()
+            const meta = JSON.parse(content)
+            allTelegramItems.push(meta)
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
   }
-
-  const telegramImages = await getTelegramImages(token);
-  if (!telegramImages || telegramImages.length === 0) {
+  
+  if (token) {
+    const githubItems = await getTelegramImages(token)
+    allTelegramItems = allTelegramItems.concat(githubItems)
+  }
+  
+  if (!allTelegramItems || allTelegramItems.length === 0) {
     return new Response('No Telegram images found', { status: 404 });
   }
 
-  const randomImage = telegramImages[Math.floor(Math.random() * telegramImages.length)];
+  const randomItem = allTelegramItems[Math.floor(Math.random() * allTelegramItems.length)];
   const baseUrl = 'https://pico.1356666.xyz';
-  const imageUrl = `${baseUrl}/api/image?path=telegram/${encodeURIComponent(randomImage.filePath)}`;
+  const fileId = randomItem.fileId;
+  const imageUrl = `${baseUrl}/api/large/${fileId}`;
 
   const url = new URL(request.url);
   const format = url.searchParams.get('format');
@@ -1447,7 +1774,7 @@ async function handleTelegramRandom(env, request) {
   <img id="tgImage" src="${imageUrl}" alt="TG壁纸">
   <script>
     function refreshImage() {
-      document.getElementById('tgImage').src = '/api/tg?t=' + Date.now();
+      document.getElementById('tgImage').src = '/api/large/${fileId}?t=' + Date.now();
       setTimeout(refreshImage, 3600000);
     }
     setTimeout(refreshImage, 3600000);
@@ -1494,21 +1821,30 @@ export async function onRequest(context) {
 
   console.log(`API 请求: ${method} ${path}`)
 
-  // 分片上传路由
+  // ============================================================
+  // 大文件分片路由
+  // ============================================================
   if (path === 'upload/init' && method === 'POST') {
-    return handleInitUpload(request, env)
+    return handleInitChunkUpload(request, env)
   }
   if (path === 'upload/chunk' && method === 'POST') {
     return handleUploadChunk(request, env)
   }
   if (path === 'upload/complete' && method === 'POST') {
-    return handleCompleteUpload(request, env)
+    return handleCompleteChunkUpload(request, env)
   }
-  if (path.startsWith('large/') && method === 'GET') {
-    return handleDownloadLarge(request, env)
+  if (path.startsWith('large/')) {
+    if (method === 'GET') {
+      return handleDownloadLarge(request, env)
+    }
+    if (method === 'DELETE') {
+      return handleDeleteLarge(request, env)
+    }
   }
 
+  // ============================================================
   // 普通路由
+  // ============================================================
   if (path === 'upload' && method === 'POST') {
     return handleUpload(request, env)
   }
