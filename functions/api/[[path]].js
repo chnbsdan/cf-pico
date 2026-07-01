@@ -2,6 +2,7 @@
 // 支持：stats, random, wallpaper, cover, list, image, upload, history, admin/delete
 // 支持 GitHub、R2、Telegram 三种存储
 // ✅ 大文件分片上传：支持最大 500MB，R2 仅存元数据，每片 16MB
+// ✅ 图片改用 sendDocument，避免 PHOTO_INVALID_DIMENSIONS
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
@@ -113,40 +114,31 @@ async function deleteCompletedFile(bucket, fileId) {
 }
 
 // ============================================================
-// Telegram 存储相关函数
+// ✅ 修改：uploadToTelegram - 图片统一用 sendDocument
 // ============================================================
-
 async function uploadToTelegram(file, botToken, chatId) {
   const ext = file.name.split('.').pop().toLowerCase();
   const mimeType = file.type || '';
   
+  // ✅ 视频和音频用专用方法，图片统一用 sendDocument 避免 PHOTO_INVALID_DIMENSIONS
+  const isVideo = ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext) && mimeType.startsWith('video/');
+  const isAudio = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'].includes(ext) && mimeType.startsWith('audio/');
+
   let method = 'sendDocument';
   let fieldName = 'document';
-  
-  const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp', 'svg', 'ico'];
-  if (imageExts.includes(ext) && mimeType.startsWith('image/')) {
-    method = 'sendPhoto';
-    fieldName = 'photo';
-  } else if (['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext) && mimeType.startsWith('video/')) {
+
+  if (isVideo) {
     method = 'sendVideo';
     fieldName = 'video';
-  } else if (['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'].includes(ext) && mimeType.startsWith('audio/')) {
+  } else if (isAudio) {
     method = 'sendAudio';
     fieldName = 'audio';
-  } else {
-    method = 'sendDocument';
-    fieldName = 'document';
   }
 
   const formData = new FormData();
   formData.append('chat_id', chatId);
   formData.append(fieldName, file, file.name);
-  
-  if (method === 'sendPhoto') {
-    formData.append('caption', `📷 ${file.name}`);
-  } else if (method === 'sendDocument') {
-    formData.append('caption', `📄 ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
-  }
+  formData.append('caption', `📄 ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
 
   const response = await fetch(
     `https://api.telegram.org/bot${botToken}/${method}`,
@@ -155,6 +147,44 @@ async function uploadToTelegram(file, botToken, chatId) {
 
   if (!response.ok) {
     const error = await response.json();
+    // 如果视频/音频专用方法失败，降级到 sendDocument
+    if (method !== 'sendDocument') {
+      const docFormData = new FormData();
+      docFormData.append('chat_id', chatId);
+      docFormData.append('document', file, file.name);
+      docFormData.append('caption', `📄 ${file.name}`);
+      
+      const docResponse = await fetch(
+        `https://api.telegram.org/bot${botToken}/sendDocument`,
+        { method: 'POST', body: docFormData }
+      );
+      if (docResponse.ok) {
+        const docData = await docResponse.json();
+        const docResult = docData.result;
+        const fileId = docResult?.document?.file_id;
+        const messageId = docResult?.message_id;
+        if (fileId) {
+          const filePathResponse = await fetch(
+            `https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`
+          );
+          if (filePathResponse.ok) {
+            const filePathData = await filePathResponse.json();
+            const filePath = filePathData.result?.file_path;
+            if (filePath) {
+              return {
+                fileId,
+                messageId,
+                filePath,
+                storageType: 'telegram',
+                method: 'sendDocument',
+                fileSize: file.size,
+                mimeType: mimeType || 'application/octet-stream'
+              };
+            }
+          }
+        }
+      }
+    }
     throw new Error(error.description || 'Telegram 上传失败');
   }
 
@@ -212,6 +242,9 @@ async function uploadToTelegram(file, botToken, chatId) {
   };
 }
 
+// ============================================================
+// ✅ 修改：uploadChunkToTelegram - 多种方式提取 file_id
+// ============================================================
 async function uploadChunkToTelegram(chunkData, botToken, chatId, chunkIndex, filename) {
   const formData = new FormData()
   formData.append('chat_id', chatId)
@@ -232,7 +265,7 @@ async function uploadChunkToTelegram(chunkData, botToken, chatId, chunkIndex, fi
   const result = data.result
   let fileId = null
   
-  // 多种方式提取 file_id
+  // ✅ 多种方式提取 file_id
   if (result?.document?.file_id) {
     fileId = result.document.file_id
   } else if (result?.photo && Array.isArray(result.photo)) {
@@ -516,6 +549,9 @@ async function handleInitChunkUpload(request, env) {
   }
 }
 
+// ============================================================
+// ✅ 修改：handleUploadChunk - 更好的错误处理
+// ============================================================
 async function handleUploadChunk(request, env) {
   try {
     const formData = await request.formData()
@@ -806,7 +842,6 @@ async function handleDeleteLarge(request, env) {
     const url = new URL(request.url)
     let fileId = url.pathname.split('/').pop()
     
-    // ✅ 去掉扩展名再查找
     if (fileId.includes('.')) {
       fileId = fileId.split('.')[0]
     }
@@ -989,13 +1024,11 @@ async function handleList(env) {
   const results = {}
   let total = 0
 
-  // Telegram 图片
   let telegramImages = []
   if (token) {
     telegramImages = await getTelegramImages(token)
   }
   
-  // 从 R2 获取分片文件
   let chunkFiles = []
   if (bucket) {
     try {
@@ -1037,7 +1070,6 @@ async function handleList(env) {
   }))
   total += results['telegram'].length
 
-  // 外部图片
   let externalImages = {}
   if (token) {
     try {
@@ -1061,7 +1093,6 @@ async function handleList(env) {
     }
   }
 
-  // GitHub + R2 图片
   for (const folder of folders) {
     const images = []
     const seen = new Set()
@@ -1676,13 +1707,11 @@ async function handleDelete(request, env) {
     let deleted = false
     let deleteErrors = []
 
-    // 删除 Telegram 文件（包括分片文件）
     if (source === 'telegram' || source === 'telegram_chunks') {
       const botToken = env.TG_BOT_TOKEN;
       const chatId = env.TG_CHAT_ID;
       
       if (source === 'telegram_chunks' && fileId) {
-        // 删除分片文件的元数据
         if (bucket) {
           const deletedMeta = await deleteCompletedFile(bucket, fileId)
           if (deletedMeta) {
@@ -1702,7 +1731,6 @@ async function handleDelete(request, env) {
         }
       }
       
-      // 删除 GitHub 记录
       if (token) {
         try {
           const images = await getTelegramImages(token);
@@ -1718,7 +1746,6 @@ async function handleDelete(request, env) {
       }
     }
 
-    // 删除 R2 存储的文件
     if (source === 'r2' || (!source && !tgMessageId && source !== 'telegram_chunks')) {
       if (bucket) {
         try {
@@ -1733,7 +1760,6 @@ async function handleDelete(request, env) {
       }
     }
 
-    // 删除 GitHub 存储的文件
     if (source === 'github' || (!source && !tgMessageId && source !== 'telegram_chunks')) {
       if (token && sha) {
         try {
@@ -1895,9 +1921,7 @@ export async function onRequest(context) {
 
   console.log(`API 请求: ${method} ${path}`)
 
-  // ============================================================
   // 大文件分片路由
-  // ============================================================
   if (path === 'upload/init' && method === 'POST') {
     return handleInitChunkUpload(request, env)
   }
@@ -1916,9 +1940,7 @@ export async function onRequest(context) {
     }
   }
 
-  // ============================================================
   // 普通路由
-  // ============================================================
   if (path === 'upload' && method === 'POST') {
     return handleUpload(request, env)
   }
