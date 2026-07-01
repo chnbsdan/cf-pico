@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react'
+import React, { useRef, useState, useEffect, useCallback } from 'react'
 import { initChunkUpload, uploadChunk, completeChunkUpload } from '../lib/api'
 
 export default function UploadArea({ onUpload, isLoading, convertToWebp, onConvertChange }) {
@@ -13,13 +13,72 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const [isNormalUploading, setIsNormalUploading] = useState(false)
   const fileInputRef = useRef(null)
 
+  // ✅ 新增：上传队列控制
+  const [uploadQueue, setUploadQueue] = useState([])
+  const [activeUploads, setActiveUploads] = useState(0)
+  const maxConcurrentUploads = 3
+  const abortControllers = useRef(new Map())
+
+  // ✅ 新增：设置状态
+  const [showSettings, setShowSettings] = useState(false)
+  const [compressQuality, setCompressQuality] = useState(4)
+  const [compressBar, setCompressBar] = useState(5)
+  const [serverCompress, setServerCompress] = useState(true)
+  const [autoRetry, setAutoRetry] = useState(true)
+  const [uploadNameType, setUploadNameType] = useState('default')
+
+  // ✅ 新增：WebP 转换独立函数
+  const convertImageToWebp = useCallback((file) => {
+    return new Promise((resolve, reject) => {
+      if (file.type.includes('gif') || file.type.includes('svg') || file.type.includes('webp')) {
+        resolve(null)
+        return
+      }
+      
+      const img = new Image()
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      const objectUrl = URL.createObjectURL(file)
+      
+      img.onload = () => {
+        canvas.width = img.width
+        canvas.height = img.height
+        ctx.drawImage(img, 0, 0)
+        
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const lastDotIndex = file.name.lastIndexOf('.')
+            const newName = lastDotIndex > 0 
+              ? file.name.substring(0, lastDotIndex) + '.webp'
+              : file.name + '.webp'
+            
+            const webpFile = new File([blob], newName, { type: 'image/webp' })
+            webpFile.uid = file.uid
+            URL.revokeObjectURL(objectUrl)
+            resolve(webpFile)
+          } else {
+            URL.revokeObjectURL(objectUrl)
+            reject(new Error('WebP 转换失败'))
+          }
+        }, 'image/webp', 0.92)
+      }
+      
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl)
+        reject(new Error('图片加载失败'))
+      }
+      
+      img.src = objectUrl
+    })
+  }, [])
+
   const CHUNK_SIZE = 16 * 1024 * 1024
 
   const folderOptions = [
-    { key: 'wallpaper', label: '横屏 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'cover', label: '竖屏 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
-    { key: 'sh', label: '横屏 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'sd', label: '竖屏 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
+    { key: 'wallpaper', label: '横屏图片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
+    { key: 'sh', label: '横屏图片 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'sd', label: '竖屏图片 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
   ]
 
   const refreshBackground = () => {
@@ -33,6 +92,19 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     img.src = url
   }
 
+  // ✅ 新增：处理上传队列
+  const processUploadQueue = useCallback(() => {
+    if (uploadQueue.length === 0 || activeUploads >= maxConcurrentUploads) {
+      return
+    }
+    const nextFile = uploadQueue.shift()
+    if (nextFile) {
+      setUploadQueue([...uploadQueue])
+      // 实际上传由调用方触发
+    }
+  }, [uploadQueue, activeUploads])
+
+  // ✅ 新增：分片上传带重试（指数退避）
   const uploadChunkWithRetry = async (uploadId, chunkIndex, chunk, maxRetries = 3) => {
     let lastError
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -44,19 +116,31 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         lastError = e.message
       }
       if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, 2000 * attempt))
+        const delay = 2000 * attempt // 指数退避：2s, 4s, 6s
+        await new Promise(r => setTimeout(r, delay))
         setUploadStatus(`重试分片 ${chunkIndex + 1} (${attempt}/${maxRetries})...`)
       }
     }
     throw new Error(`分片 ${chunkIndex + 1} 上传失败: ${lastError}`)
   }
 
+  // ✅ 增强版大文件上传（带队列控制）
   const uploadLargeFile = async (file, folder) => {
+    // 并发控制
+    if (activeUploads >= maxConcurrentUploads) {
+      return new Promise((resolve) => {
+        setUploadQueue(prev => [...prev, { file, folder, resolve }])
+      })
+    }
+
     setIsChunkUploading(true)
-    setIsNormalUploading(false)
+    setActiveUploads(prev => prev + 1)
     setUploadProgress(0)
     setUploadStatus('正在初始化...')
     setUploadSpeed('')
+
+    const abortController = new AbortController()
+    abortControllers.current.set(file.uid || file.name, abortController)
 
     try {
       const initResult = await initChunkUpload(file.name, file.size)
@@ -71,6 +155,11 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       let uploadedBytes = 0
 
       for (let i = 0; i < chunkCount; i++) {
+        // 检查是否被取消
+        if (abortController.signal.aborted) {
+          throw new Error('上传已取消')
+        }
+
         const start = i * CHUNK_SIZE
         const end = Math.min(start + CHUNK_SIZE, file.size)
         if (start >= end) continue
@@ -101,60 +190,69 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       setIsChunkUploading(false)
       setUploadProgress(100)
       setUploadSpeed('')
+      
+      abortControllers.current.delete(file.uid || file.name)
+      setActiveUploads(prev => Math.max(0, prev - 1))
+      processUploadQueue()
+      
       return completeResult.url
 
     } catch (error) {
       console.error('大文件上传失败:', error)
+      
+      // ✅ 自动重试
+      if (autoRetry && error.message !== '上传已取消') {
+        setUploadStatus(`⚠️ 上传失败，${autoRetry ? '自动重试中...' : '请手动重试'}`)
+        await new Promise(r => setTimeout(r, 3000))
+        // 重试逻辑：重新调用自身
+        return uploadLargeFile(file, folder)
+      }
+      
       setUploadStatus(`❌ ${error.message}`)
       setIsChunkUploading(false)
       setUploadProgress(0)
       setUploadSpeed('')
+      abortControllers.current.delete(file.uid || file.name)
+      setActiveUploads(prev => Math.max(0, prev - 1))
+      processUploadQueue()
       throw error
     }
   }
 
-  // ✅ 支持前端 WebP 转换
+  // ✅ 增强版普通上传（支持 WebP 转换 + 压缩）
   const uploadNormalFile = async (file, folder, storage) => {
     return new Promise((resolve, reject) => {
       const processFile = async () => {
         let fileToUpload = file
         
-        // 如果勾选了 WebP 转换且是图片，在前端转换
+        // 1. WebP 转换
         if (convertToWebp && file.type && file.type.startsWith('image/')) {
           try {
-            const img = new Image()
-            const objectUrl = URL.createObjectURL(file)
-            
-            await new Promise((resolveImg, rejectImg) => {
-              img.onload = resolveImg
-              img.onerror = rejectImg
-              img.src = objectUrl
-            })
-            
-            const canvas = document.createElement('canvas')
-            canvas.width = img.width
-            canvas.height = img.height
-            const ctx = canvas.getContext('2d')
-            ctx.drawImage(img, 0, 0)
-            
-            const webpBlob = await new Promise(resolveBlob => {
-              canvas.toBlob(resolveBlob, 'image/webp', 0.85)
-            })
-            
-            if (webpBlob) {
-              const webpFile = new File(
-                [webpBlob], 
-                file.name.replace(/\.[^/.]+$/, '') + '.webp', 
-                { type: 'image/webp' }
-              )
-              fileToUpload = webpFile
+            const converted = await convertImageToWebp(file)
+            if (converted) {
+              fileToUpload = converted
               setUploadStatus('✅ WebP 转换完成，开始上传...')
             }
-            
-            URL.revokeObjectURL(objectUrl)
           } catch (e) {
             console.log('⚠️ WebP 转换失败，使用原图:', e.message)
-            fileToUpload = file
+          }
+        }
+        
+        // 2. 客户端压缩（如果启用且文件超过阈值）
+        if (storage === 'telegram' && fileToUpload.size / 1024 / 1024 > compressBar) {
+          try {
+            const imageConversion = await import('image-conversion')
+            const compressed = await imageConversion.compressAccurately(
+              fileToUpload, 
+              1024 * compressQuality
+            )
+            if (compressed && compressed.size < fileToUpload.size) {
+              const newFile = new File([compressed], fileToUpload.name, { type: compressed.type })
+              fileToUpload = newFile
+              setUploadStatus(`✅ 压缩完成 (${(file.size / 1024 / 1024).toFixed(1)}MB → ${(compressed.size / 1024 / 1024).toFixed(1)}MB)`)
+            }
+          } catch (e) {
+            console.log('⚠️ 压缩失败，使用原图:', e.message)
           }
         }
         
@@ -211,7 +309,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         fd.append('file', fileToUpload)
         fd.append('folder', folder)
         fd.append('storage', storage)
-        fd.append('convertToWebp', 'false')
+        fd.append('compressQuality', compressQuality)
+        fd.append('serverCompress', serverCompress ? 'true' : 'false')
         
         xhr.send(fd)
       }
@@ -386,6 +485,13 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
               <i className={`fas ${opt.icon} text-xs`}></i> {opt.label}
             </button>
           ))}
+          {/* ✅ 设置按钮 */}
+          <button
+            onClick={() => setShowSettings(true)}
+            className="px-3 py-1 rounded-lg text-xs flex items-center gap-1 transition-all bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700"
+          >
+            <i className="fas fa-cog text-xs"></i>
+          </button>
         </div>
       </div>
 
@@ -473,6 +579,96 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         className="hidden" 
         onChange={handleFileSelect} 
       />
+
+      {/* ✅ 设置弹窗 */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowSettings(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-white">上传设置</h3>
+              <button onClick={() => setShowSettings(false)} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+
+            {/* 文件命名 */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">文件命名方式</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { value: 'default', label: '默认', icon: 'fa-cog' },
+                  { value: 'origin', label: '原始名称', icon: 'fa-file-signature' },
+                  { value: 'short', label: '短名称', icon: 'fa-compress-alt' },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setUploadNameType(opt.value)}
+                    className={`px-3 py-2 rounded-lg text-sm flex items-center gap-2 justify-center transition ${
+                      uploadNameType === opt.value
+                        ? 'bg-blue-500 text-white'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    <i className={`fas ${opt.icon}`}></i> {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 压缩设置 */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">客户端压缩</label>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={serverCompress} onChange={() => setServerCompress(!serverCompress)} className="sr-only peer" />
+                  <div className="w-9 h-5 bg-gray-300 dark:bg-gray-600 rounded-full peer peer-checked:bg-blue-500 transition"></div>
+                </label>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-gray-400">压缩阈值: {compressBar}MB</label>
+                  <input
+                    type="range"
+                    min="1"
+                    max="20"
+                    value={compressBar}
+                    onChange={(e) => setCompressBar(Number(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 dark:text-gray-400">目标大小: {compressQuality}MB</label>
+                  <input
+                    type="range"
+                    min="0.5"
+                    max={compressBar}
+                    step="0.5"
+                    value={compressQuality}
+                    onChange={(e) => setCompressQuality(Number(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 自动重试 */}
+            <div className="flex items-center justify-between mb-4">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">失败自动重试</label>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" checked={autoRetry} onChange={() => setAutoRetry(!autoRetry)} className="sr-only peer" />
+                <div className="w-9 h-5 bg-gray-300 dark:bg-gray-600 rounded-full peer peer-checked:bg-blue-500 transition"></div>
+              </label>
+            </div>
+
+            <button
+              onClick={() => setShowSettings(false)}
+              className="w-full py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition"
+            >
+              确认
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
