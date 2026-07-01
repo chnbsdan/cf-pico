@@ -183,7 +183,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       if (!file) continue
 
       try {
-        // ✅ 16MB 以上走分片
+        // ✅ 16MB 以上走分片（返回 /api/large/xxx.mp4）
+        // 16MB 以下走普通上传（返回 /api/short/xxx.jpg）
         const needChunk = storageType === 'telegram' && file.size > 16 * 1024 * 1024
 
         let url
@@ -348,7 +349,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="radio" name="storageType" value="telegram" checked={storageType === 'telegram'} onChange={(e) => setStorageType(e.target.value)} className="w-3.5 h-3.5 accent-green-500" />
             <span className="text-white/80 text-sm"><i className="fab fa-telegram-plane mr-1"></i>Telegram</span>
-            <span className="text-white/30 text-[10px]">(&gt;16MB 分片)</span>
+            <span className="text-white/30 text-[10px]">(&gt;16MB 分片 / &lt;16MB 短链接)</span>
           </label>
         </div>
       </div>
@@ -379,7 +380,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           ) : storageType === 'r2' ? (
             <span className="text-orange-400"><i className="fas fa-cloud-upload-alt mr-1"></i>存储到 Cloudflare R2</span>
           ) : (
-            <span className="text-green-400"><i className="fab fa-telegram-plane mr-1"></i>存储到 Telegram（&gt;16MB 分片）</span>
+            <span className="text-green-400"><i className="fab fa-telegram-plane mr-1"></i>存储到 Telegram（&gt;16MB 分片 / &lt;16MB 短链接）</span>
           )}
         </p>
 
