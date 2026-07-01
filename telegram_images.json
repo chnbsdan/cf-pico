@@ -178,5 +178,17 @@
     "time": "2026-07-01T02:35:39.765Z",
     "size": 173760,
     "mimeType": "image/webp"
+  },
+  {
+    "id": 1782874893891,
+    "filename": "20260701_yu.jpg",
+    "originalName": "yu.jpg",
+    "fileId": "AgACAgUAAyEGAAMBBNJvJQADjWpEgwt8VTGHAZp6_0WU3dbqm9bsAALxE2sbn0QoVkw4v7-stO2KAQADAgADdwADPAQ",
+    "messageId": 141,
+    "filePath": "photos/file_78.jpg",
+    "url": "https://pico.1356666.xyz/api/image?path=telegram/AgACAgUAAyEGAAMBBNJvJQADjWpEgwt8VTGHAZp6_0WU3dbqm9bsAALxE2sbn0QoVkw4v7-stO2KAQADAgADdwADPAQ",
+    "time": "2026-07-01T03:01:33.891Z",
+    "size": 3205341,
+    "mimeType": "image/jpeg"
   }
 ]
