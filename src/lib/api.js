@@ -1,3 +1,9 @@
+// src/lib/api.js
+
+// ============================================================
+// 基础 API
+// ============================================================
+
 export async function fetchStats() {
   const res = await fetch(`/api/stats`)
   if (!res.ok) throw new Error('Failed to fetch stats')
@@ -72,7 +78,7 @@ export async function deleteHistoryRecord(id) {
 }
 
 // ============================================================
-// 大文件分片上传
+// 大文件分片上传 API
 // ============================================================
 
 /**
@@ -104,7 +110,7 @@ export async function uploadChunk(uploadId, chunkIndex, chunk) {
 }
 
 /**
- * 完成分片上传（异步合并）
+ * 完成分片上传
  */
 export async function completeChunkUpload(uploadId, folder) {
   const res = await fetch('/api/upload/complete', {
@@ -113,4 +119,44 @@ export async function completeChunkUpload(uploadId, folder) {
     body: JSON.stringify({ uploadId, folder })
   });
   return res.json();
+}
+
+/**
+ * 获取大文件（合并后的文件）
+ */
+export async function getLargeFile(fileId) {
+  const res = await fetch(`/api/large/${fileId}`);
+  if (!res.ok) {
+    throw new Error('下载失败');
+  }
+  return res;
+}
+
+/**
+ * 删除大文件（删除元数据和分片记录）
+ */
+export async function deleteLargeFile(fileId) {
+  const res = await fetch(`/api/large/${fileId}`, {
+    method: 'DELETE'
+  });
+  return res.json();
+}
+
+/**
+ * 下载大文件并保存到本地
+ */
+export async function downloadLargeFile(fileId, filename) {
+  const res = await fetch(`/api/large/${fileId}`);
+  if (!res.ok) {
+    throw new Error('下载失败');
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename || 'download';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
