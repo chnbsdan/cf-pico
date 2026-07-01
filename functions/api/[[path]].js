@@ -3,13 +3,14 @@
 // 支持 GitHub、R2、Telegram 三种存储
 // ✅ 流式传输大文件，不合并到内存
 // ✅ btoa 只在 GitHub 分支执行
+// ✅ 用 fileId 做唯一标识，彻底解决 404
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
 const TELEGRAM_IMAGES_FILE = 'telegram_images.json'
 
 // ============================================================
-// 辅助函数：根据扩展名获取 MIME 类型
+// 辅助函数
 // ============================================================
 function getMimeTypeByExt(ext) {
   const mimeTypes = {
@@ -23,11 +24,8 @@ function getMimeTypeByExt(ext) {
   return mimeTypes[ext] || 'application/octet-stream'
 }
 
-// ============================================================
-// 分片配置
-// ============================================================
-const CHUNK_SIZE = 16 * 1024 * 1024  // 16MB 每片
-const MAX_FILE_SIZE = 500 * 1024 * 1024  // 500MB 最大支持
+const CHUNK_SIZE = 16 * 1024 * 1024
+const MAX_FILE_SIZE = 500 * 1024 * 1024
 
 // ============================================================
 // R2 元数据操作
@@ -639,7 +637,7 @@ async function handleUploadChunk(request, env) {
 }
 
 // ============================================================
-// 完成分片上传
+// ✅ 修复：完成分片上传 - 用 fileId 做唯一标识
 // ============================================================
 async function handleCompleteChunkUpload(request, env) {
   try {
@@ -716,7 +714,8 @@ async function handleCompleteChunkUpload(request, env) {
     await deleteChunkSession(bucket, uploadId)
 
     const baseUrl = new URL(request.url).origin
-    const fileUrl = `${baseUrl}/api/large/${finalFilename}`
+    // ✅ 用 fileId 做链接
+    const fileUrl = `${baseUrl}/api/large/${fileId}.${ext}`
 
     return new Response(JSON.stringify({
       success: true,
@@ -740,15 +739,19 @@ async function handleCompleteChunkUpload(request, env) {
 }
 
 // ============================================================
-// ✅ 流式下载大文件 - 不合并到内存
+// ✅ 修复：流式下载大文件 - 用 fileId 查询
 // ============================================================
 async function handleDownloadLarge(request, env, waitUntil) {
   try {
     const url = new URL(request.url)
-    const filename = url.pathname.split('/').pop()
+    // 提取 fileId，去掉扩展名
+    let fileId = url.pathname.split('/').pop()
+    if (fileId.includes('.')) {
+      fileId = fileId.split('.')[0]
+    }
     
-    if (!filename) {
-      return new Response('Missing filename', { status: 400 })
+    if (!fileId) {
+      return new Response('Missing file ID', { status: 400 })
     }
 
     const bucket = env.IMAGES_BUCKET
@@ -756,25 +759,8 @@ async function handleDownloadLarge(request, env, waitUntil) {
       return new Response('R2 未配置', { status: 500 })
     }
 
-    // 查找文件元数据
-    let fileMeta = null
-    try {
-      const objects = await bucket.list({ prefix: 'completed_files/' })
-      for (const obj of objects.objects) {
-        try {
-          const object = await bucket.get(obj.key)
-          if (object) {
-            const content = await object.text()
-            const meta = JSON.parse(content)
-            if (meta.filename === filename) {
-              fileMeta = meta
-              break
-            }
-          }
-        } catch (e) {}
-      }
-    } catch (e) {}
-
+    // ✅ 直接用 fileId 查询
+    const fileMeta = await getCompletedFile(bucket, fileId)
     if (!fileMeta) {
       return new Response('文件不存在', { status: 404 })
     }
@@ -792,7 +778,7 @@ async function handleDownloadLarge(request, env, waitUntil) {
     }
     const contentType = mimeTypes[ext] || 'application/octet-stream'
 
-    // ✅ 流式传输
+    // 流式传输
     const { readable, writable } = new TransformStream()
     const writer = writable.getWriter()
 
@@ -831,13 +817,19 @@ async function handleDownloadLarge(request, env, waitUntil) {
   }
 }
 
+// ============================================================
+// ✅ 修复：删除大文件 - 用 fileId
+// ============================================================
 async function handleDeleteLarge(request, env) {
   try {
     const url = new URL(request.url)
-    const filename = url.pathname.split('/').pop()
+    let fileId = url.pathname.split('/').pop()
+    if (fileId.includes('.')) {
+      fileId = fileId.split('.')[0]
+    }
     
-    if (!filename) {
-      return new Response(JSON.stringify({ error: 'Missing filename' }), { status: 400 })
+    if (!fileId) {
+      return new Response(JSON.stringify({ error: 'Missing file ID' }), { status: 400 })
     }
 
     const bucket = env.IMAGES_BUCKET
@@ -845,28 +837,13 @@ async function handleDeleteLarge(request, env) {
       return new Response(JSON.stringify({ error: 'R2 未配置' }), { status: 500 })
     }
 
-    let fileId = null
-    try {
-      const objects = await bucket.list({ prefix: 'completed_files/' })
-      for (const obj of objects.objects) {
-        try {
-          const object = await bucket.get(obj.key)
-          if (object) {
-            const content = await object.text()
-            const meta = JSON.parse(content)
-            if (meta.filename === filename) {
-              fileId = meta.fileId
-              await deleteCompletedFile(bucket, meta.fileId)
-              break
-            }
-          }
-        } catch (e) {}
-      }
-    } catch (e) {}
-
-    if (!fileId) {
+    const fileMeta = await getCompletedFile(bucket, fileId)
+    if (!fileMeta) {
       return new Response(JSON.stringify({ error: '文件不存在' }), { status: 404 })
     }
+
+    await deleteCompletedFile(bucket, fileId)
+    await deleteChunkSession(bucket, fileId.replace('file_', ''))
 
     return new Response(JSON.stringify({
       success: true,
@@ -885,7 +862,7 @@ async function handleDeleteLarge(request, env) {
 }
 
 // ============================================================
-// 短链接处理 - 用文件名
+// 短链接处理
 // ============================================================
 async function handleShort(request, env) {
   try {
@@ -971,7 +948,6 @@ async function handleUpload(request, env) {
     }
 
     const filename = generateFilename(file.name)
-    // ✅ 只读一次文件内容，供 GitHub 分支使用
     const arrayBuffer = await file.arrayBuffer()
     const uint8Array = new Uint8Array(arrayBuffer)
 
@@ -982,7 +958,7 @@ async function handleUpload(request, env) {
     let tgFilePath = null
 
     // ============================================================
-    // Telegram 存储 - 不需要 btoa
+    // 1. Telegram 存储
     // ============================================================
     if (storageType === 'telegram') {
       const botToken = env.TG_BOT_TOKEN;
@@ -1003,11 +979,8 @@ async function handleUpload(request, env) {
         usedStorage = 'telegram';
         
         const baseUrl = new URL(request.url).origin;
-        
-        // ✅ 用自己的文件名
         uploadedUrl = `${baseUrl}/api/short/${filename}`;
         
-        // 保存到 R2
         if (bucket) {
           try {
             const metaKey = `telegram_files/${filename}`
@@ -1066,7 +1039,7 @@ async function handleUpload(request, env) {
       }
 
     // ============================================================
-    // R2 存储 - 不需要 btoa
+    // 2. R2 存储
     // ============================================================
     } else if (storageType === 'r2') {
       if (!bucket) {
@@ -1084,7 +1057,7 @@ async function handleUpload(request, env) {
       usedStorage = 'r2'
 
     // ============================================================
-    // GitHub 存储 - 需要 btoa（仅图片）
+    // 3. GitHub 存储 - 只有这里执行 btoa
     // ============================================================
     } else {
       if (!token) {
@@ -1094,7 +1067,6 @@ async function handleUpload(request, env) {
         })
       }
       
-      // GitHub 只支持图片
       const ext = file.name.split('.').pop().toLowerCase()
       const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'ico', 'svg']
       if (!imageExts.includes(ext)) {
@@ -1337,7 +1309,7 @@ async function handleList(env) {
   
   results['telegram'] = allTelegramImages.map(img => ({
     name: img.filename || img.originalName || 'unknown',
-    url: img.url || (img.fileId ? `/api/large/${img.filename || img.fileId}` : ''),
+    url: img.url || (img.fileId ? `/api/large/${img.fileId}.${img.extension || ''}` : ''),
     path: `telegram/${img.fileId || ''}`,
     sha: img.fileId || '',
     size: img.totalSize || img.size || 0,
@@ -1969,8 +1941,7 @@ async function handleTelegramRandom(env, request) {
   const baseUrl = 'https://pico.1356666.xyz';
   const fileId = randomItem.fileId;
   const ext = randomItem.extension || ''
-  const filename = randomItem.filename || `${fileId}.${ext}`
-  const imageUrl = `${baseUrl}/api/large/${filename}`;
+  const imageUrl = `${baseUrl}/api/large/${fileId}.${ext}`;
 
   const url = new URL(request.url);
   const format = url.searchParams.get('format');
@@ -1992,7 +1963,7 @@ async function handleTelegramRandom(env, request) {
   <img id="tgImage" src="${imageUrl}" alt="TG壁纸">
   <script>
     function refreshImage() {
-      document.getElementById('tgImage').src = '/api/large/${filename}?t=' + Date.now();
+      document.getElementById('tgImage').src = '/api/large/${fileId}.${ext}?t=' + Date.now();
       setTimeout(refreshImage, 3600000);
     }
     setTimeout(refreshImage, 3600000);
