@@ -2,8 +2,7 @@
 // 支持：stats, random, wallpaper, cover, list, image, upload, history, admin/delete
 // 支持 GitHub、R2、Telegram 三种存储
 // ✅ 大文件分片上传：支持最大 500MB，R2 仅存元数据，每片 16MB
-// ✅ 修复：MP3/MP4 上传 btoa 错误
-// ✅ 修复：链接带扩展名
+// ✅ 修复：图片统一使用 sendDocument，避免 PHOTO_INVALID_DIMENSIONS
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
@@ -129,40 +128,31 @@ async function deleteCompletedFile(bucket, fileId) {
 }
 
 // ============================================================
-// Telegram 存储相关函数
+// ✅ 核心修复：uploadToTelegram - 所有图片统一用 sendDocument
 // ============================================================
-
 async function uploadToTelegram(file, botToken, chatId) {
   const ext = file.name.split('.').pop().toLowerCase();
   const mimeType = file.type || '';
   
+  // ✅ 视频和音频用专用方法，图片统一用 sendDocument
+  const isVideo = ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext) && mimeType.startsWith('video/');
+  const isAudio = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'].includes(ext) && mimeType.startsWith('audio/');
+
   let method = 'sendDocument';
   let fieldName = 'document';
-  
-  const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp', 'svg', 'ico'];
-  if (imageExts.includes(ext) && mimeType.startsWith('image/')) {
-    method = 'sendPhoto';
-    fieldName = 'photo';
-  } else if (['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext) && mimeType.startsWith('video/')) {
+
+  if (isVideo) {
     method = 'sendVideo';
     fieldName = 'video';
-  } else if (['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'].includes(ext) && mimeType.startsWith('audio/')) {
+  } else if (isAudio) {
     method = 'sendAudio';
     fieldName = 'audio';
-  } else {
-    method = 'sendDocument';
-    fieldName = 'document';
   }
 
   const formData = new FormData();
   formData.append('chat_id', chatId);
   formData.append(fieldName, file, file.name);
-  
-  if (method === 'sendPhoto') {
-    formData.append('caption', `📷 ${file.name}`);
-  } else if (method === 'sendDocument') {
-    formData.append('caption', `📄 ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
-  }
+  formData.append('caption', `📄 ${file.name} (${(file.size / 1024 / 1024).toFixed(1)}MB)`);
 
   const response = await fetch(
     `https://api.telegram.org/bot${botToken}/${method}`,
@@ -171,6 +161,44 @@ async function uploadToTelegram(file, botToken, chatId) {
 
   if (!response.ok) {
     const error = await response.json();
+    // 如果视频/音频专用方法失败，降级到 sendDocument
+    if (method !== 'sendDocument') {
+      const docFormData = new FormData();
+      docFormData.append('chat_id', chatId);
+      docFormData.append('document', file, file.name);
+      docFormData.append('caption', `📄 ${file.name}`);
+      
+      const docResponse = await fetch(
+        `https://api.telegram.org/bot${botToken}/sendDocument`,
+        { method: 'POST', body: docFormData }
+      );
+      if (docResponse.ok) {
+        const docData = await docResponse.json();
+        const docResult = docData.result;
+        const fileId = docResult?.document?.file_id;
+        const messageId = docResult?.message_id;
+        if (fileId) {
+          const filePathResponse = await fetch(
+            `https://api.telegram.org/bot${botToken}/getFile?file_id=${fileId}`
+          );
+          if (filePathResponse.ok) {
+            const filePathData = await filePathResponse.json();
+            const filePath = filePathData.result?.file_path;
+            if (filePath) {
+              return {
+                fileId,
+                messageId,
+                filePath,
+                storageType: 'telegram',
+                method: 'sendDocument',
+                fileSize: file.size,
+                mimeType: mimeType || 'application/octet-stream'
+              };
+            }
+          }
+        }
+      }
+    }
     throw new Error(error.description || 'Telegram 上传失败');
   }
 
@@ -1242,7 +1270,7 @@ async function handleImage(request, env) {
 }
 
 // ============================================================
-// ✅ 核心修复：handleUpload - 修复 btoa 错误
+// handleUpload - 修复 btoa 错误
 // ============================================================
 async function handleUpload(request, env) {
   const bucket = env.IMAGES_BUCKET
@@ -1261,9 +1289,6 @@ async function handleUpload(request, env) {
       })
     }
 
-    // ============================================================
-    // 文件大小检查
-    // ============================================================
     if (storageType === 'telegram' && file.size > 50 * 1024 * 1024) {
       return new Response(JSON.stringify({ 
         error: '文件超过 50MB，请使用分片上传',
@@ -1286,8 +1311,6 @@ async function handleUpload(request, env) {
     }
 
     const filename = generateFilename(file.name)
-    
-    // ✅ 先读取文件内容（后面根据存储类型决定如何处理）
     const arrayBuffer = await file.arrayBuffer()
     const uint8Array = new Uint8Array(arrayBuffer)
 
@@ -1297,9 +1320,6 @@ async function handleUpload(request, env) {
     let tgFileId = null
     let tgFilePath = null
 
-    // ============================================================
-    // 1. Telegram 存储 - 不需要 btoa 编码
-    // ============================================================
     if (storageType === 'telegram') {
       const botToken = env.TG_BOT_TOKEN;
       const chatId = env.TG_CHAT_ID;
@@ -1359,9 +1379,6 @@ async function handleUpload(request, env) {
         });
       }
 
-    // ============================================================
-    // 2. R2 存储 - 不需要 btoa 编码
-    // ============================================================
     } else if (storageType === 'r2') {
       if (!bucket) {
         return new Response(JSON.stringify({ error: 'R2 bucket not configured' }), {
@@ -1377,9 +1394,6 @@ async function handleUpload(request, env) {
       uploadedUrl = `${baseUrl}/api/image?path=${key}`
       usedStorage = 'r2'
 
-    // ============================================================
-    // 3. GitHub 存储 - 需要 btoa 编码（仅支持图片）
-    // ============================================================
     } else {
       if (!token) {
         return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
@@ -1388,7 +1402,7 @@ async function handleUpload(request, env) {
         })
       }
       
-      // ✅ GitHub 只支持图片格式
+      // GitHub 只支持图片
       const ext = file.name.split('.').pop().toLowerCase()
       const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'ico', 'svg']
       if (!imageExts.includes(ext)) {
@@ -1400,7 +1414,6 @@ async function handleUpload(request, env) {
         })
       }
       
-      // ✅ 只有图片才执行 btoa 编码
       let binary = ''
       for (let i = 0; i < uint8Array.length; i++) {
         binary += String.fromCharCode(uint8Array[i])
@@ -1459,7 +1472,7 @@ async function handleUpload(request, env) {
 }
 
 // ============================================================
-// 历史记录相关 API
+// 历史记录 API
 // ============================================================
 
 async function handleHistory(request, env) {
@@ -1797,7 +1810,7 @@ async function handleDelete(request, env) {
 }
 
 // ============================================================
-// Telegram 随机图片 API
+// Telegram 随机图片
 // ============================================================
 
 async function handleTelegramRandom(env, request) {
