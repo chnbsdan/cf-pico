@@ -1,8 +1,7 @@
 // functions/api/[[path]].js - Cloudflare Pages API 完整入口
 // 支持：stats, random, wallpaper, cover, list, image, upload, history, admin/delete
 // 支持 GitHub、R2、Telegram 三种存储
-// ✅ 大文件分片上传：支持最大 500MB，R2 仅存元数据，每片 16MB
-// ✅ 图片改用 sendDocument，避免 PHOTO_INVALID_DIMENSIONS
+// ✅ 大文件分片上传：16MB 以上走分片，R2 仅存元数据
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
@@ -30,7 +29,7 @@ const CHUNK_SIZE = 16 * 1024 * 1024  // 16MB 每片
 const MAX_FILE_SIZE = 500 * 1024 * 1024  // 500MB 最大支持
 
 // ============================================================
-// R2 元数据操作（存储分片信息）
+// R2 元数据操作
 // ============================================================
 
 async function saveChunkSession(bucket, uploadId, data) {
@@ -114,13 +113,14 @@ async function deleteCompletedFile(bucket, fileId) {
 }
 
 // ============================================================
-// ✅ 修改：uploadToTelegram - 图片统一用 sendDocument
+// Telegram 存储
 // ============================================================
+
 async function uploadToTelegram(file, botToken, chatId) {
   const ext = file.name.split('.').pop().toLowerCase();
   const mimeType = file.type || '';
   
-  // ✅ 视频和音频用专用方法，图片统一用 sendDocument 避免 PHOTO_INVALID_DIMENSIONS
+  // 图片统一用 sendDocument，避免 PHOTO_INVALID_DIMENSIONS
   const isVideo = ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext) && mimeType.startsWith('video/');
   const isAudio = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'].includes(ext) && mimeType.startsWith('audio/');
 
@@ -147,7 +147,6 @@ async function uploadToTelegram(file, botToken, chatId) {
 
   if (!response.ok) {
     const error = await response.json();
-    // 如果视频/音频专用方法失败，降级到 sendDocument
     if (method !== 'sendDocument') {
       const docFormData = new FormData();
       docFormData.append('chat_id', chatId);
@@ -242,9 +241,6 @@ async function uploadToTelegram(file, botToken, chatId) {
   };
 }
 
-// ============================================================
-// ✅ 修改：uploadChunkToTelegram - 多种方式提取 file_id
-// ============================================================
 async function uploadChunkToTelegram(chunkData, botToken, chatId, chunkIndex, filename) {
   const formData = new FormData()
   formData.append('chat_id', chatId)
@@ -265,7 +261,6 @@ async function uploadChunkToTelegram(chunkData, botToken, chatId, chunkIndex, fi
   const result = data.result
   let fileId = null
   
-  // ✅ 多种方式提取 file_id
   if (result?.document?.file_id) {
     fileId = result.document.file_id
   } else if (result?.photo && Array.isArray(result.photo)) {
@@ -383,7 +378,7 @@ async function deleteTelegramFile(botToken, chatId, messageId) {
 }
 
 // ============================================================
-// Telegram 图片列表管理（存于 GitHub 仓库）
+// Telegram 图片列表管理
 // ============================================================
 
 async function getTelegramImages(token) {
@@ -549,9 +544,6 @@ async function handleInitChunkUpload(request, env) {
   }
 }
 
-// ============================================================
-// ✅ 修改：handleUploadChunk - 更好的错误处理
-// ============================================================
 async function handleUploadChunk(request, env) {
   try {
     const formData = await request.formData()
@@ -647,7 +639,7 @@ async function handleUploadChunk(request, env) {
 }
 
 // ============================================================
-// ✅ 修改：handleCompleteChunkUpload - 链接带扩展名
+// 完成分片上传 - 链接带扩展名
 // ============================================================
 async function handleCompleteChunkUpload(request, env) {
   try {
@@ -699,7 +691,6 @@ async function handleCompleteChunkUpload(request, env) {
       String(now.getMonth() + 1).padStart(2, '0') +
       String(now.getDate()).padStart(2, '0')
     
-    // ✅ 保留原始文件扩展名
     const originalName = session.filename
     const ext = originalName.includes('.') ? originalName.split('.').pop() : ''
     const baseName = originalName.replace(/\.[^/.]+$/, '')
@@ -725,7 +716,6 @@ async function handleCompleteChunkUpload(request, env) {
     await deleteChunkSession(bucket, uploadId)
 
     const baseUrl = new URL(request.url).origin
-    // ✅ 链接带扩展名
     const fileUrl = `${baseUrl}/api/large/${fileId}.${ext}`
 
     return new Response(JSON.stringify({
@@ -750,14 +740,13 @@ async function handleCompleteChunkUpload(request, env) {
 }
 
 // ============================================================
-// ✅ 修改：handleDownloadLarge - 支持带扩展名的 URL
+// 下载大文件 - 支持带扩展名的 URL
 // ============================================================
 async function handleDownloadLarge(request, env) {
   try {
     const url = new URL(request.url)
     let fileId = url.pathname.split('/').pop()
     
-    // ✅ 去掉扩展名再查找
     if (fileId.includes('.')) {
       fileId = fileId.split('.')[0]
     }
@@ -800,7 +789,6 @@ async function handleDownloadLarge(request, env) {
       offset += chunk.byteLength
     }
 
-    // ✅ 使用元数据中保存的扩展名
     const ext = fileMeta.extension || fileMeta.filename.split('.').pop().toLowerCase()
     const mimeTypes = {
       'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
@@ -834,9 +822,6 @@ async function handleDownloadLarge(request, env) {
   }
 }
 
-// ============================================================
-// ✅ 修改：handleDeleteLarge - 支持带扩展名的 URL
-// ============================================================
 async function handleDeleteLarge(request, env) {
   try {
     const url = new URL(request.url)
@@ -1301,6 +1286,9 @@ async function handleImage(request, env) {
   }
 }
 
+// ============================================================
+// ✅ 核心修复：handleUpload - btoa 只在 GitHub 分支执行
+// ============================================================
 async function handleUpload(request, env) {
   const bucket = env.IMAGES_BUCKET
   const token = env.GITHUB_TOKEN
@@ -1341,13 +1329,9 @@ async function handleUpload(request, env) {
     }
 
     const filename = generateFilename(file.name)
+    // 只读一次文件内容
     const arrayBuffer = await file.arrayBuffer()
     const uint8Array = new Uint8Array(arrayBuffer)
-    let binary = ''
-    for (let i = 0; i < uint8Array.length; i++) {
-      binary += String.fromCharCode(uint8Array[i])
-    }
-    const base64Content = btoa(binary)
 
     let uploadedUrl = ''
     let usedStorage = storageType
@@ -1355,6 +1339,9 @@ async function handleUpload(request, env) {
     let tgFileId = null
     let tgFilePath = null
 
+    // ============================================================
+    // Telegram 存储 - 不需要 btoa
+    // ============================================================
     if (storageType === 'telegram') {
       const botToken = env.TG_BOT_TOKEN;
       const chatId = env.TG_CHAT_ID;
@@ -1391,10 +1378,10 @@ async function handleUpload(request, env) {
               url: uploadedUrl,
               time: new Date().toISOString(),
               size: file.size,
-              mimeType: file.type || 'image/jpeg'
+              mimeType: file.type || 'application/octet-stream'
             });
             await saveTelegramImages(token, existingImages);
-            console.log(`✅ Telegram 图片已记录到 GitHub: ${filename}`);
+            console.log(`✅ Telegram 文件已记录到 GitHub: ${filename}`);
           }
         }
         
@@ -1414,6 +1401,9 @@ async function handleUpload(request, env) {
         });
       }
 
+    // ============================================================
+    // R2 存储 - 不需要 btoa
+    // ============================================================
     } else if (storageType === 'r2') {
       if (!bucket) {
         return new Response(JSON.stringify({ error: 'R2 bucket not configured' }), {
@@ -1429,6 +1419,9 @@ async function handleUpload(request, env) {
       uploadedUrl = `${baseUrl}/api/image?path=${key}`
       usedStorage = 'r2'
 
+    // ============================================================
+    // GitHub 存储 - 需要 btoa（仅图片）
+    // ============================================================
     } else {
       if (!token) {
         return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
@@ -1436,6 +1429,26 @@ async function handleUpload(request, env) {
           headers: { 'Content-Type': 'application/json' }
         })
       }
+      
+      // GitHub 只支持图片
+      const ext = file.name.split('.').pop().toLowerCase()
+      const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'ico', 'svg']
+      if (!imageExts.includes(ext)) {
+        return new Response(JSON.stringify({ 
+          error: `GitHub 存储仅支持图片格式，${ext.toUpperCase()} 文件请使用 Telegram 存储` 
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      
+      // ✅ 只有这里才执行 btoa
+      let binary = ''
+      for (let i = 0; i < uint8Array.length; i++) {
+        binary += String.fromCharCode(uint8Array[i])
+      }
+      const base64Content = btoa(binary)
+      
       const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}/${filename}`
       const response = await fetch(apiUrl, {
         method: 'PUT',
@@ -1486,6 +1499,10 @@ async function handleUpload(request, env) {
     })
   }
 }
+
+// ============================================================
+// 历史记录
+// ============================================================
 
 async function handleHistory(request, env) {
   const token = env.GITHUB_TOKEN
@@ -1689,6 +1706,10 @@ async function deleteHistory(request, env) {
   }
 }
 
+// ============================================================
+// 删除 API
+// ============================================================
+
 async function handleDelete(request, env) {
   const bucket = env.IMAGES_BUCKET
   const token = env.GITHUB_TOKEN
@@ -1816,6 +1837,10 @@ async function handleDelete(request, env) {
     })
   }
 }
+
+// ============================================================
+// Telegram 随机
+// ============================================================
 
 async function handleTelegramRandom(env, request) {
   const token = env.GITHUB_TOKEN;
