@@ -16,10 +16,10 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const CHUNK_SIZE = 16 * 1024 * 1024
 
   const folderOptions = [
-    { key: 'wallpaper', label: '横屏图片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
-    { key: 'sh', label: '横屏图片 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'sd', label: '竖屏图片 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
+    { key: 'wallpaper', label: '横屏片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'cover', label: '竖屏 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
+    { key: 'sh', label: '横屏 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'sd', label: '竖屏 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
   ]
 
   const refreshBackground = () => {
@@ -173,7 +173,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     })
   }
 
-  // ✅ 核心修复：检测文件类型，MP3/视频强制使用 Telegram
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
 
@@ -184,33 +183,29 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       if (!file) continue
 
       try {
-        // 检测文件类型
+        // 检测文件类型，音频和视频强制走分片（避免 btoa）
         const ext = file.name.split('.').pop().toLowerCase()
-        const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a']
-        const videoExts = ['mp4', 'webm', 'avi', 'mov', 'mkv']
-        const isAudio = audioExts.includes(ext)
-        const isVideo = videoExts.includes(ext)
+        const mediaExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'mp4', 'webm', 'avi', 'mov', 'mkv']
+        const isMedia = mediaExts.includes(ext)
         
-        // 音频和视频强制使用 Telegram 存储
+        // 媒体文件强制走 Telegram 分片
         let actualStorage = storageType
-        if (isAudio || isVideo) {
+        if (isMedia) {
           actualStorage = 'telegram'
-          if (storageType !== 'telegram') {
-            setUploadStatus(`🎵 媒体文件自动切换到 Telegram 存储...`)
-            await new Promise(r => setTimeout(r, 300))
-          }
         }
 
-        const needChunk = actualStorage === 'telegram' && file.size > 16 * 1024 * 1024
+        // 只有 Telegram + 大于16MB 才分片，但媒体文件强制分片
+        const needChunk = actualStorage === 'telegram' && (file.size > 16 * 1024 * 1024 || isMedia)
 
         let url
         if (needChunk) {
           if (file.size > 500 * 1024 * 1024) {
             throw new Error('文件超过 500MB，暂不支持')
           }
-          console.log(`📦 大文件 (${(file.size / 1024 / 1024).toFixed(1)}MB)，使用分片上传`)
+          console.log(`📦 ${isMedia ? '媒体文件' : '大文件'} (${(file.size / 1024 / 1024).toFixed(1)}MB)，使用分片上传`)
           url = await uploadLargeFile(file, folder)
         } else {
+          // 普通上传（仅图片）
           if (actualStorage === 'telegram' && file.size > 50 * 1024 * 1024) {
             throw new Error('Telegram 直接上传限制 50MB')
           }
@@ -386,14 +381,14 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       >
         <i className="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-3 block"></i>
         <p className="text-gray-600 dark:text-gray-300 text-base mb-2">点击或拖拽文件到此处上传</p>
-        <p className="text-xs text-gray-400 dark:text-gray-500">支持图片、音频、视频 | 媒体文件自动切换到 Telegram</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">支持图片、音频、视频 | 媒体文件自动走分片</p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-1"><i className="fas fa-paste mr-1"></i>也可直接 Ctrl+V 粘贴截图上传</p>
 
         <p className="text-xs mt-2 flex items-center justify-center gap-1 flex-wrap">
           {storageType === 'github' ? (
-            <span className="text-blue-400"><i className="fab fa-github mr-1"></i>存储到 GitHub 私有仓库（仅图片）</span>
+            <span className="text-blue-400"><i className="fab fa-github mr-1"></i>存储到 GitHub（仅图片）</span>
           ) : storageType === 'r2' ? (
-            <span className="text-orange-400"><i className="fas fa-cloud-upload-alt mr-1"></i>存储到 Cloudflare R2（仅图片）</span>
+            <span className="text-orange-400"><i className="fas fa-cloud-upload-alt mr-1"></i>存储到 R2（仅图片）</span>
           ) : (
             <span className="text-green-400"><i className="fab fa-telegram-plane mr-1"></i>存储到 Telegram（支持所有文件）</span>
           )}
