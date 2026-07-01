@@ -106,5 +106,17 @@
     "time": "2026-06-30T14:09:17.108Z",
     "size": 1025580,
     "mimeType": "image/jpeg"
+  },
+  {
+    "id": 1782864008847,
+    "filename": "20260701_background.webp",
+    "originalName": "background.webp",
+    "fileId": "CAACAgUAAyEGAAMBBNJvJQADeWpEWIehj2xo9uAUY7oKRzuD9drFAAIGJAACn0QgVhs-AAFNop4yrTwE",
+    "messageId": 121,
+    "filePath": "stickers/file_57.webp",
+    "url": "https://pico.1356666.xyz/api/image?path=telegram/stickers%2Ffile_57.webp",
+    "time": "2026-07-01T00:00:08.847Z",
+    "size": 324962,
+    "mimeType": "image/webp"
   }
 ]
