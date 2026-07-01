@@ -226,5 +226,17 @@
     "time": "2026-07-01T05:29:37.609Z",
     "size": 344594,
     "mimeType": "image/jpeg"
+  },
+  {
+    "id": 1782884284410,
+    "filename": "20260701_my04.webp",
+    "originalName": "my04.webp",
+    "fileId": "CAACAgUAAyEGAAMBBNJvJQADq2pEp7oVNv_YgAk1XE1jsY-Rg77pAAI2IgACn0QoVihd01ZV4md-PAQ",
+    "messageId": 171,
+    "filePath": "stickers/file_108.webp",
+    "url": "https://pico.1356666.xyz/api/short/CAACAgUAAyEGAAMBBNJvJQADq2pEp7oVNv_YgAk1XE1jsY-Rg77pAAI2IgACn0QoVihd01ZV4md-PAQ.webp",
+    "time": "2026-07-01T05:38:04.410Z",
+    "size": 82106,
+    "mimeType": "image/webp"
   }
 ]
