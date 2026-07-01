@@ -888,7 +888,7 @@ async function handleUpload(request, env) {
     const file = formData.get('file')
     const folder = formData.get('folder') || 'wallpaper'
     const storageType = formData.get('storage') || 'github'
-    // ✅ 读取 WebP 转换参数
+    // ✅ 读取 convertToWebp 参数（前端已转换，后端只记录）
     const convertToWebp = formData.get('convertToWebp') === 'true'
 
     if (!file) {
