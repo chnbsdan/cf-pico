@@ -8,6 +8,21 @@ const GITHUB_REPO = 'cf-pico'
 const TELEGRAM_IMAGES_FILE = 'telegram_images.json'
 
 // ============================================================
+// 辅助函数：根据扩展名获取 MIME 类型
+// ============================================================
+function getMimeTypeByExt(ext) {
+  const mimeTypes = {
+    'mp4': 'video/mp4', 'webm': 'video/webm', 'avi': 'video/x-msvideo',
+    'mov': 'video/quicktime', 'mkv': 'video/x-matroska', 'm4v': 'video/mp4',
+    'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'ogg': 'audio/ogg',
+    'flac': 'audio/flac', 'aac': 'audio/aac', 'm4a': 'audio/mp4',
+    'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+    'webp': 'image/webp', 'gif': 'image/gif', 'pdf': 'application/pdf'
+  }
+  return mimeTypes[ext] || 'application/octet-stream'
+}
+
+// ============================================================
 // 分片配置
 // ============================================================
 const CHUNK_SIZE = 16 * 1024 * 1024  // 16MB 每片
@@ -568,6 +583,9 @@ async function handleUploadChunk(request, env) {
   }
 }
 
+// ============================================================
+// ✅ 修改：handleCompleteChunkUpload - 链接带扩展名
+// ============================================================
 async function handleCompleteChunkUpload(request, env) {
   try {
     const { uploadId, folder } = await request.json()
@@ -617,7 +635,12 @@ async function handleCompleteChunkUpload(request, env) {
     const datePrefix = now.getFullYear() +
       String(now.getMonth() + 1).padStart(2, '0') +
       String(now.getDate()).padStart(2, '0')
-    const finalFilename = `${datePrefix}_${session.filename}`
+    
+    // ✅ 保留原始文件扩展名
+    const originalName = session.filename
+    const ext = originalName.includes('.') ? originalName.split('.').pop() : ''
+    const baseName = originalName.replace(/\.[^/.]+$/, '')
+    const finalFilename = `${datePrefix}_${baseName}.${ext}`
 
     const fileMetadata = {
       fileId,
@@ -630,14 +653,17 @@ async function handleCompleteChunkUpload(request, env) {
       folder: folder || 'telegram',
       storageType: 'telegram_chunks',
       uploadedAt: new Date().toISOString(),
-      createdAt: session.createdAt
+      createdAt: session.createdAt,
+      extension: ext,
+      mimeType: getMimeTypeByExt(ext)
     }
 
     await saveCompletedFile(bucket, fileId, fileMetadata)
     await deleteChunkSession(bucket, uploadId)
 
     const baseUrl = new URL(request.url).origin
-    const fileUrl = `${baseUrl}/api/large/${fileId}`
+    // ✅ 链接带扩展名
+    const fileUrl = `${baseUrl}/api/large/${fileId}.${ext}`
 
     return new Response(JSON.stringify({
       success: true,
@@ -660,10 +686,19 @@ async function handleCompleteChunkUpload(request, env) {
   }
 }
 
+// ============================================================
+// ✅ 修改：handleDownloadLarge - 支持带扩展名的 URL
+// ============================================================
 async function handleDownloadLarge(request, env) {
   try {
     const url = new URL(request.url)
-    const fileId = url.pathname.split('/').pop()
+    let fileId = url.pathname.split('/').pop()
+    
+    // ✅ 去掉扩展名再查找
+    if (fileId.includes('.')) {
+      fileId = fileId.split('.')[0]
+    }
+    
     if (!fileId) {
       return new Response('Missing file ID', { status: 400 })
     }
@@ -702,7 +737,8 @@ async function handleDownloadLarge(request, env) {
       offset += chunk.byteLength
     }
 
-    const ext = fileMeta.filename.split('.').pop().toLowerCase()
+    // ✅ 使用元数据中保存的扩展名
+    const ext = fileMeta.extension || fileMeta.filename.split('.').pop().toLowerCase()
     const mimeTypes = {
       'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
       'webp': 'image/webp', 'gif': 'image/gif', 'mp4': 'video/mp4',
@@ -712,7 +748,7 @@ async function handleDownloadLarge(request, env) {
       'mov': 'video/quicktime', 'mkv': 'video/x-matroska',
       'm4a': 'audio/mp4', 'm4v': 'video/mp4'
     }
-    const contentType = mimeTypes[ext] || 'application/octet-stream'
+    const contentType = fileMeta.mimeType || mimeTypes[ext] || 'application/octet-stream'
 
     const inlineExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'mp4', 'webm', 'mov', 'mkv', 'm4v', 'jpg', 'jpeg', 'png', 'webp', 'gif']
     const isInline = inlineExts.includes(ext)
@@ -735,10 +771,19 @@ async function handleDownloadLarge(request, env) {
   }
 }
 
+// ============================================================
+// ✅ 修改：handleDeleteLarge - 支持带扩展名的 URL
+// ============================================================
 async function handleDeleteLarge(request, env) {
   try {
     const url = new URL(request.url)
-    const fileId = url.pathname.split('/').pop()
+    let fileId = url.pathname.split('/').pop()
+    
+    // ✅ 去掉扩展名再查找
+    if (fileId.includes('.')) {
+      fileId = fileId.split('.')[0]
+    }
+    
     if (!fileId) {
       return new Response(JSON.stringify({ error: 'Missing file ID' }), { status: 400 })
     }
@@ -949,7 +994,7 @@ async function handleList(env) {
   
   results['telegram'] = allTelegramImages.map(img => ({
     name: img.filename || img.originalName || 'unknown',
-    url: img.url || (img.fileId ? `/api/large/${img.fileId}` : ''),
+    url: img.url || (img.fileId ? `/api/large/${img.fileId}.${img.extension || ''}` : ''),
     path: `telegram/${img.fileId || ''}`,
     sha: img.fileId || '',
     size: img.totalSize || img.size || 0,
@@ -960,7 +1005,8 @@ async function handleList(env) {
     filePath: img.filePath,
     time: img.uploadedAt || img.time,
     fromR2: !!img.fromR2,
-    chunkCount: img.chunkCount
+    chunkCount: img.chunkCount,
+    extension: img.extension || ''
   }))
   total += results['telegram'].length
 
@@ -1752,7 +1798,8 @@ async function handleTelegramRandom(env, request) {
   const randomItem = allTelegramItems[Math.floor(Math.random() * allTelegramItems.length)];
   const baseUrl = 'https://pico.1356666.xyz';
   const fileId = randomItem.fileId;
-  const imageUrl = `${baseUrl}/api/large/${fileId}`;
+  const ext = randomItem.extension || ''
+  const imageUrl = `${baseUrl}/api/large/${fileId}.${ext}`;
 
   const url = new URL(request.url);
   const format = url.searchParams.get('format');
@@ -1774,7 +1821,7 @@ async function handleTelegramRandom(env, request) {
   <img id="tgImage" src="${imageUrl}" alt="TG壁纸">
   <script>
     function refreshImage() {
-      document.getElementById('tgImage').src = '/api/large/${fileId}?t=' + Date.now();
+      document.getElementById('tgImage').src = '/api/large/${fileId}.${ext}?t=' + Date.now();
       setTimeout(refreshImage, 3600000);
     }
     setTimeout(refreshImage, 3600000);
