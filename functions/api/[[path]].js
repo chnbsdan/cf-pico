@@ -1,10 +1,10 @@
 // functions/api/[[path]].js - Cloudflare Pages API 完整入口
 // 支持：stats, random, wallpaper, cover, list, image, upload, history, admin/delete
 // 支持 GitHub、R2、Telegram 三种存储
-// ✅ 所有文件类型正常上传
+// ✅ 流式传输大文件，不合并到内存
 // ✅ btoa 只在 GitHub 分支执行
-// ✅ 流式传输大文件
-// ✅ 短链接返回
+// ✅ 用 fileId 做唯一标识，彻底解决 404
+// ✅ 修复WebP 转换功能
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
@@ -135,7 +135,6 @@ async function uploadToTelegram(file, botToken, chatId) {
     method = 'sendAudio';
     fieldName = 'audio';
   } else if (isImage) {
-    // 图片统一用 sendDocument 避免尺寸问题
     method = 'sendDocument';
     fieldName = 'document';
   }
@@ -151,7 +150,6 @@ async function uploadToTelegram(file, botToken, chatId) {
       { method: 'POST', body: formData }
     );
 
-    // 如果专用方法失败，降级到 sendDocument
     if (!response.ok && method !== 'sendDocument') {
       const docFormData = new FormData();
       docFormData.append('chat_id', chatId);
@@ -626,9 +624,6 @@ async function handleUploadChunk(request, env) {
   }
 }
 
-// ============================================================
-// 完成分片上传
-// ============================================================
 async function handleCompleteChunkUpload(request, env) {
   try {
     const { uploadId, folder } = await request.json()
@@ -727,9 +722,6 @@ async function handleCompleteChunkUpload(request, env) {
   }
 }
 
-// ============================================================
-// ✅ 流式下载大文件
-// ============================================================
 async function handleDownloadLarge(request, env, waitUntil) {
   try {
     const url = new URL(request.url)
@@ -843,9 +835,6 @@ async function handleDeleteLarge(request, env) {
   }
 }
 
-// ============================================================
-// 短链接处理
-// ============================================================
 async function handleShort(request, env) {
   try {
     const url = new URL(request.url)
@@ -888,7 +877,7 @@ async function handleShort(request, env) {
 }
 
 // ============================================================
-// ✅ 完整修复：handleUpload - btoa 只在 GitHub 分支执行
+// ✅ 完整修复：handleUpload - 支持 WebP 转换 + 所有存储
 // ============================================================
 async function handleUpload(request, env) {
   const bucket = env.IMAGES_BUCKET
@@ -899,6 +888,8 @@ async function handleUpload(request, env) {
     const file = formData.get('file')
     const folder = formData.get('folder') || 'wallpaper'
     const storageType = formData.get('storage') || 'github'
+    // ✅ 读取 WebP 转换参数
+    const convertToWebp = formData.get('convertToWebp') === 'true'
 
     if (!file) {
       return new Response(JSON.stringify({ error: 'No file uploaded' }), {
@@ -929,8 +920,36 @@ async function handleUpload(request, env) {
       })
     }
 
-    const filename = generateFilename(file.name)
-    const arrayBuffer = await file.arrayBuffer()
+    // ✅ WebP 转换处理
+    let processedFile = file
+    let processedName = file.name
+
+    if (convertToWebp && file.type && file.type.startsWith('image/')) {
+      try {
+        const imageData = await file.arrayBuffer()
+        const blob = new Blob([imageData], { type: file.type })
+        const imageBitmap = await createImageBitmap(blob)
+        
+        const canvas = new OffscreenCanvas(imageBitmap.width, imageBitmap.height)
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(imageBitmap, 0, 0)
+        
+        const webpBlob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.85 })
+        const webpArrayBuffer = await webpBlob.arrayBuffer()
+        const webpFile = new File([webpArrayBuffer], file.name.replace(/\.[^/.]+$/, '') + '.webp', { type: 'image/webp' })
+        
+        processedFile = webpFile
+        processedName = file.name.replace(/\.[^/.]+$/, '') + '.webp'
+        console.log(`✅ 已转换 WebP: ${file.name}`)
+      } catch (e) {
+        console.log('⚠️ WebP 转换失败，使用原图:', e.message)
+        processedFile = file
+        processedName = file.name
+      }
+    }
+
+    const filename = generateFilename(processedName)
+    const arrayBuffer = await processedFile.arrayBuffer()
     const uint8Array = new Uint8Array(arrayBuffer)
 
     let uploadedUrl = ''
@@ -954,7 +973,7 @@ async function handleUpload(request, env) {
       }
       
       try {
-        const result = await uploadToTelegram(file, botToken, chatId);
+        const result = await uploadToTelegram(processedFile, botToken, chatId);
         tgFileId = result.fileId;
         tgMessageId = result.messageId;
         tgFilePath = result.filePath;
@@ -971,9 +990,9 @@ async function handleUpload(request, env) {
               messageId: tgMessageId,
               filePath: tgFilePath,
               filename: filename,
-              originalName: file.name,
-              size: file.size,
-              mimeType: file.type || 'application/octet-stream',
+              originalName: processedFile.name,
+              size: processedFile.size,
+              mimeType: processedFile.type || 'application/octet-stream',
               uploadedAt: new Date().toISOString()
             }, null, 2), {
               httpMetadata: { contentType: 'application/json' }
@@ -990,14 +1009,14 @@ async function handleUpload(request, env) {
             existingImages.push({
               id: Date.now(),
               filename: filename,
-              originalName: file.name,
+              originalName: processedFile.name,
               fileId: tgFileId,
               messageId: tgMessageId,
               filePath: tgFilePath,
               url: uploadedUrl,
               time: new Date().toISOString(),
-              size: file.size,
-              mimeType: file.type || 'application/octet-stream'
+              size: processedFile.size,
+              mimeType: processedFile.type || 'image/jpeg'
             });
             await saveTelegramImages(token, existingImages);
             console.log(`✅ Telegram 文件已记录到 GitHub: ${filename}`);
@@ -1009,7 +1028,7 @@ async function handleUpload(request, env) {
           messageId: tgMessageId,
           filePath: tgFilePath,
           url: uploadedUrl,
-          size: file.size
+          size: processedFile.size
         });
         
       } catch (error) {
@@ -1032,14 +1051,14 @@ async function handleUpload(request, env) {
       }
       const key = `${folder}/${filename}`
       await bucket.put(key, arrayBuffer, {
-        httpMetadata: { contentType: file.type || 'image/jpeg' }
+        httpMetadata: { contentType: processedFile.type || 'image/webp' }
       })
       const baseUrl = new URL(request.url).origin;
       uploadedUrl = `${baseUrl}/api/image?path=${key}`
       usedStorage = 'r2'
 
     // ============================================================
-    // 3. GitHub 存储 - ✅ 只有这里执行 btoa
+    // 3. GitHub 存储
     // ============================================================
     } else {
       if (!token) {
@@ -1049,7 +1068,7 @@ async function handleUpload(request, env) {
         })
       }
       
-      const ext = file.name.split('.').pop().toLowerCase()
+      const ext = processedName.split('.').pop().toLowerCase()
       const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'ico', 'svg']
       if (!imageExts.includes(ext)) {
         return new Response(JSON.stringify({ 
@@ -1060,7 +1079,7 @@ async function handleUpload(request, env) {
         })
       }
       
-      // ✅ 只有这里才执行 btoa
+      // btoa 编码
       let binary = ''
       for (let i = 0; i < uint8Array.length; i++) {
         binary += String.fromCharCode(uint8Array[i])
@@ -1105,7 +1124,8 @@ async function handleUpload(request, env) {
       tgMessageId: tgMessageId,
       tgFileId: tgFileId,
       tgFilePath: tgFilePath,
-      fileSize: file.size
+      fileSize: processedFile.size,
+      converted: convertToWebp && processedFile.type === 'image/webp'
     }), {
       headers: { 'Content-Type': 'application/json' }
     })
@@ -1744,10 +1764,6 @@ async function deleteHistory(request, env) {
   }
 }
 
-// ============================================================
-// 删除 API
-// ============================================================
-
 async function handleDelete(request, env) {
   const bucket = env.IMAGES_BUCKET
   const token = env.GITHUB_TOKEN
@@ -1882,10 +1898,6 @@ async function handleDelete(request, env) {
     })
   }
 }
-
-// ============================================================
-// Telegram 随机
-// ============================================================
 
 async function handleTelegramRandom(env, request) {
   const token = env.GITHUB_TOKEN;
