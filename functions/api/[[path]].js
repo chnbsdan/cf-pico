@@ -1,7 +1,8 @@
 // functions/api/[[path]].js - Cloudflare Pages API 完整入口
 // 支持：stats, random, wallpaper, cover, list, image, upload, history, admin/delete
 // 支持 GitHub、R2、Telegram 三种存储
-// ✅ 大文件分片上传：16MB 以上走分片，R2 仅存元数据
+// ✅ 普通上传返回短链接 /api/short/xxx.jpg
+// ✅ 分片上传返回短链接 /api/large/xxx.mp4
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
@@ -120,7 +121,6 @@ async function uploadToTelegram(file, botToken, chatId) {
   const ext = file.name.split('.').pop().toLowerCase();
   const mimeType = file.type || '';
   
-  // 图片统一用 sendDocument，避免 PHOTO_INVALID_DIMENSIONS
   const isVideo = ['mp4', 'webm', 'avi', 'mov', 'mkv'].includes(ext) && mimeType.startsWith('video/');
   const isAudio = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'].includes(ext) && mimeType.startsWith('audio/');
 
@@ -638,9 +638,6 @@ async function handleUploadChunk(request, env) {
   }
 }
 
-// ============================================================
-// 完成分片上传 - 链接带扩展名
-// ============================================================
 async function handleCompleteChunkUpload(request, env) {
   try {
     const { uploadId, folder } = await request.json()
@@ -739,9 +736,6 @@ async function handleCompleteChunkUpload(request, env) {
   }
 }
 
-// ============================================================
-// 下载大文件 - 支持带扩展名的 URL
-// ============================================================
 async function handleDownloadLarge(request, env) {
   try {
     const url = new URL(request.url)
@@ -863,6 +857,65 @@ async function handleDeleteLarge(request, env) {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     })
+  }
+}
+
+// ============================================================
+// ✅ 新增：短链接处理 - 让普通上传也返回短链接
+// ============================================================
+async function handleShort(request, env) {
+  try {
+    const url = new URL(request.url)
+    let fileId = url.pathname.split('/').pop()
+    
+    if (fileId.includes('.')) {
+      fileId = fileId.split('.')[0]
+    }
+    
+    if (!fileId) {
+      return new Response('Missing file ID', { status: 400 })
+    }
+
+    const bucket = env.IMAGES_BUCKET
+    const token = env.GITHUB_TOKEN
+    const botToken = env.TG_BOT_TOKEN
+
+    let fileMeta = null
+    
+    // 1. 先从 R2 查找
+    if (bucket) {
+      const metaKey = `telegram_files/${fileId}.json`
+      try {
+        const object = await bucket.get(metaKey)
+        if (object) {
+          const content = await object.text()
+          fileMeta = JSON.parse(content)
+        }
+      } catch (e) {}
+    }
+
+    // 2. 如果 R2 没有，从 GitHub 记录查找
+    if (!fileMeta && token) {
+      const images = await getTelegramImages(token)
+      const record = images.find(img => img.fileId === fileId || img.filePath === fileId)
+      if (record) {
+        fileMeta = record
+      }
+    }
+
+    if (!fileMeta || !fileMeta.fileId) {
+      return new Response('文件不存在', { status: 404 })
+    }
+
+    if (!botToken) {
+      return new Response('Telegram 未配置', { status: 500 })
+    }
+
+    return await getTelegramFileContentByFileId(botToken, fileMeta.fileId)
+
+  } catch (error) {
+    console.error('Short link error:', error)
+    return new Response('Internal error: ' + error.message, { status: 500 })
   }
 }
 
@@ -1287,7 +1340,7 @@ async function handleImage(request, env) {
 }
 
 // ============================================================
-// ✅ 核心修复：handleUpload - btoa 只在 GitHub 分支执行
+// ✅ 核心修复：handleUpload - 普通上传也返回短链接
 // ============================================================
 async function handleUpload(request, env) {
   const bucket = env.IMAGES_BUCKET
@@ -1329,7 +1382,6 @@ async function handleUpload(request, env) {
     }
 
     const filename = generateFilename(file.name)
-    // 只读一次文件内容
     const arrayBuffer = await file.arrayBuffer()
     const uint8Array = new Uint8Array(arrayBuffer)
 
@@ -1340,7 +1392,7 @@ async function handleUpload(request, env) {
     let tgFilePath = null
 
     // ============================================================
-    // Telegram 存储 - 不需要 btoa
+    // Telegram 存储
     // ============================================================
     if (storageType === 'telegram') {
       const botToken = env.TG_BOT_TOKEN;
@@ -1361,8 +1413,31 @@ async function handleUpload(request, env) {
         usedStorage = 'telegram';
         
         const baseUrl = new URL(request.url).origin;
-        const tgProxyPath = `telegram/${encodeURIComponent(tgFileId)}`;
-        uploadedUrl = `${baseUrl}/api/image?path=${tgProxyPath}`;
+        const ext = file.name.split('.').pop().toLowerCase();
+        
+        // ✅ 短链接格式
+        uploadedUrl = `${baseUrl}/api/short/${tgFileId}.${ext}`;
+        
+        // ✅ 保存到 R2（供短链接查询）
+        if (bucket) {
+          try {
+            const metaKey = `telegram_files/${tgFileId}.json`
+            await bucket.put(metaKey, JSON.stringify({
+              fileId: tgFileId,
+              messageId: tgMessageId,
+              filePath: tgFilePath,
+              filename: filename,
+              originalName: file.name,
+              size: file.size,
+              mimeType: file.type || 'application/octet-stream',
+              uploadedAt: new Date().toISOString()
+            }, null, 2), {
+              httpMetadata: { contentType: 'application/json' }
+            })
+          } catch (e) {
+            console.error('保存短链接记录失败:', e)
+          }
+        }
         
         if (token) {
           const existingImages = await getTelegramImages(token);
@@ -1402,7 +1477,7 @@ async function handleUpload(request, env) {
       }
 
     // ============================================================
-    // R2 存储 - 不需要 btoa
+    // R2 存储
     // ============================================================
     } else if (storageType === 'r2') {
       if (!bucket) {
@@ -1442,7 +1517,7 @@ async function handleUpload(request, env) {
         })
       }
       
-      // ✅ 只有这里才执行 btoa
+      // 只有这里才执行 btoa
       let binary = ''
       for (let i = 0; i < uint8Array.length; i++) {
         binary += String.fromCharCode(uint8Array[i])
@@ -1752,6 +1827,14 @@ async function handleDelete(request, env) {
         }
       }
       
+      // 同时删除 R2 短链接记录
+      if (bucket && fileId) {
+        try {
+          const metaKey = `telegram_files/${fileId}.json`
+          await bucket.delete(metaKey)
+        } catch (e) {}
+      }
+      
       if (token) {
         try {
           const images = await getTelegramImages(token);
@@ -1962,6 +2045,13 @@ export async function onRequest(context) {
     }
     if (method === 'DELETE') {
       return handleDeleteLarge(request, env)
+    }
+  }
+
+  // ✅ 短链接路由
+  if (path.startsWith('short/')) {
+    if (method === 'GET') {
+      return handleShort(request, env)
     }
   }
 
