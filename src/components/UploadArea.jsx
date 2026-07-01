@@ -16,10 +16,10 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const CHUNK_SIZE = 16 * 1024 * 1024
 
   const folderOptions = [
-    { key: 'wallpaper', label: '横屏 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'cover', label: '竖屏 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
-    { key: 'sh', label: '横屏 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'sd', label: '竖屏 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
+    { key: 'wallpaper', label: '横屏图片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
+    { key: 'sh', label: '横屏图片 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'sd', label: '竖屏图片 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
   ]
 
   const refreshBackground = () => {
@@ -183,8 +183,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       if (!file) continue
 
       try {
-        // ✅ 20MB 以上走分片
-        const needChunk = storageType === 'telegram' && file.size > 20 * 1024 * 1024
+        // ✅ 16MB 以上走分片
+        const needChunk = storageType === 'telegram' && file.size > 16 * 1024 * 1024
 
         let url
         if (needChunk) {
@@ -348,7 +348,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="radio" name="storageType" value="telegram" checked={storageType === 'telegram'} onChange={(e) => setStorageType(e.target.value)} className="w-3.5 h-3.5 accent-green-500" />
             <span className="text-white/80 text-sm"><i className="fab fa-telegram-plane mr-1"></i>Telegram</span>
-            <span className="text-white/30 text-[10px]">(&gt;20MB 分片)</span>
+            <span className="text-white/30 text-[10px]">(&gt;16MB 分片)</span>
           </label>
         </div>
       </div>
@@ -379,7 +379,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           ) : storageType === 'r2' ? (
             <span className="text-orange-400"><i className="fas fa-cloud-upload-alt mr-1"></i>存储到 Cloudflare R2</span>
           ) : (
-            <span className="text-green-400"><i className="fab fa-telegram-plane mr-1"></i>存储到 Telegram（&gt;20MB 分片）</span>
+            <span className="text-green-400"><i className="fab fa-telegram-plane mr-1"></i>存储到 Telegram（&gt;16MB 分片）</span>
           )}
         </p>
 
