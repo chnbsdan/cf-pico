@@ -17,10 +17,10 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const CONCURRENT = 1
 
   const folderOptions = [
-    { key: 'wallpaper', label: '横屏 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'cover', label: '竖屏 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
-    { key: 'sh', label: '横屏 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'sd', label: '竖屏 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
+    { key: 'wallpaper', label: '横屏图片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
+    { key: 'sh', label: '横屏图片 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'sd', label: '竖屏图片 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
   ]
 
   const refreshBackground = () => {
@@ -114,7 +114,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     }
   }
 
-  // ✅ 普通上传 - 带进度显示
   const uploadNormalFile = async (file, folder, storage) => {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
@@ -185,20 +184,25 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       if (!file) continue
 
       try {
-        // ✅ 只要选择 Telegram 存储，就使用分片上传（生成短链接）
-        const useChunk = storageType === 'telegram'
+        // ✅ 只有 Telegram + 大于50MB 才分片
+        const needChunk = storageType === 'telegram' && file.size > 50 * 1024 * 1024
 
         let url
-        if (useChunk) {
+        if (needChunk) {
           if (file.size > 500 * 1024 * 1024) {
             throw new Error('文件超过 500MB，暂不支持')
           }
-          console.log(`📦 使用分片上传 (${(file.size / 1024 / 1024).toFixed(1)}MB)`)
+          console.log(`📦 大文件 (${(file.size / 1024 / 1024).toFixed(1)}MB)，使用分片上传`)
           url = await uploadLargeFile(file, folder)
         } else {
-          if (file.size > 10 * 1024 * 1024) {
+          // 普通上传
+          if (storageType === 'telegram' && file.size > 50 * 1024 * 1024) {
+            throw new Error('Telegram 直接上传限制 50MB，将自动使用分片上传')
+          }
+          if (storageType !== 'telegram' && file.size > 10 * 1024 * 1024) {
             throw new Error(`${storageType === 'github' ? 'GitHub' : 'R2'} 限制 10MB，请切换到 Telegram`)
           }
+          
           setIsNormalUploading(true)
           setUploadStatus('准备上传...')
           setUploadProgress(0)
@@ -241,7 +245,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     setIsChunkUploading(false)
     setIsNormalUploading(false)
     
-    // 延迟清除状态，让用户看到完成信息
     setTimeout(() => {
       if (!uploadStatus.includes('❌')) {
         setUploadStatus('')
@@ -346,7 +349,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="radio" name="storageType" value="telegram" checked={storageType === 'telegram'} onChange={(e) => setStorageType(e.target.value)} className="w-3.5 h-3.5 accent-green-500" />
             <span className="text-white/80 text-sm"><i className="fab fa-telegram-plane mr-1"></i>Telegram</span>
-            <span className="text-white/30 text-[10px]">(分片上传，短链接)</span>
+            <span className="text-white/30 text-[10px]">(&lt;50MB 直传，&gt;50MB 分片)</span>
           </label>
         </div>
       </div>
@@ -377,11 +380,10 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           ) : storageType === 'r2' ? (
             <span className="text-orange-400"><i className="fas fa-cloud-upload-alt mr-1"></i>存储到 Cloudflare R2</span>
           ) : (
-            <span className="text-green-400"><i className="fab fa-telegram-plane mr-1"></i>存储到 Telegram（分片上传，生成短链接）</span>
+            <span className="text-green-400"><i className="fab fa-telegram-plane mr-1"></i>存储到 Telegram</span>
           )}
         </p>
 
-        {/* ✅ 进度条 - 所有上传都会显示 */}
         {isUploading && (
           <div className="mt-4 bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/10">
             <div className="flex justify-between items-center text-sm text-gray-800 dark:text-white/80 mb-2">
