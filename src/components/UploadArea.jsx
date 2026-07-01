@@ -10,16 +10,17 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const [uploadStatus, setUploadStatus] = useState('')
   const [uploadSpeed, setUploadSpeed] = useState('')
   const [isChunkUploading, setIsChunkUploading] = useState(false)
+  const [isNormalUploading, setIsNormalUploading] = useState(false)
   const fileInputRef = useRef(null)
 
-  const CHUNK_SIZE = 16 * 1024 * 1024  // 16MB
-  const CONCURRENT = 3
+  const CHUNK_SIZE = 16 * 1024 * 1024
+  const CONCURRENT = 1
 
   const folderOptions = [
-    { key: 'wallpaper', label: '横屏图片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
-    { key: 'sh', label: '横屏图片 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'sd', label: '竖屏图片 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
+    { key: 'wallpaper', label: '横屏 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'cover', label: '竖屏 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
+    { key: 'sh', label: '横屏 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'sd', label: '竖屏 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
   ]
 
   const refreshBackground = () => {
@@ -44,7 +45,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         lastError = e.message
       }
       if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, 1000 * attempt))
+        await new Promise(r => setTimeout(r, 2000 * attempt))
         setUploadStatus(`重试分片 ${chunkIndex + 1} (${attempt}/${maxRetries})...`)
       }
     }
@@ -53,6 +54,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
 
   const uploadLargeFile = async (file, folder) => {
     setIsChunkUploading(true)
+    setIsNormalUploading(false)
     setUploadProgress(0)
     setUploadStatus('正在初始化...')
     setUploadSpeed('')
@@ -69,27 +71,19 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       const startTime = Date.now()
       let uploadedBytes = 0
 
-      for (let i = 0; i < chunkCount; i += CONCURRENT) {
-        const batch = []
-        const batchSize = Math.min(CONCURRENT, chunkCount - i)
+      for (let i = 0; i < chunkCount; i++) {
+        const start = i * CHUNK_SIZE
+        const end = Math.min(start + CHUNK_SIZE, file.size)
+        if (start >= end) continue
+        
+        const chunk = file.slice(start, end)
+        await uploadChunkWithRetry(uploadId, i, chunk, 3)
 
-        for (let j = i; j < i + batchSize; j++) {
-          const start = j * CHUNK_SIZE
-          const end = Math.min(start + CHUNK_SIZE, file.size)
-          if (start >= end) continue
-          const chunk = file.slice(start, end)
-          batch.push(uploadChunkWithRetry(uploadId, j, chunk, 3))
-        }
-
-        if (batch.length === 0) continue
-        await Promise.all(batch)
-
-        const completed = Math.min(i + CONCURRENT, chunkCount)
-        const progress = Math.round((completed / chunkCount) * 100)
+        const progress = Math.round(((i + 1) / chunkCount) * 100)
         setUploadProgress(progress)
-        setUploadStatus(`上传分片 ${completed}/${chunkCount}`)
+        setUploadStatus(`上传分片 ${i + 1}/${chunkCount}`)
 
-        uploadedBytes = Math.min((i + CONCURRENT) * CHUNK_SIZE, file.size)
+        uploadedBytes = Math.min((i + 1) * CHUNK_SIZE, file.size)
         const elapsed = (Date.now() - startTime) / 1000
         if (elapsed > 0.5) {
           const speed = (uploadedBytes / elapsed / 1024 / 1024).toFixed(1)
@@ -106,7 +100,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
 
       setUploadStatus(`✅ 上传完成! ${(file.size / 1024 / 1024).toFixed(1)}MB`)
       setIsChunkUploading(false)
-      setUploadProgress(0)
+      setUploadProgress(100)
       setUploadSpeed('')
       return completeResult.url
 
@@ -120,13 +114,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     }
   }
 
+  // ✅ 普通上传 - 带进度显示
   const uploadNormalFile = async (file, folder, storage) => {
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('folder', folder)
-    formData.append('storage', storage)
-    formData.append('convertToWebp', convertToWebp ? 'true' : 'false')
-
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       xhr.open('POST', '/api/upload')
@@ -137,6 +126,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         if (e.lengthComputable) {
           const progress = Math.round((e.loaded / e.total) * 100)
           setUploadProgress(progress)
+          setUploadStatus(`上传中 ${progress}%`)
           const elapsed = (Date.now() - startTime) / 1000
           if (elapsed > 0.5) {
             const speed = (e.loaded / elapsed / 1024 / 1024).toFixed(1)
@@ -148,7 +138,10 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       xhr.onload = () => {
         if (xhr.status === 200) {
           try {
-            resolve(JSON.parse(xhr.responseText))
+            const result = JSON.parse(xhr.responseText)
+            setUploadStatus('✅ 上传完成')
+            setUploadProgress(100)
+            resolve(result)
           } catch (e) {
             reject(new Error('解析响应失败'))
           }
@@ -162,11 +155,23 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         }
       }
 
-      xhr.onerror = () => reject(new Error('网络错误'))
-      xhr.ontimeout = () => reject(new Error('上传超时'))
-      xhr.timeout = 120000
+      xhr.onerror = () => {
+        setUploadStatus('❌ 网络错误')
+        reject(new Error('网络错误'))
+      }
+      xhr.ontimeout = () => {
+        setUploadStatus('❌ 上传超时')
+        reject(new Error('上传超时'))
+      }
+      xhr.timeout = 300000
 
-      xhr.send(formData)
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('folder', folder)
+      fd.append('storage', storage)
+      fd.append('convertToWebp', convertToWebp ? 'true' : 'false')
+      
+      xhr.send(fd)
     })
   }
 
@@ -180,32 +185,30 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       if (!file) continue
 
       try {
-        setUploadStatus(`处理: ${file.name}`)
-
-        // 判断是否需要分片（Telegram 且 > 50MB）
-        const needChunk = storageType === 'telegram' && file.size > 50 * 1024 * 1024
+        // ✅ 只要选择 Telegram 存储，就使用分片上传（生成短链接）
+        const useChunk = storageType === 'telegram'
 
         let url
-        if (needChunk) {
+        if (useChunk) {
           if (file.size > 500 * 1024 * 1024) {
             throw new Error('文件超过 500MB，暂不支持')
           }
-          console.log(`📦 大文件 (${(file.size / 1024 / 1024).toFixed(1)}MB)，使用分片上传 (16MB/片)`)
+          console.log(`📦 使用分片上传 (${(file.size / 1024 / 1024).toFixed(1)}MB)`)
           url = await uploadLargeFile(file, folder)
         } else {
-          // 普通上传
-          if (storageType === 'telegram' && file.size > 50 * 1024 * 1024) {
-            throw new Error('Telegram 直接上传限制 50MB，将自动使用分片上传')
-          }
-          if (storageType !== 'telegram' && file.size > 10 * 1024 * 1024) {
+          if (file.size > 10 * 1024 * 1024) {
             throw new Error(`${storageType === 'github' ? 'GitHub' : 'R2'} 限制 10MB，请切换到 Telegram`)
           }
+          setIsNormalUploading(true)
+          setUploadStatus('准备上传...')
+          setUploadProgress(0)
           
           const result = await uploadNormalFile(file, folder, storageType)
           if (!result.success) {
             throw new Error(result.error || '上传失败')
           }
           url = result.url
+          setIsNormalUploading(false)
         }
 
         results.push({
@@ -236,10 +239,16 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     }
 
     setIsChunkUploading(false)
-    setUploadProgress(0)
-    setUploadSpeed('')
+    setIsNormalUploading(false)
     
-    setTimeout(() => setUploadStatus(''), 3000)
+    // 延迟清除状态，让用户看到完成信息
+    setTimeout(() => {
+      if (!uploadStatus.includes('❌')) {
+        setUploadStatus('')
+        setUploadProgress(0)
+        setUploadSpeed('')
+      }
+    }, 3000)
 
     if (onUpload) {
       await onUpload(results)
@@ -292,14 +301,14 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   }, [folder, storageType])
 
   const currentFolder = folderOptions.find(opt => opt.key === folder) || folderOptions[0]
-  const isUploading = isLoading || isChunkUploading
+  const isUploading = isLoading || isChunkUploading || isNormalUploading
 
   return (
     <div className="mb-4">
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 className="font-semibold text-green-500 text-sm flex items-center gap-1">
           <i className="fas fa-upload text-orange-600 text-sm"></i>
-          上传图片
+          上传文件
         </h3>
         <div className="flex items-center gap-2 flex-wrap">
           <button
@@ -337,7 +346,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="radio" name="storageType" value="telegram" checked={storageType === 'telegram'} onChange={(e) => setStorageType(e.target.value)} className="w-3.5 h-3.5 accent-green-500" />
             <span className="text-white/80 text-sm"><i className="fab fa-telegram-plane mr-1"></i>Telegram</span>
-            <span className="text-white/30 text-[10px]">(&lt;50MB 直传，&gt;50MB 分片 16MB)</span>
+            <span className="text-white/30 text-[10px]">(分片上传，短链接)</span>
           </label>
         </div>
       </div>
@@ -358,31 +367,35 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         onDrop={handleDrop}
       >
         <i className="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-3 block"></i>
-        <p className="text-gray-600 dark:text-gray-300 text-base mb-2">点击或拖拽图片到此处上传</p>
-        <p className="text-xs text-gray-400 dark:text-gray-500">支持 JPG、PNG、WebP、GIF、AVIF | 大图自动压缩</p>
+        <p className="text-gray-600 dark:text-gray-300 text-base mb-2">点击或拖拽文件到此处上传</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">支持图片、音频、视频 | 大图自动压缩</p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-1"><i className="fas fa-paste mr-1"></i>也可直接 Ctrl+V 粘贴截图上传</p>
 
         <p className="text-xs mt-2 flex items-center justify-center gap-1 flex-wrap">
           {storageType === 'github' ? (
-            <span className="text-blue-400"><i className="fab fa-github mr-1"></i>将存储到 GitHub 私有仓库 (&lt;10MB)</span>
+            <span className="text-blue-400"><i className="fab fa-github mr-1"></i>存储到 GitHub 私有仓库</span>
           ) : storageType === 'r2' ? (
-            <span className="text-orange-400"><i className="fas fa-cloud-upload-alt mr-1"></i>将存储到 Cloudflare R2 (&lt;10MB)</span>
+            <span className="text-orange-400"><i className="fas fa-cloud-upload-alt mr-1"></i>存储到 Cloudflare R2</span>
           ) : (
-            <span className="text-green-400"><i className="fab fa-telegram-plane mr-1"></i>将存储到 Telegram 频道 (&lt;50MB 直传 / &gt;50MB 分片 16MB)</span>
+            <span className="text-green-400"><i className="fab fa-telegram-plane mr-1"></i>存储到 Telegram（分片上传，生成短链接）</span>
           )}
         </p>
 
+        {/* ✅ 进度条 - 所有上传都会显示 */}
         {isUploading && (
           <div className="mt-4 bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/10">
             <div className="flex justify-between items-center text-sm text-gray-800 dark:text-white/80 mb-2">
-              <span>{uploadStatus}</span>
+              <span>{uploadStatus || '上传中...'}</span>
               <div className="flex items-center gap-3">
                 {uploadSpeed && <span className="text-xs text-green-600 dark:text-green-400">{uploadSpeed}</span>}
                 <span className="font-mono text-gray-800 dark:text-white">{uploadProgress}%</span>
               </div>
             </div>
             <div className="w-full bg-gray-300 dark:bg-gray-700/50 rounded-full h-3 overflow-hidden">
-              <div className="bg-gradient-to-r from-blue-500 to-green-500 h-3 rounded-full transition-all duration-300 ease-out" style={{ width: `${uploadProgress}%` }}></div>
+              <div 
+                className="bg-gradient-to-r from-blue-500 to-green-500 h-3 rounded-full transition-all duration-300 ease-out" 
+                style={{ width: `${Math.max(uploadProgress, 0)}%` }}
+              ></div>
             </div>
           </div>
         )}
@@ -402,15 +415,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         className="hidden" 
         onChange={handleFileSelect} 
       />
-
-      {(isLoading || isUploading) && !uploadStatus && (
-        <div className="mt-3 text-center">
-          <div className="inline-flex items-center gap-2 text-sm text-orange-600">
-            <div className="w-3 h-3 border-2 border-orange-600 border-t-transparent rounded-full animate-spin" />
-            上传中，请稍候...
-          </div>
-        </div>
-      )}
     </div>
   )
 }
