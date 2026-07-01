@@ -1,8 +1,8 @@
 // functions/api/[[path]].js - Cloudflare Pages API 完整入口
 // 支持：stats, random, wallpaper, cover, list, image, upload, history, admin/delete
 // 支持 GitHub、R2、Telegram 三种存储
-// ✅ 普通上传返回短链接 /api/short/xxx.jpg
-// ✅ 分片上传返回短链接 /api/large/xxx.mp4
+// ✅ 流式传输大文件，不合并到内存
+// ✅ btoa 只在 GitHub 分支执行
 
 const GITHUB_USER = 'chnbsdan'
 const GITHUB_REPO = 'cf-pico'
@@ -638,6 +638,9 @@ async function handleUploadChunk(request, env) {
   }
 }
 
+// ============================================================
+// 完成分片上传
+// ============================================================
 async function handleCompleteChunkUpload(request, env) {
   try {
     const { uploadId, folder } = await request.json()
@@ -713,7 +716,7 @@ async function handleCompleteChunkUpload(request, env) {
     await deleteChunkSession(bucket, uploadId)
 
     const baseUrl = new URL(request.url).origin
-    const fileUrl = `${baseUrl}/api/large/${fileId}.${ext}`
+    const fileUrl = `${baseUrl}/api/large/${finalFilename}`
 
     return new Response(JSON.stringify({
       success: true,
@@ -736,17 +739,16 @@ async function handleCompleteChunkUpload(request, env) {
   }
 }
 
-async function handleDownloadLarge(request, env) {
+// ============================================================
+// ✅ 流式下载大文件 - 不合并到内存
+// ============================================================
+async function handleDownloadLarge(request, env, waitUntil) {
   try {
     const url = new URL(request.url)
-    let fileId = url.pathname.split('/').pop()
+    const filename = url.pathname.split('/').pop()
     
-    if (fileId.includes('.')) {
-      fileId = fileId.split('.')[0]
-    }
-    
-    if (!fileId) {
-      return new Response('Missing file ID', { status: 400 })
+    if (!filename) {
+      return new Response('Missing filename', { status: 400 })
     }
 
     const bucket = env.IMAGES_BUCKET
@@ -754,7 +756,25 @@ async function handleDownloadLarge(request, env) {
       return new Response('R2 未配置', { status: 500 })
     }
 
-    const fileMeta = await getCompletedFile(bucket, fileId)
+    // 查找文件元数据
+    let fileMeta = null
+    try {
+      const objects = await bucket.list({ prefix: 'completed_files/' })
+      for (const obj of objects.objects) {
+        try {
+          const object = await bucket.get(obj.key)
+          if (object) {
+            const content = await object.text()
+            const meta = JSON.parse(content)
+            if (meta.filename === filename) {
+              fileMeta = meta
+              break
+            }
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+
     if (!fileMeta) {
       return new Response('文件不存在', { status: 404 })
     }
@@ -764,49 +784,44 @@ async function handleDownloadLarge(request, env) {
       return new Response('Telegram 未配置', { status: 500 })
     }
 
-    const chunks = []
-    for (const chunkInfo of fileMeta.chunks) {
+    // 获取 Content-Type
+    const ext = fileMeta.extension || fileMeta.filename.split('.').pop().toLowerCase()
+    const mimeTypes = {
+      'mp4': 'video/mp4', 'mp3': 'audio/mpeg', 'jpg': 'image/jpeg',
+      'png': 'image/png', 'webp': 'image/webp', 'gif': 'image/gif'
+    }
+    const contentType = mimeTypes[ext] || 'application/octet-stream'
+
+    // ✅ 流式传输
+    const { readable, writable } = new TransformStream()
+    const writer = writable.getWriter()
+
+    const downloadAllChunks = async () => {
       try {
-        const chunkData = await downloadChunkFromTelegram(botToken, chunkInfo.fileId)
-        chunks.push(chunkData)
+        for (const chunkInfo of fileMeta.chunks) {
+          const chunkData = await downloadChunkFromTelegram(botToken, chunkInfo.fileId)
+          await writer.write(new Uint8Array(chunkData))
+        }
+        await writer.close()
       } catch (e) {
-        console.error(`下载分片 ${chunkInfo.index} 失败:`, e)
-        return new Response(`下载分片 ${chunkInfo.index} 失败: ${e.message}`, { status: 500 })
+        console.error('流式下载失败:', e)
+        await writer.abort(e)
       }
     }
 
-    const totalSize = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0)
-    const merged = new Uint8Array(totalSize)
-    let offset = 0
-    for (const chunk of chunks) {
-      merged.set(new Uint8Array(chunk), offset)
-      offset += chunk.byteLength
+    if (waitUntil) {
+      waitUntil(downloadAllChunks())
+    } else {
+      downloadAllChunks().catch(e => console.error('下载失败:', e))
     }
 
-    const ext = fileMeta.extension || fileMeta.filename.split('.').pop().toLowerCase()
-    const mimeTypes = {
-      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
-      'webp': 'image/webp', 'gif': 'image/gif', 'mp4': 'video/mp4',
-      'webm': 'video/webm', 'mp3': 'audio/mpeg', 'wav': 'audio/wav',
-      'ogg': 'audio/ogg', 'flac': 'audio/flac', 'aac': 'audio/aac',
-      'pdf': 'application/pdf', 'zip': 'application/zip',
-      'mov': 'video/quicktime', 'mkv': 'video/x-matroska',
-      'm4a': 'audio/mp4', 'm4v': 'video/mp4'
-    }
-    const contentType = fileMeta.mimeType || mimeTypes[ext] || 'application/octet-stream'
-
-    const inlineExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'mp4', 'webm', 'mov', 'mkv', 'm4v', 'jpg', 'jpeg', 'png', 'webp', 'gif']
-    const isInline = inlineExts.includes(ext)
-    const disposition = isInline ? 'inline' : 'attachment'
-
-    return new Response(merged, {
+    return new Response(readable, {
       headers: {
         'Content-Type': contentType,
-        'Content-Disposition': `${disposition}; filename="${encodeURIComponent(fileMeta.filename)}"`,
-        'Content-Length': String(totalSize),
+        'Content-Disposition': `inline; filename="${encodeURIComponent(fileMeta.filename)}"`,
+        'Content-Length': String(fileMeta.totalSize),
         'Cache-Control': 'public, max-age=86400',
-        'Access-Control-Allow-Origin': '*',
-        'Accept-Ranges': 'bytes'
+        'Access-Control-Allow-Origin': '*'
       }
     })
 
@@ -819,14 +834,10 @@ async function handleDownloadLarge(request, env) {
 async function handleDeleteLarge(request, env) {
   try {
     const url = new URL(request.url)
-    let fileId = url.pathname.split('/').pop()
+    const filename = url.pathname.split('/').pop()
     
-    if (fileId.includes('.')) {
-      fileId = fileId.split('.')[0]
-    }
-    
-    if (!fileId) {
-      return new Response(JSON.stringify({ error: 'Missing file ID' }), { status: 400 })
+    if (!filename) {
+      return new Response(JSON.stringify({ error: 'Missing filename' }), { status: 400 })
     }
 
     const bucket = env.IMAGES_BUCKET
@@ -834,19 +845,32 @@ async function handleDeleteLarge(request, env) {
       return new Response(JSON.stringify({ error: 'R2 未配置' }), { status: 500 })
     }
 
-    const fileMeta = await getCompletedFile(bucket, fileId)
-    if (!fileMeta) {
+    let fileId = null
+    try {
+      const objects = await bucket.list({ prefix: 'completed_files/' })
+      for (const obj of objects.objects) {
+        try {
+          const object = await bucket.get(obj.key)
+          if (object) {
+            const content = await object.text()
+            const meta = JSON.parse(content)
+            if (meta.filename === filename) {
+              fileId = meta.fileId
+              await deleteCompletedFile(bucket, meta.fileId)
+              break
+            }
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+
+    if (!fileId) {
       return new Response(JSON.stringify({ error: '文件不存在' }), { status: 404 })
     }
 
-    await deleteCompletedFile(bucket, fileId)
-
-    const uploadId = fileId.replace('file_', '')
-    await deleteChunkSession(bucket, uploadId)
-
     return new Response(JSON.stringify({
       success: true,
-      message: '文件元数据已删除'
+      message: '文件已删除'
     }), {
       headers: { 'Content-Type': 'application/json' }
     })
@@ -861,30 +885,24 @@ async function handleDeleteLarge(request, env) {
 }
 
 // ============================================================
-// ✅ 新增：短链接处理 - 让普通上传也返回短链接
+// 短链接处理 - 用文件名
 // ============================================================
 async function handleShort(request, env) {
   try {
     const url = new URL(request.url)
-    let fileId = url.pathname.split('/').pop()
+    const filename = url.pathname.split('/').pop()
     
-    if (fileId.includes('.')) {
-      fileId = fileId.split('.')[0]
-    }
-    
-    if (!fileId) {
-      return new Response('Missing file ID', { status: 400 })
+    if (!filename) {
+      return new Response('Missing filename', { status: 400 })
     }
 
     const bucket = env.IMAGES_BUCKET
-    const token = env.GITHUB_TOKEN
     const botToken = env.TG_BOT_TOKEN
 
     let fileMeta = null
     
-    // 1. 先从 R2 查找
     if (bucket) {
-      const metaKey = `telegram_files/${fileId}.json`
+      const metaKey = `telegram_files/${filename}`
       try {
         const object = await bucket.get(metaKey)
         if (object) {
@@ -892,15 +910,6 @@ async function handleShort(request, env) {
           fileMeta = JSON.parse(content)
         }
       } catch (e) {}
-    }
-
-    // 2. 如果 R2 没有，从 GitHub 记录查找
-    if (!fileMeta && token) {
-      const images = await getTelegramImages(token)
-      const record = images.find(img => img.fileId === fileId || img.filePath === fileId)
-      if (record) {
-        fileMeta = record
-      }
     }
 
     if (!fileMeta || !fileMeta.fileId) {
@@ -916,6 +925,242 @@ async function handleShort(request, env) {
   } catch (error) {
     console.error('Short link error:', error)
     return new Response('Internal error: ' + error.message, { status: 500 })
+  }
+}
+
+// ============================================================
+// ✅ 修复：handleUpload - btoa 只在 GitHub 分支执行
+// ============================================================
+async function handleUpload(request, env) {
+  const bucket = env.IMAGES_BUCKET
+  const token = env.GITHUB_TOKEN
+
+  try {
+    const formData = await request.formData()
+    const file = formData.get('file')
+    const folder = formData.get('folder') || 'wallpaper'
+    const storageType = formData.get('storage') || 'github'
+
+    if (!file) {
+      return new Response(JSON.stringify({ error: 'No file uploaded' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    // 文件大小检查
+    if (storageType === 'telegram' && file.size > 50 * 1024 * 1024) {
+      return new Response(JSON.stringify({ 
+        error: '文件超过 50MB，请使用分片上传',
+        needChunkUpload: true,
+        maxDirectSize: 50 * 1024 * 1024
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    if (storageType !== 'telegram' && file.size > 10 * 1024 * 1024) {
+      return new Response(JSON.stringify({ 
+        error: `${storageType === 'github' ? 'GitHub' : 'R2'} 不支持超过 10MB 的文件，请切换到 Telegram`,
+        maxSize: 10 * 1024 * 1024
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    const filename = generateFilename(file.name)
+    // ✅ 只读一次文件内容，供 GitHub 分支使用
+    const arrayBuffer = await file.arrayBuffer()
+    const uint8Array = new Uint8Array(arrayBuffer)
+
+    let uploadedUrl = ''
+    let usedStorage = storageType
+    let tgMessageId = null
+    let tgFileId = null
+    let tgFilePath = null
+
+    // ============================================================
+    // Telegram 存储 - 不需要 btoa
+    // ============================================================
+    if (storageType === 'telegram') {
+      const botToken = env.TG_BOT_TOKEN;
+      const chatId = env.TG_CHAT_ID;
+      
+      if (!botToken || !chatId) {
+        return new Response(JSON.stringify({ error: 'Telegram 存储未配置' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      try {
+        const result = await uploadToTelegram(file, botToken, chatId);
+        tgFileId = result.fileId;
+        tgMessageId = result.messageId;
+        tgFilePath = result.filePath;
+        usedStorage = 'telegram';
+        
+        const baseUrl = new URL(request.url).origin;
+        
+        // ✅ 用自己的文件名
+        uploadedUrl = `${baseUrl}/api/short/${filename}`;
+        
+        // 保存到 R2
+        if (bucket) {
+          try {
+            const metaKey = `telegram_files/${filename}`
+            await bucket.put(metaKey, JSON.stringify({
+              fileId: tgFileId,
+              messageId: tgMessageId,
+              filePath: tgFilePath,
+              filename: filename,
+              originalName: file.name,
+              size: file.size,
+              mimeType: file.type || 'application/octet-stream',
+              uploadedAt: new Date().toISOString()
+            }, null, 2), {
+              httpMetadata: { contentType: 'application/json' }
+            })
+          } catch (e) {
+            console.error('保存短链接记录失败:', e)
+          }
+        }
+        
+        if (token) {
+          const existingImages = await getTelegramImages(token);
+          const exists = existingImages.some(img => img.fileId === tgFileId);
+          if (!exists) {
+            existingImages.push({
+              id: Date.now(),
+              filename: filename,
+              originalName: file.name,
+              fileId: tgFileId,
+              messageId: tgMessageId,
+              filePath: tgFilePath,
+              url: uploadedUrl,
+              time: new Date().toISOString(),
+              size: file.size,
+              mimeType: file.type || 'application/octet-stream'
+            });
+            await saveTelegramImages(token, existingImages);
+            console.log(`✅ Telegram 文件已记录到 GitHub: ${filename}`);
+          }
+        }
+        
+        console.log('Telegram 上传成功:', {
+          fileId: tgFileId,
+          messageId: tgMessageId,
+          filePath: tgFilePath,
+          url: uploadedUrl,
+          size: file.size
+        });
+        
+      } catch (error) {
+        console.error('Telegram upload error:', error)
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+    // ============================================================
+    // R2 存储 - 不需要 btoa
+    // ============================================================
+    } else if (storageType === 'r2') {
+      if (!bucket) {
+        return new Response(JSON.stringify({ error: 'R2 bucket not configured' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      const key = `${folder}/${filename}`
+      await bucket.put(key, arrayBuffer, {
+        httpMetadata: { contentType: file.type || 'image/jpeg' }
+      })
+      const baseUrl = new URL(request.url).origin;
+      uploadedUrl = `${baseUrl}/api/image?path=${key}`
+      usedStorage = 'r2'
+
+    // ============================================================
+    // GitHub 存储 - 需要 btoa（仅图片）
+    // ============================================================
+    } else {
+      if (!token) {
+        return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      
+      // GitHub 只支持图片
+      const ext = file.name.split('.').pop().toLowerCase()
+      const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'ico', 'svg']
+      if (!imageExts.includes(ext)) {
+        return new Response(JSON.stringify({ 
+          error: `GitHub 存储仅支持图片格式，${ext.toUpperCase()} 文件请使用 Telegram 存储` 
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      
+      // ✅ 只有这里才执行 btoa
+      let binary = ''
+      for (let i = 0; i < uint8Array.length; i++) {
+        binary += String.fromCharCode(uint8Array[i])
+      }
+      const base64Content = btoa(binary)
+      
+      const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}/${filename}`
+      const response = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'Cloudflare-Pages'
+        },
+        body: JSON.stringify({
+          message: `Upload ${filename}`,
+          content: base64Content,
+          branch: 'main'
+        })
+      })
+      if (!response.ok) {
+        const error = await response.text()
+        console.error('GitHub upload error:', error)
+        return new Response(JSON.stringify({ error: 'GitHub upload failed' }), {
+          status: response.status,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      const data = await response.json()
+      const baseUrl = new URL(request.url).origin;
+      uploadedUrl = `${baseUrl}/api/image?path=${folder}/${filename}`
+      usedStorage = 'github'
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      filename: filename,
+      folder: folder,
+      url: uploadedUrl,
+      storage: usedStorage,
+      rawUrl: uploadedUrl,
+      tgMessageId: tgMessageId,
+      tgFileId: tgFileId,
+      tgFilePath: tgFilePath,
+      fileSize: file.size
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+  } catch (error) {
+    console.error('Upload error:', error)
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
   }
 }
 
@@ -1092,7 +1337,7 @@ async function handleList(env) {
   
   results['telegram'] = allTelegramImages.map(img => ({
     name: img.filename || img.originalName || 'unknown',
-    url: img.url || (img.fileId ? `/api/large/${img.fileId}.${img.extension || ''}` : ''),
+    url: img.url || (img.fileId ? `/api/large/${img.filename || img.fileId}` : ''),
     path: `telegram/${img.fileId || ''}`,
     sha: img.fileId || '',
     size: img.totalSize || img.size || 0,
@@ -1336,242 +1581,6 @@ async function handleImage(request, env) {
   } catch (error) {
     console.error('GitHub fetch error:', error)
     return new Response('Internal error', { status: 500 })
-  }
-}
-
-// ============================================================
-// ✅ 核心修复：handleUpload - 普通上传也返回短链接
-// ============================================================
-async function handleUpload(request, env) {
-  const bucket = env.IMAGES_BUCKET
-  const token = env.GITHUB_TOKEN
-
-  try {
-    const formData = await request.formData()
-    const file = formData.get('file')
-    const folder = formData.get('folder') || 'wallpaper'
-    const storageType = formData.get('storage') || 'github'
-
-    if (!file) {
-      return new Response(JSON.stringify({ error: 'No file uploaded' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    // 文件大小检查
-    if (storageType === 'telegram' && file.size > 50 * 1024 * 1024) {
-      return new Response(JSON.stringify({ 
-        error: '文件超过 50MB，请使用分片上传',
-        needChunkUpload: true,
-        maxDirectSize: 50 * 1024 * 1024
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    if (storageType !== 'telegram' && file.size > 10 * 1024 * 1024) {
-      return new Response(JSON.stringify({ 
-        error: `${storageType === 'github' ? 'GitHub' : 'R2'} 不支持超过 10MB 的文件，请切换到 Telegram`,
-        maxSize: 10 * 1024 * 1024
-      }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      })
-    }
-
-    const filename = generateFilename(file.name)
-    const arrayBuffer = await file.arrayBuffer()
-    const uint8Array = new Uint8Array(arrayBuffer)
-
-    let uploadedUrl = ''
-    let usedStorage = storageType
-    let tgMessageId = null
-    let tgFileId = null
-    let tgFilePath = null
-
-    // ============================================================
-    // Telegram 存储
-    // ============================================================
-    if (storageType === 'telegram') {
-      const botToken = env.TG_BOT_TOKEN;
-      const chatId = env.TG_CHAT_ID;
-      
-      if (!botToken || !chatId) {
-        return new Response(JSON.stringify({ error: 'Telegram 存储未配置' }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-      
-      try {
-        const result = await uploadToTelegram(file, botToken, chatId);
-        tgFileId = result.fileId;
-        tgMessageId = result.messageId;
-        tgFilePath = result.filePath;
-        usedStorage = 'telegram';
-        
-        const baseUrl = new URL(request.url).origin;
-        const ext = file.name.split('.').pop().toLowerCase();
-        
-        // ✅ 短链接格式
-        uploadedUrl = `${baseUrl}/api/short/${tgFileId}.${ext}`;
-        
-        // ✅ 保存到 R2（供短链接查询）
-        if (bucket) {
-          try {
-            const metaKey = `telegram_files/${tgFileId}.json`
-            await bucket.put(metaKey, JSON.stringify({
-              fileId: tgFileId,
-              messageId: tgMessageId,
-              filePath: tgFilePath,
-              filename: filename,
-              originalName: file.name,
-              size: file.size,
-              mimeType: file.type || 'application/octet-stream',
-              uploadedAt: new Date().toISOString()
-            }, null, 2), {
-              httpMetadata: { contentType: 'application/json' }
-            })
-          } catch (e) {
-            console.error('保存短链接记录失败:', e)
-          }
-        }
-        
-        if (token) {
-          const existingImages = await getTelegramImages(token);
-          const exists = existingImages.some(img => img.fileId === tgFileId);
-          if (!exists) {
-            existingImages.push({
-              id: Date.now(),
-              filename: filename,
-              originalName: file.name,
-              fileId: tgFileId,
-              messageId: tgMessageId,
-              filePath: tgFilePath,
-              url: uploadedUrl,
-              time: new Date().toISOString(),
-              size: file.size,
-              mimeType: file.type || 'application/octet-stream'
-            });
-            await saveTelegramImages(token, existingImages);
-            console.log(`✅ Telegram 文件已记录到 GitHub: ${filename}`);
-          }
-        }
-        
-        console.log('Telegram 上传成功:', {
-          fileId: tgFileId,
-          messageId: tgMessageId,
-          filePath: tgFilePath,
-          url: uploadedUrl,
-          size: file.size
-        });
-        
-      } catch (error) {
-        console.error('Telegram upload error:', error)
-        return new Response(JSON.stringify({ error: error.message }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-
-    // ============================================================
-    // R2 存储
-    // ============================================================
-    } else if (storageType === 'r2') {
-      if (!bucket) {
-        return new Response(JSON.stringify({ error: 'R2 bucket not configured' }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        })
-      }
-      const key = `${folder}/${filename}`
-      await bucket.put(key, arrayBuffer, {
-        httpMetadata: { contentType: file.type || 'image/jpeg' }
-      })
-      const baseUrl = new URL(request.url).origin;
-      uploadedUrl = `${baseUrl}/api/image?path=${key}`
-      usedStorage = 'r2'
-
-    // ============================================================
-    // GitHub 存储 - 需要 btoa（仅图片）
-    // ============================================================
-    } else {
-      if (!token) {
-        return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' }
-        })
-      }
-      
-      // GitHub 只支持图片
-      const ext = file.name.split('.').pop().toLowerCase()
-      const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'ico', 'svg']
-      if (!imageExts.includes(ext)) {
-        return new Response(JSON.stringify({ 
-          error: `GitHub 存储仅支持图片格式，${ext.toUpperCase()} 文件请使用 Telegram 存储` 
-        }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        })
-      }
-      
-      // 只有这里才执行 btoa
-      let binary = ''
-      for (let i = 0; i < uint8Array.length; i++) {
-        binary += String.fromCharCode(uint8Array[i])
-      }
-      const base64Content = btoa(binary)
-      
-      const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}/${filename}`
-      const response = await fetch(apiUrl, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'Cloudflare-Pages'
-        },
-        body: JSON.stringify({
-          message: `Upload ${filename}`,
-          content: base64Content,
-          branch: 'main'
-        })
-      })
-      if (!response.ok) {
-        const error = await response.text()
-        console.error('GitHub upload error:', error)
-        return new Response(JSON.stringify({ error: 'GitHub upload failed' }), {
-          status: response.status,
-          headers: { 'Content-Type': 'application/json' }
-        })
-      }
-      const data = await response.json()
-      const baseUrl = new URL(request.url).origin;
-      uploadedUrl = `${baseUrl}/api/image?path=${folder}/${filename}`
-      usedStorage = 'github'
-    }
-
-    return new Response(JSON.stringify({
-      success: true,
-      filename: filename,
-      folder: folder,
-      url: uploadedUrl,
-      storage: usedStorage,
-      rawUrl: uploadedUrl,
-      tgMessageId: tgMessageId,
-      tgFileId: tgFileId,
-      tgFilePath: tgFilePath,
-      fileSize: file.size
-    }), {
-      headers: { 'Content-Type': 'application/json' }
-    })
-  } catch (error) {
-    console.error('Upload error:', error)
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    })
   }
 }
 
@@ -1827,10 +1836,10 @@ async function handleDelete(request, env) {
         }
       }
       
-      // 同时删除 R2 短链接记录
-      if (bucket && fileId) {
+      // 删除 R2 短链接记录
+      if (bucket && filename) {
         try {
-          const metaKey = `telegram_files/${fileId}.json`
+          const metaKey = `telegram_files/${filename}`
           await bucket.delete(metaKey)
         } catch (e) {}
       }
@@ -1960,7 +1969,8 @@ async function handleTelegramRandom(env, request) {
   const baseUrl = 'https://pico.1356666.xyz';
   const fileId = randomItem.fileId;
   const ext = randomItem.extension || ''
-  const imageUrl = `${baseUrl}/api/large/${fileId}.${ext}`;
+  const filename = randomItem.filename || `${fileId}.${ext}`
+  const imageUrl = `${baseUrl}/api/large/${filename}`;
 
   const url = new URL(request.url);
   const format = url.searchParams.get('format');
@@ -1982,7 +1992,7 @@ async function handleTelegramRandom(env, request) {
   <img id="tgImage" src="${imageUrl}" alt="TG壁纸">
   <script>
     function refreshImage() {
-      document.getElementById('tgImage').src = '/api/large/${fileId}.${ext}?t=' + Date.now();
+      document.getElementById('tgImage').src = '/api/large/${filename}?t=' + Date.now();
       setTimeout(refreshImage, 3600000);
     }
     setTimeout(refreshImage, 3600000);
@@ -2017,7 +2027,7 @@ async function handleTelegramRandom(env, request) {
 // ============================================================
 
 export async function onRequest(context) {
-  const { request, env, params } = context
+  const { request, env, params, waitUntil } = context
   const method = request.method
 
   let path = ''
@@ -2041,14 +2051,14 @@ export async function onRequest(context) {
   }
   if (path.startsWith('large/')) {
     if (method === 'GET') {
-      return handleDownloadLarge(request, env)
+      return handleDownloadLarge(request, env, waitUntil)
     }
     if (method === 'DELETE') {
       return handleDeleteLarge(request, env)
     }
   }
 
-  // ✅ 短链接路由
+  // 短链接路由
   if (path.startsWith('short/')) {
     if (method === 'GET') {
       return handleShort(request, env)
