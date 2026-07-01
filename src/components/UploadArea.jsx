@@ -16,7 +16,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const CHUNK_SIZE = 16 * 1024 * 1024
 
   const folderOptions = [
-    { key: 'wallpaper', label: '横屏片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
+    { key: 'wallpaper', label: '横屏 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
     { key: 'cover', label: '竖屏 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
     { key: 'sh', label: '横屏 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
     { key: 'sd', label: '竖屏 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
@@ -113,63 +113,110 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     }
   }
 
+  // ✅ 支持前端 WebP 转换
   const uploadNormalFile = async (file, folder, storage) => {
     return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest()
-      xhr.open('POST', '/api/upload')
-
-      const startTime = Date.now()
-
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          const progress = Math.round((e.loaded / e.total) * 100)
-          setUploadProgress(progress)
-          setUploadStatus(`上传中 ${progress}%`)
-          const elapsed = (Date.now() - startTime) / 1000
-          if (elapsed > 0.5) {
-            const speed = (e.loaded / elapsed / 1024 / 1024).toFixed(1)
-            setUploadSpeed(`${speed} MB/s`)
-          }
-        }
-      }
-
-      xhr.onload = () => {
-        if (xhr.status === 200) {
+      const processFile = async () => {
+        let fileToUpload = file
+        
+        // 如果勾选了 WebP 转换且是图片，在前端转换
+        if (convertToWebp && file.type && file.type.startsWith('image/')) {
           try {
-            const result = JSON.parse(xhr.responseText)
-            setUploadStatus('✅ 上传完成')
-            setUploadProgress(100)
-            resolve(result)
+            const img = new Image()
+            const objectUrl = URL.createObjectURL(file)
+            
+            await new Promise((resolveImg, rejectImg) => {
+              img.onload = resolveImg
+              img.onerror = rejectImg
+              img.src = objectUrl
+            })
+            
+            const canvas = document.createElement('canvas')
+            canvas.width = img.width
+            canvas.height = img.height
+            const ctx = canvas.getContext('2d')
+            ctx.drawImage(img, 0, 0)
+            
+            const webpBlob = await new Promise(resolveBlob => {
+              canvas.toBlob(resolveBlob, 'image/webp', 0.85)
+            })
+            
+            if (webpBlob) {
+              const webpFile = new File(
+                [webpBlob], 
+                file.name.replace(/\.[^/.]+$/, '') + '.webp', 
+                { type: 'image/webp' }
+              )
+              fileToUpload = webpFile
+              setUploadStatus('✅ WebP 转换完成，开始上传...')
+            }
+            
+            URL.revokeObjectURL(objectUrl)
           } catch (e) {
-            reject(new Error('解析响应失败'))
-          }
-        } else {
-          try {
-            const error = JSON.parse(xhr.responseText)
-            reject(new Error(error.error || `上传失败 (${xhr.status})`))
-          } catch {
-            reject(new Error(`上传失败 (${xhr.status})`))
+            console.log('⚠️ WebP 转换失败，使用原图:', e.message)
+            fileToUpload = file
           }
         }
-      }
+        
+        // 发送请求
+        const xhr = new XMLHttpRequest()
+        xhr.open('POST', '/api/upload')
 
-      xhr.onerror = () => {
-        setUploadStatus('❌ 网络错误')
-        reject(new Error('网络错误'))
-      }
-      xhr.ontimeout = () => {
-        setUploadStatus('❌ 上传超时')
-        reject(new Error('上传超时'))
-      }
-      xhr.timeout = 300000
+        const startTime = Date.now()
 
-      const fd = new FormData()
-      fd.append('file', file)
-      fd.append('folder', folder)
-      fd.append('storage', storage)
-      fd.append('convertToWebp', convertToWebp ? 'true' : 'false')
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const progress = Math.round((e.loaded / e.total) * 100)
+            setUploadProgress(progress)
+            setUploadStatus(`上传中 ${progress}%`)
+            const elapsed = (Date.now() - startTime) / 1000
+            if (elapsed > 0.5) {
+              const speed = (e.loaded / elapsed / 1024 / 1024).toFixed(1)
+              setUploadSpeed(`${speed} MB/s`)
+            }
+          }
+        }
+
+        xhr.onload = () => {
+          if (xhr.status === 200) {
+            try {
+              const result = JSON.parse(xhr.responseText)
+              setUploadStatus('✅ 上传完成')
+              setUploadProgress(100)
+              resolve(result)
+            } catch (e) {
+              reject(new Error('解析响应失败'))
+            }
+          } else {
+            try {
+              const error = JSON.parse(xhr.responseText)
+              reject(new Error(error.error || `上传失败 (${xhr.status})`))
+            } catch {
+              reject(new Error(`上传失败 (${xhr.status})`))
+            }
+          }
+        }
+
+        xhr.onerror = () => {
+          setUploadStatus('❌ 网络错误')
+          reject(new Error('网络错误'))
+        }
+        xhr.ontimeout = () => {
+          setUploadStatus('❌ 上传超时')
+          reject(new Error('上传超时'))
+        }
+        xhr.timeout = 300000
+
+        const fd = new FormData()
+        fd.append('file', fileToUpload)
+        fd.append('folder', folder)
+        fd.append('storage', storage)
+        fd.append('convertToWebp', 'false')
+        
+        xhr.send(fd)
+      }
       
-      xhr.send(fd)
+      processFile()
     })
   }
 
@@ -183,29 +230,28 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       if (!file) continue
 
       try {
-        // 检测文件类型，音频和视频强制走分片（避免 btoa）
+        // 检测文件类型
         const ext = file.name.split('.').pop().toLowerCase()
-        const mediaExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'mp4', 'webm', 'avi', 'mov', 'mkv']
-        const isMedia = mediaExts.includes(ext)
+        const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a']
+        const videoExts = ['mp4', 'webm', 'avi', 'mov', 'mkv']
+        const isAudio = audioExts.includes(ext)
+        const isVideo = videoExts.includes(ext)
         
-        // 媒体文件强制走 Telegram 分片
         let actualStorage = storageType
-        if (isMedia) {
+        if (isAudio || isVideo) {
           actualStorage = 'telegram'
         }
 
-        // 只有 Telegram + 大于16MB 才分片，但媒体文件强制分片
-        const needChunk = actualStorage === 'telegram' && (file.size > 16 * 1024 * 1024 || isMedia)
+        const needChunk = actualStorage === 'telegram' && (file.size > 16 * 1024 * 1024 || isAudio || isVideo)
 
         let url
         if (needChunk) {
           if (file.size > 500 * 1024 * 1024) {
             throw new Error('文件超过 500MB，暂不支持')
           }
-          console.log(`📦 ${isMedia ? '媒体文件' : '大文件'} (${(file.size / 1024 / 1024).toFixed(1)}MB)，使用分片上传`)
+          console.log(`📦 ${isAudio ? '音频' : isVideo ? '视频' : '大文件'} (${(file.size / 1024 / 1024).toFixed(1)}MB)，使用分片上传`)
           url = await uploadLargeFile(file, folder)
         } else {
-          // 普通上传（仅图片）
           if (actualStorage === 'telegram' && file.size > 50 * 1024 * 1024) {
             throw new Error('Telegram 直接上传限制 50MB')
           }
@@ -368,7 +414,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         <label className="flex items-center gap-2 cursor-pointer group" onClick={(e) => e.stopPropagation()}>
           <input type="checkbox" checked={convertToWebp || false} onChange={(e) => onConvertChange?.(e.target.checked)} className="w-4 h-4 rounded border-gray-300 bg-white/80 checked:bg-blue-500 checked:border-blue-500 focus:ring-2 focus:ring-blue-400 focus:ring-offset-0 cursor-pointer" />
           <span className="text-white/80 text-sm group-hover:text-white/100 transition"><i className="fas fa-file-image mr-1"></i>自动转换为 WebP 格式</span>
-          <span className="text-white/40 text-xs hidden sm:inline">(更小体积，相同画质)</span>
+          <span className="text-white/40 text-xs hidden sm:inline">(前端转换)</span>
         </label>
       </div>
 
@@ -381,7 +427,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       >
         <i className="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-3 block"></i>
         <p className="text-gray-600 dark:text-gray-300 text-base mb-2">点击或拖拽文件到此处上传</p>
-        <p className="text-xs text-gray-400 dark:text-gray-500">支持图片、音频、视频 | 媒体文件自动走分片</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500">支持图片、音频、视频 | 媒体文件自动走 Telegram</p>
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-1"><i className="fas fa-paste mr-1"></i>也可直接 Ctrl+V 粘贴截图上传</p>
 
         <p className="text-xs mt-2 flex items-center justify-center gap-1 flex-wrap">
