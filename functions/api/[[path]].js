@@ -229,9 +229,24 @@ async function uploadChunkToTelegram(chunkData, botToken, chatId, chunkIndex, fi
   }
 
   const data = await response.json()
-  const fileId = data.result?.document?.file_id
+  const result = data.result
+  let fileId = null
+  
+  // 多种方式提取 file_id
+  if (result?.document?.file_id) {
+    fileId = result.document.file_id
+  } else if (result?.photo && Array.isArray(result.photo)) {
+    fileId = result.photo[result.photo.length - 1]?.file_id
+  } else if (result?.video?.file_id) {
+    fileId = result.video.file_id
+  } else if (result?.audio?.file_id) {
+    fileId = result.audio.file_id
+  } else if (result?.file_id) {
+    fileId = result.file_id
+  }
   
   if (!fileId) {
+    console.error('❌ 无法提取 file_id，完整响应:', JSON.stringify(data, null, 2))
     throw new Error('Telegram 未返回 file_id')
   }
 
@@ -551,13 +566,25 @@ async function handleUploadChunk(request, env) {
     }
 
     const chunkData = await chunk.arrayBuffer()
-    const fileId = await uploadChunkToTelegram(
-      chunkData, 
-      botToken, 
-      chatId, 
-      chunkIndex, 
-      session.filename
-    )
+    
+    let fileId
+    try {
+      fileId = await uploadChunkToTelegram(
+        chunkData, 
+        botToken, 
+        chatId, 
+        chunkIndex, 
+        session.filename
+      )
+    } catch (uploadError) {
+      console.error(`分片 ${chunkIndex} 上传到 Telegram 失败:`, uploadError)
+      return new Response(JSON.stringify({ 
+        error: `Telegram 上传失败: ${uploadError.message}` 
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
 
     session.uploadedChunks.push({ index: chunkIndex, fileId })
     await saveChunkSession(bucket, uploadId, session)
