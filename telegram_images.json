@@ -238,5 +238,17 @@
     "time": "2026-07-01T06:39:38.745Z",
     "size": 352870,
     "mimeType": "image/jpeg"
+  },
+  {
+    "id": 1782899471889,
+    "filename": "20260701_yj01.webp",
+    "originalName": "yj01.webp",
+    "fileId": "CAACAgUAAyEGAAMBBNJvJQADyGpE4w3ivO-WZX8bUkJUP2e5SUKLAAIXIwACn0QoVk6Obs34VtccPAQ",
+    "messageId": 200,
+    "filePath": "stickers/file_118.webp",
+    "url": "https://pico.1356666.xyz/api/short/20260701_yj01.webp",
+    "time": "2026-07-01T09:51:11.889Z",
+    "size": 303408,
+    "mimeType": "image/webp"
   }
 ]
