@@ -154,5 +154,17 @@
     "time": "2026-07-01T01:55:05.994Z",
     "size": 870330,
     "mimeType": "image/jpeg"
+  },
+  {
+    "id": 1782871299796,
+    "filename": "20260701_background.webp",
+    "originalName": "background.webp",
+    "fileId": "AgACAgUAAyEGAAMBBNJvJQADiGpEdQFkVbEU5-fxKfiLGvn_HVV7AAJ4EWsbn0QgVkMlNglTbG5uAQADAgADdwADPAQ",
+    "messageId": 136,
+    "filePath": "photos/file_76.jpg",
+    "url": "https://pico.1356666.xyz/api/image?path=telegram/AgACAgUAAyEGAAMBBNJvJQADiGpEdQFkVbEU5-fxKfiLGvn_HVV7AAJ4EWsbn0QgVkMlNglTbG5uAQADAgADdwADPAQ",
+    "time": "2026-07-01T02:01:39.796Z",
+    "size": 324962,
+    "mimeType": "image/webp"
   }
 ]
