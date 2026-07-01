@@ -6,6 +6,28 @@ import ThemeToggle from '../components/ThemeToggle'
 // 占位图
 const PLACEHOLDER_SVG = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect fill="%23f0f0f0" width="100" height="100"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23ccc" font-size="20"%3E🖼%3C/text%3E%3C/svg%3E'
 
+// ============================================================
+// 文件类型判断工具函数
+// ============================================================
+
+const isAudioFile = (filename) => {
+  if (!filename) return false
+  const ext = filename.split('.').pop().toLowerCase()
+  const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff']
+  return audioExts.includes(ext)
+}
+
+const isVideoFile = (filename) => {
+  if (!filename) return false
+  const ext = filename.split('.').pop().toLowerCase()
+  const videoExts = ['mp4', 'webm', 'avi', 'mov', 'mkv', 'm4v', 'flv']
+  return videoExts.includes(ext)
+}
+
+const isMediaFile = (filename) => {
+  return isAudioFile(filename) || isVideoFile(filename)
+}
+
 export default function Manage() {
   // ============================================================
   // 基础状态
@@ -59,7 +81,6 @@ export default function Manage() {
     }
   }, [previewScale, previewTranslateX, previewTranslateY]);
 
-  // 打开预览时重置缩放
   const openPreview = (img) => {
     setPreviewImage(img);
     setPreviewScale(1);
@@ -67,7 +88,6 @@ export default function Manage() {
     setPreviewTranslateY(0);
   };
 
-  // 滚轮缩放
   const handleWheel = (e) => {
     if (!previewImage) return;
     e.preventDefault();
@@ -76,7 +96,6 @@ export default function Manage() {
     setPreviewScale(newScale);
   };
 
-  // 鼠标拖拽
   const handleMouseDown = (e) => {
     if (previewScale <= 1) return;
     setIsDragging(true);
@@ -98,7 +117,6 @@ export default function Manage() {
     setIsDragging(false);
   };
 
-  // 触摸拖拽
   const handleTouchStart = (e) => {
     if (previewScale <= 1 || e.touches.length !== 1) return;
     setIsDragging(true);
@@ -120,7 +138,6 @@ export default function Manage() {
     setIsDragging(false);
   };
 
-  // 键盘快捷键：ESC 关闭预览
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -135,22 +152,30 @@ export default function Manage() {
   }, []);
 
   // ============================================================
-  // ✅ 修复：获取图片代理链接（优先使用存储的完整URL）
+  // 获取图片代理链接
   // ============================================================
   const getProxyUrl = (img) => {
-    // ✅ 如果图片自带完整 URL（Telegram 上传时已生成），直接使用
+    // 如果是分片文件（telegram_chunks），使用 /api/large/ 路径
+    if (img.source === 'telegram_chunks' || (img.fileId && img.chunkCount)) {
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+      return `${baseUrl}/api/large/${img.fileId}`
+    }
+    
     if (img.url && img.url.startsWith('http')) {
       return img.url
     }
     
-    // 外部图片（external）直接使用原链接
     if (img.source === 'external') return img.url
     
-    // 兜底：手动拼接（兼容旧数据）
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
     
     if (img.source === 'telegram' && img.filePath) {
       const encodedPath = encodeURIComponent(`telegram/${img.filePath}`)
+      return `${baseUrl}/api/image?path=${encodedPath}`
+    }
+    
+    if (img.fileId && !img.chunkCount) {
+      const encodedPath = encodeURIComponent(`telegram/${img.fileId}`)
       return `${baseUrl}/api/image?path=${encodedPath}`
     }
     
@@ -159,6 +184,9 @@ export default function Manage() {
   }
 
   const getImageAspect = (img) => {
+    // 音频/视频文件用正方形
+    if (isMediaFile(img.name)) return 'aspect-square'
+    
     if (img.folder === 'wallpaper' || img.folder === 'sh') return 'aspect-video'
     if (img.folder === 'cover' || img.folder === 'sd') return 'aspect-9/16'
     if (img.folder === 'telegram') return 'aspect-square'
@@ -333,7 +361,8 @@ export default function Manage() {
           folder: folder,
           sha: img.sha,
           source: img.source,
-          tgMessageId: img.messageId
+          tgMessageId: img.messageId,
+          fileId: img.fileId
         })
       })
       const result = await response.json()
@@ -371,7 +400,8 @@ export default function Manage() {
             folder: activeTab,
             sha: img.sha,
             source: img.source,
-            tgMessageId: img.messageId
+            tgMessageId: img.messageId,
+            fileId: img.fileId
           })
         })
         const result = await response.json()
@@ -569,22 +599,22 @@ export default function Manage() {
 
         <div className="p-3 border-b border-gray-200/30 dark:border-gray-800/30">
           <a
-  href="/"
-  className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600 transition"
->
-  <i className="fas fa-home w-4 text-blue-500"></i>
-  <span className="text-sm">返回首页</span>
-</a>
-<button
-  onClick={() => {
-    setIsAuthenticated(false)
-    localStorage.removeItem('manage_auth')
-  }}
-  className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600 transition mt-1"
->
-  <i className="fas fa-sign-out-alt w-4 text-red-500"></i>
-  <span className="text-sm">退出登录</span>
-</button>
+            href="/"
+            className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600 transition"
+          >
+            <i className="fas fa-home w-4 text-blue-500"></i>
+            <span className="text-sm">返回首页</span>
+          </a>
+          <button
+            onClick={() => {
+              setIsAuthenticated(false)
+              localStorage.removeItem('manage_auth')
+            }}
+            className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600 transition mt-1"
+          >
+            <i className="fas fa-sign-out-alt w-4 text-red-500"></i>
+            <span className="text-sm">退出登录</span>
+          </button>
         </div>
 
         <div className="p-2">
@@ -996,22 +1026,54 @@ export default function Manage() {
                       className={`${aspectClass} bg-gray-100/50 dark:bg-gray-900/50 overflow-hidden cursor-pointer relative`}
                       onClick={() => openPreview(img)}
                     >
-                      <img
-                        src={isLoaded ? proxyUrl : PLACEHOLDER_SVG}
-                        alt={img.name}
-                        loading="lazy"
-                        decoding="async"
-                        className={`w-full h-full object-cover transition-opacity duration-300 ${
-                          isLoaded ? 'opacity-100' : 'opacity-50'
-                        } group-hover:scale-110 transition-transform duration-300`}
-                        onError={(e) => {
-                          e.target.src = PLACEHOLDER_SVG
-                        }}
-                        onLoad={() => {
-                          setLoadedImages(prev => new Set(prev).add(img.name))
-                        }}
-                      />
-                      {!isLoaded && (
+                      {isAudioFile(img.name) ? (
+                        // 音频文件：显示播放器
+                        <div className="flex flex-col items-center justify-center h-full bg-gradient-to-b from-gray-800 to-gray-900 p-3">
+                          <i className="fas fa-music text-4xl text-blue-400 mb-2"></i>
+                          <audio 
+                            controls 
+                            className="w-full max-w-[120px] scale-75 origin-center"
+                            src={proxyUrl}
+                            preload="metadata"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            您的浏览器不支持音频播放
+                          </audio>
+                          <span className="text-white/50 text-[8px] mt-1 truncate w-full text-center">
+                            {img.name}
+                          </span>
+                        </div>
+                      ) : isVideoFile(img.name) ? (
+                        // 视频文件：显示视频预览
+                        <div className="flex items-center justify-center h-full bg-black">
+                          <video 
+                            className="w-full h-full object-cover"
+                            src={proxyUrl}
+                            muted
+                            preload="metadata"
+                            playsInline
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                      ) : (
+                        // 图片文件：正常显示
+                        <img
+                          src={isLoaded ? proxyUrl : PLACEHOLDER_SVG}
+                          alt={img.name}
+                          loading="lazy"
+                          decoding="async"
+                          className={`w-full h-full object-cover transition-opacity duration-300 ${
+                            isLoaded ? 'opacity-100' : 'opacity-50'
+                          } group-hover:scale-110 transition-transform duration-300`}
+                          onError={(e) => {
+                            e.target.src = PLACEHOLDER_SVG
+                          }}
+                          onLoad={() => {
+                            setLoadedImages(prev => new Set(prev).add(img.name))
+                          }}
+                        />
+                      )}
+                      {!isLoaded && !isMediaFile(img.name) && (
                         <div className="absolute inset-0 flex items-center justify-center">
                           <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
                         </div>
@@ -1028,7 +1090,7 @@ export default function Manage() {
                         <span className="text-[8px] text-gray-400">
                           {img.source === 'external' ? '🌐' : 
                            img.source === 'r2' ? '☁️' : 
-                           img.source === 'telegram' ? '✈️' : '📦'}
+                           img.source === 'telegram' || img.source === 'telegram_chunks' ? '✈️' : '📦'}
                         </span>
                         <div className="flex gap-0.5">
                           <button
@@ -1133,18 +1195,38 @@ export default function Manage() {
               onTouchEnd={handleTouchEnd}
               style={{ touchAction: 'none' }}
             >
-              <img
-                id="previewImage"
-                src={getProxyUrl(previewImage)}
-                alt={previewImage.name}
-                className="max-w-[95vw] max-h-[88vh] object-contain select-none pointer-events-none rounded-2xl"
-                style={{
-                  transform: `scale(${previewScale}) translate(${previewTranslateX}px, ${previewTranslateY}px)`,
-                  transition: isDragging ? 'none' : 'transform 0.05s linear',
-                  willChange: 'transform',
-                }}
-                draggable={false}
-              />
+              {isAudioFile(previewImage.name) ? (
+                // 预览音频文件
+                <div className="flex flex-col items-center justify-center bg-gray-900/90 rounded-2xl p-8 max-w-[400px] w-full">
+                  <i className="fas fa-music text-6xl text-blue-400 mb-4"></i>
+                  <p className="text-white text-sm truncate w-full text-center mb-4">{previewImage.name}</p>
+                  <audio controls className="w-full" src={getProxyUrl(previewImage)} autoPlay>
+                    您的浏览器不支持音频播放
+                  </audio>
+                </div>
+              ) : isVideoFile(previewImage.name) ? (
+                // 预览视频文件
+                <video 
+                  controls 
+                  className="max-w-[95vw] max-h-[88vh] object-contain rounded-2xl"
+                  src={getProxyUrl(previewImage)}
+                  autoPlay
+                />
+              ) : (
+                // 预览图片文件
+                <img
+                  id="previewImage"
+                  src={getProxyUrl(previewImage)}
+                  alt={previewImage.name}
+                  className="max-w-[95vw] max-h-[88vh] object-contain select-none pointer-events-none rounded-2xl"
+                  style={{
+                    transform: `scale(${previewScale}) translate(${previewTranslateX}px, ${previewTranslateY}px)`,
+                    transition: isDragging ? 'none' : 'transform 0.05s linear',
+                    willChange: 'transform',
+                  }}
+                  draggable={false}
+                />
+              )}
             </div>
 
             {/* 关闭按钮 */}
@@ -1170,41 +1252,44 @@ export default function Manage() {
 
               <div className="w-px h-5 bg-white/20 mx-1"></div>
 
-              {/* 缩放控制 */}
-              <button
-                onClick={() => {
-                  setPreviewScale(Math.min(previewScale + 0.2, 5))
-                }}
-                className="text-white/60 hover:text-white text-xs p-1.5 rounded hover:bg-white/10 transition"
-                title="放大"
-              >
-                <i className="fas fa-search-plus"></i>
-              </button>
-              <button
-                onClick={() => {
-                  setPreviewScale(Math.max(previewScale - 0.2, 0.2))
-                }}
-                className="text-white/60 hover:text-white text-xs p-1.5 rounded hover:bg-white/10 transition"
-                title="缩小"
-              >
-                <i className="fas fa-search-minus"></i>
-              </button>
-              <button
-                onClick={() => {
-                  setPreviewScale(1)
-                  setPreviewTranslateX(0)
-                  setPreviewTranslateY(0)
-                }}
-                className="text-white/60 hover:text-white text-xs p-1.5 rounded hover:bg-white/10 transition"
-                title="重置"
-              >
-                <i className="fas fa-expand"></i>
-              </button>
-              <span className="text-white/40 text-[10px] min-w-[36px] text-center">
-                {Math.round(previewScale * 100)}%
-              </span>
-
-              <div className="w-px h-5 bg-white/20 mx-1"></div>
+              {/* 缩放控制（仅图片有效） */}
+              {!isMediaFile(previewImage.name) && (
+                <>
+                  <button
+                    onClick={() => {
+                      setPreviewScale(Math.min(previewScale + 0.2, 5))
+                    }}
+                    className="text-white/60 hover:text-white text-xs p-1.5 rounded hover:bg-white/10 transition"
+                    title="放大"
+                  >
+                    <i className="fas fa-search-plus"></i>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPreviewScale(Math.max(previewScale - 0.2, 0.2))
+                    }}
+                    className="text-white/60 hover:text-white text-xs p-1.5 rounded hover:bg-white/10 transition"
+                    title="缩小"
+                  >
+                    <i className="fas fa-search-minus"></i>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPreviewScale(1)
+                      setPreviewTranslateX(0)
+                      setPreviewTranslateY(0)
+                    }}
+                    className="text-white/60 hover:text-white text-xs p-1.5 rounded hover:bg-white/10 transition"
+                    title="重置"
+                  >
+                    <i className="fas fa-expand"></i>
+                  </button>
+                  <span className="text-white/40 text-[10px] min-w-[36px] text-center">
+                    {Math.round(previewScale * 100)}%
+                  </span>
+                  <div className="w-px h-5 bg-white/20 mx-1"></div>
+                </>
+              )}
 
               {/* 操作按钮 */}
               <a
@@ -1249,9 +1334,16 @@ export default function Manage() {
 
               <div className="w-px h-5 bg-white/20 mx-1"></div>
 
-              <span className="text-white/30 text-[10px] hidden sm:inline">
-                🖱️ 滚轮缩放 · 拖拽移动
-              </span>
+              {!isMediaFile(previewImage.name) && (
+                <span className="text-white/30 text-[10px] hidden sm:inline">
+                  🖱️ 滚轮缩放 · 拖拽移动
+                </span>
+              )}
+              {isMediaFile(previewImage.name) && (
+                <span className="text-white/30 text-[10px] hidden sm:inline">
+                  ▶️ 点击播放
+                </span>
+              )}
             </div>
           </div>
         </div>
