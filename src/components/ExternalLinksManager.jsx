@@ -1,22 +1,14 @@
-// src/components/ExternalLinksManager.jsx - 外部图源管理
+// src/components/ExternalLinksManager.jsx - 简化版，不分类
 import React, { useState, useEffect } from 'react'
 
 export default function ExternalLinksManager() {
-  const [links, setLinks] = useState({})
+  const [links, setLinks] = useState([])
   const [loading, setLoading] = useState(true)
-  const [activeFolder, setActiveFolder] = useState('wallpaper')
   const [newUrls, setNewUrls] = useState('')
   const [adding, setAdding] = useState(false)
   const [deleting, setDeleting] = useState(null)
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState('success')
-
-  const folders = [
-    { key: 'wallpaper', label: '横屏图片 (wallpaper)' },
-    { key: 'cover', label: '竖屏图片 (cover)' },
-    { key: 'sh', label: '横屏图片 (sh)' },
-    { key: 'sd', label: '竖屏图片 (sd)' }
-  ]
 
   const loadExternalLinks = async () => {
     setLoading(true)
@@ -24,15 +16,25 @@ export default function ExternalLinksManager() {
       const res = await fetch('/api/external')
       const data = await res.json()
       console.log('📸 加载外链数据:', data)
-      if (data.error) {
-        console.error('加载失败:', data.error)
-        setLinks({ wallpaper: [], cover: [], sh: [], sd: [] })
-      } else {
-        setLinks(data)
+      
+      // ✅ 合并所有分类的外链为一个数组
+      const allLinks = []
+      const folders = ['wallpaper', 'cover', 'sh', 'sd']
+      for (const folder of folders) {
+        if (data[folder]) {
+          for (const url of data[folder]) {
+            allLinks.push({
+              url: url,
+              folder: folder,
+              name: url.split('/').pop() || 'unknown'
+            })
+          }
+        }
       }
+      setLinks(allLinks)
     } catch (err) {
       console.error('加载失败:', err)
-      setLinks({ wallpaper: [], cover: [], sh: [], sd: [] })
+      setLinks([])
     } finally {
       setLoading(false)
     }
@@ -63,7 +65,7 @@ export default function ExternalLinksManager() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           urls: validUrls,
-          folder: activeFolder
+          folder: 'wallpaper' // 默认存到 wallpaper，但显示时合并
         })
       })
       const data = await res.json()
@@ -88,12 +90,16 @@ export default function ExternalLinksManager() {
     
     setDeleting(url)
     try {
+      // 需要知道它在哪个文件夹，从 links 里找
+      const item = links.find(l => l.url === url)
+      const folder = item?.folder || 'wallpaper'
+      
       const res = await fetch('/api/external', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url: url,
-          folder: activeFolder
+          folder: folder
         })
       })
       const data = await res.json()
@@ -116,8 +122,6 @@ export default function ExternalLinksManager() {
     setMessageType(type)
     setTimeout(() => setMessage(''), 3000)
   }
-
-  const currentLinks = links[activeFolder] || []
 
   return (
     <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-white/30 p-6">
@@ -144,21 +148,9 @@ export default function ExternalLinksManager() {
         </div>
       )}
 
-      {/* 分类切换 */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        {folders.map(f => (
-          <button
-            key={f.key}
-            onClick={() => setActiveFolder(f.key)}
-            className={`px-4 py-2 rounded-xl text-sm transition ${
-              activeFolder === f.key
-                ? 'bg-purple-500 text-white shadow-lg'
-                : 'bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70'
-            }`}
-          >
-            {f.label} <span className="ml-1 text-xs opacity-70">({currentLinks.length})</span>
-          </button>
-        ))}
+      {/* ✅ 显示总数量 */}
+      <div className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+        共 {links.length} 条外链
       </div>
 
       {/* 添加外链 */}
@@ -181,12 +173,12 @@ export default function ExternalLinksManager() {
         </button>
       </div>
 
-      {/* 外链列表 */}
+      {/* 外链列表 - 无分类，直接全部显示 */}
       {loading ? (
         <div className="flex justify-center py-10">
           <div className="w-8 h-8 border-2 border-gray-300 border-t-purple-500 rounded-full animate-spin"></div>
         </div>
-      ) : currentLinks.length === 0 ? (
+      ) : links.length === 0 ? (
         <div className="text-center py-10 text-gray-500 dark:text-gray-400">
           <i className="fas fa-link text-4xl mb-2 block"></i>
           <p>暂无外链图片</p>
@@ -194,71 +186,68 @@ export default function ExternalLinksManager() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {currentLinks.map((url, idx) => {
-            const name = url.split('/').pop() || `image_${idx}`
-            return (
-              <div
-                key={idx}
-                className="flex items-center justify-between p-3 bg-white/50 dark:bg-gray-700/50 rounded-xl border border-white/30 dark:border-gray-600 hover:border-purple-400 transition group"
-              >
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <img
-                    src={url}
-                    alt={name}
-                    className="w-12 h-12 rounded-lg object-cover bg-gray-200 dark:bg-gray-800 flex-shrink-0"
-                    onError={(e) => {
-                      e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect fill="%23eee" width="100" height="100"/%3E%3Ctext x="50" y="55" text-anchor="middle" fill="%23aaa" font-size="30"%3E🖼%3C/text%3E%3C/svg%3E'
-                    }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-700 dark:text-gray-300 truncate" title={url}>
-                      {name}
-                    </p>
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-purple-500 hover:text-purple-600 truncate block"
-                      title={url}
-                    >
-                      {url}
-                    </a>
-                  </div>
-                </div>
-                <div className="flex gap-1 ml-2 flex-shrink-0">
-                  <button
-                    onClick={() => window.open(url, '_blank')}
-                    className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-600/50 transition text-gray-400 hover:text-purple-500"
-                    title="打开"
+          {links.map((item, idx) => (
+            <div
+              key={idx}
+              className="flex items-center justify-between p-3 bg-white/50 dark:bg-gray-700/50 rounded-xl border border-white/30 dark:border-gray-600 hover:border-purple-400 transition group"
+            >
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <img
+                  src={item.url}
+                  alt={item.name}
+                  className="w-12 h-12 rounded-lg object-cover bg-gray-200 dark:bg-gray-800 flex-shrink-0"
+                  onError={(e) => {
+                    e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect fill="%23eee" width="100" height="100"/%3E%3Ctext x="50" y="55" text-anchor="middle" fill="%23aaa" font-size="30"%3E🖼%3C/text%3E%3C/svg%3E'
+                  }}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-700 dark:text-gray-300 truncate" title={item.url}>
+                    {item.name}
+                  </p>
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-purple-500 hover:text-purple-600 truncate block"
+                    title={item.url}
                   >
-                    <i className="fas fa-external-link-alt text-xs"></i>
-                  </button>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(url)
-                      showMessage('📋 已复制链接', 'success')
-                    }}
-                    className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-600/50 transition text-gray-400 hover:text-green-500"
-                    title="复制链接"
-                  >
-                    <i className="fas fa-copy text-xs"></i>
-                  </button>
-                  <button
-                    onClick={() => handleDeleteLink(url)}
-                    disabled={deleting === url}
-                    className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-600/50 transition text-gray-400 hover:text-red-500 disabled:opacity-30"
-                    title="删除"
-                  >
-                    {deleting === url ? (
-                      <i className="fas fa-spinner fa-pulse text-xs"></i>
-                    ) : (
-                      <i className="fas fa-trash-alt text-xs"></i>
-                    )}
-                  </button>
+                    {item.url}
+                  </a>
                 </div>
               </div>
-            )
-          })}
+              <div className="flex gap-1 ml-2 flex-shrink-0">
+                <button
+                  onClick={() => window.open(item.url, '_blank')}
+                  className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-600/50 transition text-gray-400 hover:text-purple-500"
+                  title="打开"
+                >
+                  <i className="fas fa-external-link-alt text-xs"></i>
+                </button>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(item.url)
+                    showMessage('📋 已复制链接', 'success')
+                  }}
+                  className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-600/50 transition text-gray-400 hover:text-green-500"
+                  title="复制链接"
+                >
+                  <i className="fas fa-copy text-xs"></i>
+                </button>
+                <button
+                  onClick={() => handleDeleteLink(item.url)}
+                  disabled={deleting === item.url}
+                  className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-600/50 transition text-gray-400 hover:text-red-500 disabled:opacity-30"
+                  title="删除"
+                >
+                  {deleting === item.url ? (
+                    <i className="fas fa-spinner fa-pulse text-xs"></i>
+                  ) : (
+                    <i className="fas fa-trash-alt text-xs"></i>
+                  )}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
