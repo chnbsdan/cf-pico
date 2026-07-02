@@ -1,279 +1,256 @@
-// api/upload.js - 兼容 Vercel 和 Cloudflare，支持 GitHub + R2
-import { createHandler, getEnv, parseMultipart, generateFilename } from './_utils.js'
+// api/upload.js - POST /api/upload 普通上传
+import { GITHUB_USER, GITHUB_REPO, generateFilename } from './utils/helpers.js'
+import { getTelegramImages, saveTelegramImages } from './utils/github.js'
+import { uploadToTelegram } from './utils/telegram.js'
 
-// ============================================================
-// 配置常量
-// ============================================================
-const ALLOWED_FOLDERS = ['wallpaper', 'cover', 'sh', 'sd']
-const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif']
-
-// ============================================================
-// GitHub 上传
-// ============================================================
-async function uploadToGitHub(fileBuffer, filename, folder, env) {
-  const GITHUB_USER = getEnv('GITHUB_USER', env) || 'chnbsdan'
-  const GITHUB_REPO = getEnv('GITHUB_REPO', env) || 'cf-pico'
-  const GITHUB_TOKEN = getEnv('GITHUB_TOKEN', env)
-
-  if (!GITHUB_TOKEN) {
-    throw new Error('GITHUB_TOKEN is not configured')
-  }
-
-  const base64Content = fileBuffer.toString('base64')
-  const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}/${filename}`
-
-  const response = await fetch(apiUrl, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${GITHUB_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      message: `Upload ${filename}`,
-      content: base64Content,
-      branch: 'main'
-    })
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    console.error('GitHub upload error:', errorText)
-    throw new Error('GitHub upload failed')
-  }
-
-  const data = await response.json()
-  return data.content.download_url
-}
-
-// ============================================================
-// R2 上传
-// ============================================================
-async function uploadToR2(fileBuffer, filename, folder, env) {
-  const R2_ACCOUNT_ID = getEnv('R2_ACCOUNT_ID', env)
-  const R2_ACCESS_KEY_ID = getEnv('R2_ACCESS_KEY_ID', env)
-  const R2_SECRET_ACCESS_KEY = getEnv('R2_SECRET_ACCESS_KEY', env)
-  const R2_BUCKET = getEnv('R2_BUCKET', env) || 'pcbed-images'
-
-  if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
-    throw new Error('R2 is not configured')
-  }
-
-  const key = `${folder}/${filename}`
-  const url = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${R2_BUCKET}/${key}`
-
-  // 构建 AWS Signature V4 签名（简化版，生产环境建议使用官方 SDK）
-  const response = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'image/jpeg',
-      'Content-Length': fileBuffer.length.toString(),
-    },
-    body: fileBuffer
-  })
-
-  if (!response.ok) {
-    console.error('R2 upload error:', response.status)
-    throw new Error('R2 upload failed')
-  }
-
-  return `https://${R2_BUCKET}.${R2_ACCOUNT_ID}.r2.dev/${key}`
-}
-
-// ============================================================
-// 预签名 URL 处理
-// ============================================================
-async function handlePresign(req, res, env) {
-  const { filename, folder, storage = 'github' } = req.query
-  const { filename: originalName } = req.body
-
-  const finalFilename = generateFilename(originalName || filename)
-
-  if (storage === 'r2') {
-    const R2_ACCOUNT_ID = getEnv('R2_ACCOUNT_ID', env)
-    const R2_BUCKET = getEnv('R2_BUCKET', env) || 'pcbed-images'
-
-    if (!R2_ACCOUNT_ID) {
-      return res.status(400).json({
-        success: false,
-        error: 'R2 not configured'
-      })
-    }
-
-    return res.status(200).json({
-      success: true,
-      uploadUrl: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${R2_BUCKET}/${folder}/${finalFilename}`,
-      filename: finalFilename,
-      folder: folder,
-      storage: 'r2',
-      headers: {}
-    })
-  } else {
-    const GITHUB_USER = getEnv('GITHUB_USER', env) || 'chnbsdan'
-    const GITHUB_REPO = getEnv('GITHUB_REPO', env) || 'cf-pico'
-    const GITHUB_TOKEN = getEnv('GITHUB_TOKEN', env)
-
-    if (!GITHUB_TOKEN) {
-      return res.status(400).json({
-        success: false,
-        error: 'GITHUB_TOKEN not configured'
-      })
-    }
-
-    const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}/${finalFilename}`
-
-    return res.status(200).json({
-      success: true,
-      uploadUrl: apiUrl,
-      filename: finalFilename,
-      folder: folder,
-      storage: 'github',
-      headers: {
-        'Authorization': `Bearer ${GITHUB_TOKEN}`,
-        'Content-Type': 'application/json'
-      }
-    })
-  }
-}
-
-// ============================================================
-// 传统上传处理
-// ============================================================
-async function handleTraditionalUpload(req, res, env) {
-  const contentType = req.headers['content-type'] || ''
-  const boundary = getBoundary(contentType)
-
-  if (!boundary) {
-    return res.status(400).json({ error: 'Cannot parse boundary' })
-  }
-
-  // 获取请求体
-  let bodyBuffer
-  if (req.body) {
-    bodyBuffer = Buffer.isBuffer(req.body)
-      ? req.body
-      : Buffer.from(req.body)
-  } else {
-    const chunks = []
-    for await (const chunk of req) {
-      chunks.push(chunk)
-    }
-    bodyBuffer = Buffer.concat(chunks)
-  }
-
-  const formData = await parseMultipart(contentType, bodyBuffer)
-  const file = formData.file
-  let targetFolder = formData.folder || 'wallpaper'
-  const storage = req.query.storage || 'github'
-
-  // 验证文件夹
-  if (!ALLOWED_FOLDERS.includes(targetFolder)) {
-    return res.status(400).json({
-      error: `Invalid folder. Use: ${ALLOWED_FOLDERS.join(', ')}`
-    })
-  }
-
-  // 验证文件
-  if (!file || !file.data) {
-    return res.status(400).json({ error: 'No file uploaded' })
-  }
-
-  if (file.size > 25 * 1024 * 1024) {
-    return res.status(400).json({ error: 'File too large (max 25MB)' })
-  }
-
-  const ext = file.filename.split('.').pop().toLowerCase()
-  if (!ALLOWED_EXTENSIONS.includes(ext)) {
-    return res.status(400).json({ error: 'Unsupported file format' })
-  }
-
-  const filename = generateFilename(file.filename)
-  const fileBuffer = file.data
-
-  let uploadedUrl = null
-  let storageUsed = storage
+export async function onRequest(context) {
+  const { request, env } = context
+  const bucket = env.IMAGES_BUCKET
+  const token = env.GITHUB_TOKEN
 
   try {
-    if (storage === 'r2') {
-      uploadedUrl = await uploadToR2(fileBuffer, filename, targetFolder, env)
-    } else {
-      uploadedUrl = await uploadToGitHub(fileBuffer, filename, targetFolder, env)
+    const formData = await request.formData()
+    const file = formData.get('file')
+    const folder = formData.get('folder') || 'wallpaper'
+    const storageType = formData.get('storage') || 'github'
+    const convertToWebp = formData.get('convertToWebp') === 'true'
+
+    if (!file) {
+      return new Response(JSON.stringify({ error: 'No file uploaded' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
     }
 
-    return res.status(200).json({
-      success: true,
-      filename,
-      folder: targetFolder,
-      url: uploadedUrl,
-      storage: storageUsed
-    })
-  } catch (error) {
-    // 如果首选存储失败，尝试备用存储
-    console.error(`Primary storage (${storage}) failed:`, error.message)
+    // 文件大小检查
+    if (storageType === 'telegram' && file.size > 50 * 1024 * 1024) {
+      return new Response(JSON.stringify({ 
+        error: '文件超过 50MB，请使用分片上传',
+        needChunkUpload: true,
+        maxDirectSize: 50 * 1024 * 1024
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
 
-    try {
-      if (storage === 'github') {
-        uploadedUrl = await uploadToR2(fileBuffer, filename, targetFolder, env)
-        storageUsed = 'r2'
-        console.log('Fallback to R2 successful')
-      } else {
-        uploadedUrl = await uploadToGitHub(fileBuffer, filename, targetFolder, env)
-        storageUsed = 'github'
-        console.log('Fallback to GitHub successful')
+    if (storageType !== 'telegram' && file.size > 10 * 1024 * 1024) {
+      return new Response(JSON.stringify({ 
+        error: `${storageType === 'github' ? 'GitHub' : 'R2'} 不支持超过 10MB 的文件，请切换到 Telegram`,
+        maxSize: 10 * 1024 * 1024
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    // WebP 转换
+    let processedFile = file
+    let processedName = file.name
+
+    if (convertToWebp && file.type && file.type.startsWith('image/')) {
+      try {
+        const imageData = await file.arrayBuffer()
+        const blob = new Blob([imageData], { type: file.type })
+        const imageBitmap = await createImageBitmap(blob)
+        
+        const canvas = new OffscreenCanvas(imageBitmap.width, imageBitmap.height)
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(imageBitmap, 0, 0)
+        
+        const webpBlob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.85 })
+        const webpArrayBuffer = await webpBlob.arrayBuffer()
+        const webpFile = new File([webpArrayBuffer], file.name.replace(/\.[^/.]+$/, '') + '.webp', { type: 'image/webp' })
+        
+        processedFile = webpFile
+        processedName = file.name.replace(/\.[^/.]+$/, '') + '.webp'
+        console.log(`✅ 已转换 WebP: ${file.name}`)
+      } catch (e) {
+        console.log('⚠️ WebP 转换失败，使用原图:', e.message)
+        processedFile = file
+        processedName = file.name
+      }
+    }
+
+    const filename = generateFilename(processedName)
+    const arrayBuffer = await processedFile.arrayBuffer()
+    const uint8Array = new Uint8Array(arrayBuffer)
+
+    let uploadedUrl = ''
+    let usedStorage = storageType
+    let tgMessageId = null
+    let tgFileId = null
+    let tgFilePath = null
+
+    // 1. Telegram 存储
+    if (storageType === 'telegram') {
+      const botToken = env.TG_BOT_TOKEN;
+      const chatId = env.TG_CHAT_ID;
+      
+      if (!botToken || !chatId) {
+        return new Response(JSON.stringify({ error: 'Telegram 存储未配置' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      try {
+        const result = await uploadToTelegram(processedFile, botToken, chatId);
+        tgFileId = result.fileId;
+        tgMessageId = result.messageId;
+        tgFilePath = result.filePath;
+        usedStorage = 'telegram';
+        
+        const baseUrl = new URL(request.url).origin;
+        uploadedUrl = `${baseUrl}/api/short/${filename}`;
+        
+        if (bucket) {
+          try {
+            const metaKey = `telegram_files/${filename}`
+            await bucket.put(metaKey, JSON.stringify({
+              fileId: tgFileId,
+              messageId: tgMessageId,
+              filePath: tgFilePath,
+              filename: filename,
+              originalName: processedFile.name,
+              size: processedFile.size,
+              mimeType: processedFile.type || 'application/octet-stream',
+              uploadedAt: new Date().toISOString()
+            }, null, 2), {
+              httpMetadata: { contentType: 'application/json' }
+            })
+          } catch (e) {
+            console.error('保存短链接记录失败:', e)
+          }
+        }
+        
+        if (token) {
+          const existingImages = await getTelegramImages(token);
+          const exists = existingImages.some(img => img.fileId === tgFileId);
+          if (!exists) {
+            existingImages.push({
+              id: Date.now(),
+              filename: filename,
+              originalName: processedFile.name,
+              fileId: tgFileId,
+              messageId: tgMessageId,
+              filePath: tgFilePath,
+              url: uploadedUrl,
+              time: new Date().toISOString(),
+              size: processedFile.size,
+              mimeType: processedFile.type || 'image/jpeg'
+            });
+            await saveTelegramImages(token, existingImages);
+            console.log(`✅ Telegram 文件已记录到 GitHub: ${filename}`);
+          }
+        }
+        
+        console.log('Telegram 上传成功:', {
+          fileId: tgFileId,
+          messageId: tgMessageId,
+          filePath: tgFilePath,
+          url: uploadedUrl,
+          size: processedFile.size
+        });
+        
+      } catch (error) {
+        console.error('Telegram upload error:', error)
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
 
-      return res.status(200).json({
-        success: true,
-        filename,
-        folder: targetFolder,
-        url: uploadedUrl,
-        storage: storageUsed,
-        fallback: true
+    // 2. R2 存储
+    } else if (storageType === 'r2') {
+      if (!bucket) {
+        return new Response(JSON.stringify({ error: 'R2 bucket not configured' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      const key = `${folder}/${filename}`
+      await bucket.put(key, arrayBuffer, {
+        httpMetadata: { contentType: processedFile.type || 'image/webp' }
       })
-    } catch (fallbackError) {
-      console.error('Fallback also failed:', fallbackError.message)
+      const baseUrl = new URL(request.url).origin;
+      uploadedUrl = `${baseUrl}/api/image?path=${key}`
+      usedStorage = 'r2'
 
-      return res.status(500).json({
-        success: false,
-        error: error.message,
-        fallbackError: fallbackError.message
+    // 3. GitHub 存储
+    } else {
+      if (!token) {
+        return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      
+      const ext = processedName.split('.').pop().toLowerCase()
+      const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'ico', 'svg']
+      if (!imageExts.includes(ext)) {
+        return new Response(JSON.stringify({ 
+          error: `GitHub 存储仅支持图片格式，${ext.toUpperCase()} 文件请使用 Telegram 存储` 
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      
+      let binary = ''
+      for (let i = 0; i < uint8Array.length; i++) {
+        binary += String.fromCharCode(uint8Array[i])
+      }
+      const base64Content = btoa(binary)
+      
+      const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}/${filename}`
+      const response = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'Cloudflare-Pages'
+        },
+        body: JSON.stringify({
+          message: `Upload ${filename}`,
+          content: base64Content,
+          branch: 'main'
+        })
       })
+      if (!response.ok) {
+        const error = await response.text()
+        console.error('GitHub upload error:', error)
+        return new Response(JSON.stringify({ error: 'GitHub upload failed' }), {
+          status: response.status,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      const data = await response.json()
+      const baseUrl = new URL(request.url).origin;
+      uploadedUrl = `${baseUrl}/api/image?path=${folder}/${filename}`
+      usedStorage = 'github'
     }
+
+    return new Response(JSON.stringify({
+      success: true,
+      filename: filename,
+      folder: folder,
+      url: uploadedUrl,
+      storage: usedStorage,
+      rawUrl: uploadedUrl,
+      tgMessageId: tgMessageId,
+      tgFileId: tgFileId,
+      tgFilePath: tgFilePath,
+      fileSize: processedFile.size,
+      converted: convertToWebp && processedFile.type === 'image/webp'
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    })
+  } catch (error) {
+    console.error('Upload error:', error)
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    })
   }
 }
-
-// ============================================================
-// 主处理函数
-// ============================================================
-async function uploadHandler(req, res) {
-  // 获取环境变量（兼容两种平台）
-  const env = req.env || process.env
-
-  // 设置 CORS 头
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-
-  // 处理预检请求
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end()
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
-
-  const { action, storage = 'github' } = req.query
-
-  if (action === 'presign') {
-    return handlePresign(req, res, env)
-  }
-
-  return handleTraditionalUpload(req, res, env)
-}
-
-function getBoundary(contentType) {
-  const match = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/)
-  return match ? (match[1] || match[2]) : null
-}
-
-// 导出兼容层处理后的函数
-export default createHandler(uploadHandler)
