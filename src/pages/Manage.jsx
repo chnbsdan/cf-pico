@@ -1,4 +1,4 @@
-// src/pages/Manage.jsx - 图片管理页面（密码从环境变量读取 + 历史记录搜索 + Telegram 分类）
+// src/pages/Manage.jsx - 图片管理页面（密码从环境变量读取 + 历史记录搜索 + Telegram 分类 + 外链图片）
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { fetchImageList, copyToClipboard, batchCopyLinks } from '../lib/api'
 import ThemeToggle from '../components/ThemeToggle'
@@ -8,6 +8,8 @@ import BatchActionBar from '../components/BatchActionBar'
 import FileDetailDialog from '../components/FileDetailDialog'
 import FilterDropdown from '../components/FilterDropdown'
 import SkeletonLoader from '../components/SkeletonLoader'
+// ✅ 新增：外链图片管理
+import ExternalLinksManager from '../components/ExternalLinksManager'
 
 // 占位图
 const PLACEHOLDER_SVG = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect fill="%23f0f0f0" width="100" height="100"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23ccc" font-size="20"%3E🖼%3C/text%3E%3C/svg%3E'
@@ -42,7 +44,8 @@ export default function Manage() {
   const [password, setPassword] = useState('')
   const [passwordError, setPasswordError] = useState(false)
   
-  const [images, setImages] = useState({ wallpaper: [], cover: [], sh: [], sd: [], telegram: [] })
+  // ✅ 添加 external: [] 
+  const [images, setImages] = useState({ wallpaper: [], cover: [], sh: [], sd: [], telegram: [], external: [] })
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('wallpaper')
   const [copiedId, setCopiedId] = useState(null)
@@ -335,7 +338,7 @@ export default function Manage() {
     setLoadedImages(new Set())
     try {
       const data = await fetchImageList()
-      setImages(data.folders || { wallpaper: [], cover: [], sh: [], sd: [], telegram: [] })
+      setImages(data.folders || { wallpaper: [], cover: [], sh: [], sd: [], telegram: [], external: [] })
     } catch (err) {
       console.error('加载图片列表失败:', err)
     } finally {
@@ -424,7 +427,7 @@ export default function Manage() {
     await loadImages()
   }
 
-  // ✅ 批量复制（使用新组件）
+  // ✅ 批量复制
   const handleBatchCopy = async () => {
     const urls = paginatedImages
       .filter(img => selectedImages.has(img.name))
@@ -696,6 +699,26 @@ export default function Manage() {
             </span>
           </div>
 
+          {/* ✅ 外链图片 */}
+          <div
+            onClick={() => handleTabChange('external')}
+            className={`
+              flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 mt-2
+              ${activeTab === 'external'
+                ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400 bg-white/20 backdrop-blur-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600'
+              }
+            `}
+          >
+            <div className="flex items-center gap-2">
+              <i className="fas fa-link text-sm"></i>
+              <span className="text-sm font-medium">外链图片</span>
+            </div>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-white/30 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300">
+              {images['external']?.length || 0}
+            </span>
+          </div>
+
           <div
             onClick={() => handleTabChange('history')}
             className={`
@@ -731,6 +754,8 @@ export default function Manage() {
                     ? 'fa-mobile-alt text-purple-500'
                     : activeTab === 'telegram'
                     ? 'fa-paper-plane text-green-500'
+                    : activeTab === 'external'
+                    ? 'fa-link text-purple-500'
                     : 'fa-history text-teal-500'
                   }
                 `}></i>
@@ -744,9 +769,11 @@ export default function Manage() {
                   ? '竖屏图片 (sd)'
                   : activeTab === 'telegram'
                   ? 'Telegram 图片'
+                  : activeTab === 'external'
+                  ? '外链图片'
                   : '上传历史'}
               </h2>
-              {activeTab !== 'history' && (
+              {activeTab !== 'history' && activeTab !== 'external' && (
                 <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
                   共 {totalCount} 张图片 · 第 {currentPage}/{totalPages || 1} 页
                 </p>
@@ -756,8 +783,13 @@ export default function Manage() {
                   共 {filteredHistory.length} 条记录
                 </p>
               )}
+              {activeTab === 'external' && (
+                <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
+                  共 {images['external']?.length || 0} 条外链
+                </p>
+              )}
             </div>
-            {activeTab !== 'history' && totalPages > 1 && (
+            {activeTab !== 'history' && activeTab !== 'external' && totalPages > 1 && (
               <div className="flex gap-1">
                 <button
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
@@ -781,8 +813,8 @@ export default function Manage() {
           </div>
         </div>
 
-        {/* ✅ 搜索框 + 筛选下拉 */}
-        {activeTab !== 'history' && (
+        {/* ✅ 搜索框 + 筛选下拉（外链页面不显示） */}
+        {activeTab !== 'history' && activeTab !== 'external' && (
           <div className="mb-4 flex flex-wrap gap-2">
             <div className="relative flex-1 min-w-[200px]">
               <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 dark:text-blue-400 text-sm"></i>
@@ -805,7 +837,6 @@ export default function Manage() {
                 </button>
               )}
             </div>
-            {/* ✅ 筛选下拉 */}
             <FilterDropdown
               filters={filters}
               onFilterChange={setFilters}
@@ -846,8 +877,8 @@ export default function Manage() {
           </div>
         )}
 
-        {/* 批量操作栏（保留原有逻辑） */}
-        {activeTab !== 'history' && selectedImages.size > 0 && (
+        {/* 批量操作栏（外链页面不显示） */}
+        {activeTab !== 'history' && activeTab !== 'external' && selectedImages.size > 0 && (
           <div className="bg-blue-50/80 dark:bg-blue-900/30 backdrop-blur-sm rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-blue-200/50 dark:border-blue-800/50">
             <span className="text-blue-700 dark:text-blue-300 text-sm flex items-center gap-2">
               <i className="fas fa-check-circle"></i>
@@ -902,9 +933,12 @@ export default function Manage() {
         )}
 
         {/* ============================================================
-            内容区域 - ✅ 使用新组件
+            内容区域
             ============================================================ */}
-        {activeTab === 'history' ? (
+        {activeTab === 'external' ? (
+          // ✅ 外链图片管理
+          <ExternalLinksManager />
+        ) : activeTab === 'history' ? (
           historyLoading ? (
             <div className="flex justify-center items-center py-20">
               <i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i>
@@ -982,7 +1016,6 @@ export default function Manage() {
             </div>
           )
         ) : loading ? (
-          // ✅ 使用骨架屏
           <SkeletonLoader count={12} type="card" />
         ) : paginatedImages.length === 0 ? (
           <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl">
@@ -1007,7 +1040,6 @@ export default function Manage() {
                 const aspectClass = getImageAspect(img)
                 const isLoaded = loadedImages.has(img.name)
 
-                // ✅ 使用 FileCard 组件
                 return (
                   <FileCard
                     key={img.sha || idx}
@@ -1066,7 +1098,7 @@ export default function Manage() {
       </div>
 
       {/* ============================================================
-          ✅ 文件详情弹窗（来自 Sanyue-ImgHub）
+          文件详情弹窗
           ============================================================ */}
       <FileDetailDialog
         file={detailFile}
@@ -1081,9 +1113,9 @@ export default function Manage() {
       />
 
       {/* ============================================================
-          ✅ 批量操作栏（来自 Sanyue-ImgHub）- 固定在底部
+          批量操作栏 - 固定在底部（外链页面不显示）
           ============================================================ */}
-      {activeTab !== 'history' && (
+      {activeTab !== 'history' && activeTab !== 'external' && (
         <BatchActionBar
           selectedCount={selectedImages.size}
           totalCount={paginatedImages.length}
@@ -1095,7 +1127,7 @@ export default function Manage() {
       )}
 
       {/* ============================================================
-          预览弹窗 - 保持原有逻辑
+          预览弹窗
           ============================================================ */}
       {previewImage && (
         <div
