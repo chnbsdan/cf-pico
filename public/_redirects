@@ -1,6 +1,0 @@
-# 静态资源直接放行
-/logo.png -
-/favicon.ico -
-
-# SPA 路由
-/* /index.html 200
