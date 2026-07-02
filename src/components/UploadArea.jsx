@@ -239,22 +239,22 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         }
         
         // 2. 客户端压缩（如果启用且文件超过阈值）
-        if (storage === 'telegram' && fileToUpload.size / 1024 / 1024 > compressBar) {
-          try {
-            const imageConversion = await import('image-conversion')
-            const compressed = await imageConversion.compressAccurately(
-              fileToUpload, 
-              1024 * compressQuality
-            )
-            if (compressed && compressed.size < fileToUpload.size) {
-              const newFile = new File([compressed], fileToUpload.name, { type: compressed.type })
-              fileToUpload = newFile
-              setUploadStatus(`✅ 压缩完成 (${(file.size / 1024 / 1024).toFixed(1)}MB → ${(compressed.size / 1024 / 1024).toFixed(1)}MB)`)
-            }
-          } catch (e) {
-            console.log('⚠️ 压缩失败，使用原图:', e.message)
-          }
-        }
+     //   if (storage === 'telegram' && fileToUpload.size / 1024 / 1024 > compressBar) {
+     //     try {
+     //       const imageConversion = await import('image-conversion')
+    //        const compressed = await imageConversion.compressAccurately(
+    //          fileToUpload, 
+    //          1024 * compressQuality
+    //        )
+   //         if (compressed && compressed.size < fileToUpload.size) {
+    //          const newFile = new File([compressed], fileToUpload.name, { type: compressed.type })
+  //            fileToUpload = newFile
+       //       setUploadStatus(`✅ 压缩完成 (${(file.size / 1024 / 1024).toFixed(1)}MB → ${(compressed.size / 1024 / 1024).toFixed(1)}MB)`)
+    //        }
+  //        } catch (e) {
+  //          console.log('⚠️ 压缩失败，使用原图:', e.message)
+  //        }
+  //      }
         
         // 发送请求
         const xhr = new XMLHttpRequest()
