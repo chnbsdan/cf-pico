@@ -1,65 +1,134 @@
-// api/image.js - 图片代理
-const GITHUB_USER = process.env.GITHUB_USER || 'chnbsdan'
-const GITHUB_REPO = process.env.GITHUB_REPO || 'pcbed'
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN
+// api/image.js - GET /api/image 图片代理
+import { getTelegramImages } from './utils/github.js'
+import { getCompletedFile } from './utils/r2.js'
+import { getTelegramFileContentByFileId } from './utils/telegram.js'
 
-// 允许的文件夹列表（添加 sh 和 sd）
-const ALLOWED_FOLDERS = ['wallpaper', 'cover', 'sh', 'sd']
-
-function getContentType(filename) {
-  const ext = filename.split('.').pop().toLowerCase()
-  const types = {
-    'jpg': 'image/jpeg',
-    'jpeg': 'image/jpeg',
-    'png': 'image/png',
-    'webp': 'image/webp',
-    'gif': 'image/gif',
-    'avif': 'image/avif'
-  }
-  return types[ext] || 'image/jpeg'
-}
-
-export default async function handler(req, res) {
-  const { path } = req.query
+export async function onRequest(context) {
+  const { request, env } = context
+  const url = new URL(request.url)
+  const path = url.searchParams.get('path')
   
   if (!path) {
-    return res.status(400).send('Missing path parameter')
+    return new Response('Missing path parameter', { status: 400 })
   }
-  
+
+  const bucket = env.IMAGES_BUCKET
+  const token = env.GITHUB_TOKEN
   const parts = path.split('/')
   const folder = parts[0]
   const filename = parts.slice(1).join('/')
-  
-  // 验证文件夹是否允许
-  if (!ALLOWED_FOLDERS.includes(folder)) {
-    return res.status(403).send(`Invalid folder: ${folder}`)
+  const allowedFolders = ['wallpaper', 'cover', 'sh', 'sd', 'telegram']
+
+  if (!allowedFolders.includes(folder)) {
+    return new Response('Invalid folder', { status: 403 })
   }
-  
-  if (!filename || filename.includes('..')) {
-    return res.status(403).send('Invalid filename')
+
+  // Telegram 文件
+  if (folder === 'telegram') {
+    const botToken = env.TG_BOT_TOKEN;
+    if (!botToken) {
+      return new Response('Telegram 未配置', { status: 500 });
+    }
+
+    let fileId = null
+
+    if (bucket) {
+      const metaKey = `completed_files/${filename}.json`
+      try {
+        const object = await bucket.get(metaKey)
+        if (object) {
+          const content = await object.text()
+          const meta = JSON.parse(content)
+          if (meta.fileId) {
+            fileId = meta.fileId
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (!fileId && token) {
+      try {
+        const images = await getTelegramImages(token)
+        const record = images.find(img => img.filePath === filename || img.fileId === filename)
+        if (record) {
+          fileId = record.fileId
+        }
+      } catch (e) {}
+    }
+
+    if (!fileId) {
+      fileId = filename
+    }
+
+    try {
+      return await getTelegramFileContentByFileId(botToken, fileId)
+    } catch (error) {
+      console.error('Telegram fetch error:', error)
+      return new Response(`Telegram 文件获取失败: ${error.message}`, { status: 404 })
+    }
   }
-  
-  const rawUrl = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/${folder}/${filename}`
-  
+
+  // R2 存储
+  if (bucket) {
+    try {
+      const object = await bucket.get(path)
+      if (object) {
+        const contentType = object.httpMetadata?.contentType || 'image/jpeg'
+        const body = await object.arrayBuffer()
+        
+        return new Response(body, {
+          status: 200,
+          headers: {
+            'Content-Type': contentType,
+            'Cache-Control': 'public, max-age=86400',
+            'Access-Control-Allow-Origin': '*'
+          }
+        })
+      }
+    } catch (e) {
+      console.log('R2 miss, trying GitHub:', e.message)
+    }
+  }
+
+  // GitHub 存储
+  if (!token) {
+    return new Response('GITHUB_TOKEN not configured', { status: 500 })
+  }
+
+  const rawUrl = `https://raw.githubusercontent.com/chnbsdan/cf-pico/main/${folder}/${filename}`
+
   try {
     const response = await fetch(rawUrl, {
-      headers: GITHUB_TOKEN ? {
-        'Authorization': `Bearer ${GITHUB_TOKEN}`,
-        'User-Agent': 'Vercel-Serverless'
-      } : {}
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'User-Agent': 'Cloudflare-Pages'
+      }
     })
-    
+
     if (!response.ok) {
-      return res.status(404).send('Image not found')
+      return new Response('Image not found', { status: 404 })
     }
-    
+
+    const ext = filename.split('.').pop().toLowerCase()
+    const contentTypes = {
+      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+      'webp': 'image/webp', 'gif': 'image/gif', 'avif': 'image/avif',
+      'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'ogg': 'audio/ogg',
+      'mp4': 'video/mp4', 'webm': 'video/webm'
+    }
+    const contentType = contentTypes[ext] || 'image/jpeg'
     const body = await response.arrayBuffer()
-    res.setHeader('Content-Type', getContentType(filename))
-    res.setHeader('Cache-Control', 'public, max-age=86400')
-    res.setHeader('Content-Disposition', 'inline')
-    res.send(Buffer.from(body))
+
+    return new Response(body, {
+      status: 200,
+      headers: {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*'
+      }
+    })
   } catch (error) {
-    console.error('Proxy error:', error)
-    res.status(500).send('Internal error')
+    console.error('GitHub fetch error:', error)
+    return new Response('Internal error', { status: 500 })
   }
 }
