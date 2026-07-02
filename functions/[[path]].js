@@ -1,7 +1,6 @@
-// functions/[[path]].js - 处理 SPA 路由 + API 兜底
-
+// functions/[[path]].js - 只处理 API 和 SPA 路由
 export async function onRequest(context) {
-  const { request, params, env } = context
+  const { request, params } = context
 
   let path = ''
   if (Array.isArray(params.path)) {
@@ -10,8 +9,14 @@ export async function onRequest(context) {
     path = params.path || ''
   }
 
-  // ✅ 如果是 API 请求，交给 api/ 目录处理
-  // 如果走到这里，说明 api/ 目录没有匹配的路由
+  // 静态文件让 _redirects 处理，这里直接返回 404 跳过
+  const staticExts = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'css', 'js', 'woff', 'woff2', 'ttf', 'eot']
+  const ext = path.split('.').pop()
+  if (staticExts.includes(ext)) {
+    return new Response(null, { status: 404 })
+  }
+
+  // API 请求
   if (path.startsWith('api/')) {
     return new Response(JSON.stringify({ error: 'API not found', path }), {
       status: 404,
@@ -19,26 +24,10 @@ export async function onRequest(context) {
     })
   }
 
-  // ✅ 非 API 请求：返回 index.html（SPA 路由）
-  // 直接返回 index.html 内容
-  try {
-    // 从环境变量获取静态文件
-    // 在 Cloudflare Pages 中，静态文件通过 env.ASSETS 访问
-    const assets = env.ASSETS
-    if (assets) {
-      const response = await assets.fetch(request)
-      if (response.ok) {
-        return response
-      }
-    }
-  } catch (e) {
-    console.error('从 ASSETS 获取失败:', e)
-  }
-
-  // 备用方案：从当前站点获取 index.html
+  // SPA 路由
   try {
     const url = new URL(request.url)
-    const origin = `${url.protocol}//${url.hostname}${url.port ? ':' + url.port : ''}`
+    const origin = `${url.protocol}//${url.hostname}`
     const indexResponse = await fetch(`${origin}/index.html`)
     if (indexResponse.ok) {
       return new Response(indexResponse.body, {
@@ -48,12 +37,7 @@ export async function onRequest(context) {
         }
       })
     }
-  } catch (e) {
-    console.error('获取 index.html 失败:', e)
-  }
+  } catch (e) {}
 
-  return new Response(JSON.stringify({ error: 'Not found', path }), {
-    status: 404,
-    headers: { 'Content-Type': 'application/json' }
-  })
+  return new Response('Not found', { status: 404 })
 }
