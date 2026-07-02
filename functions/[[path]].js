@@ -1,9 +1,7 @@
-// functions/[[path]].js - 路由分发（精简版）
-// 所有路由已拆分到 api/ 目录下，此文件只做兜底
+// functions/[[path]].js - 处理 SPA 路由 + API 兜底
 
 export async function onRequest(context) {
-  const { request, params } = context
-  const method = request.method
+  const { request, params, env } = context
 
   let path = ''
   if (Array.isArray(params.path)) {
@@ -12,11 +10,49 @@ export async function onRequest(context) {
     path = params.path || ''
   }
 
-  console.log(`API 请求: ${method} ${path}`)
+  // ✅ 如果是 API 请求，交给 api/ 目录处理
+  // 如果走到这里，说明 api/ 目录没有匹配的路由
+  if (path.startsWith('api/')) {
+    return new Response(JSON.stringify({ error: 'API not found', path }), {
+      status: 404,
+      headers: { 'Content-Type': 'application/json' }
+    })
+  }
 
-  // 所有路由都在 api/ 目录下处理
-  // 如果走到这里，说明没有匹配的路由
-  return new Response(JSON.stringify({ error: 'API not found', path }), {
+  // ✅ 非 API 请求：返回 index.html（SPA 路由）
+  // 直接返回 index.html 内容
+  try {
+    // 从环境变量获取静态文件
+    // 在 Cloudflare Pages 中，静态文件通过 env.ASSETS 访问
+    const assets = env.ASSETS
+    if (assets) {
+      const response = await assets.fetch(request)
+      if (response.ok) {
+        return response
+      }
+    }
+  } catch (e) {
+    console.error('从 ASSETS 获取失败:', e)
+  }
+
+  // 备用方案：从当前站点获取 index.html
+  try {
+    const url = new URL(request.url)
+    const origin = `${url.protocol}//${url.hostname}${url.port ? ':' + url.port : ''}`
+    const indexResponse = await fetch(`${origin}/index.html`)
+    if (indexResponse.ok) {
+      return new Response(indexResponse.body, {
+        headers: {
+          'Content-Type': 'text/html',
+          'Cache-Control': 'no-cache'
+        }
+      })
+    }
+  } catch (e) {
+    console.error('获取 index.html 失败:', e)
+  }
+
+  return new Response(JSON.stringify({ error: 'Not found', path }), {
     status: 404,
     headers: { 'Content-Type': 'application/json' }
   })
