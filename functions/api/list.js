@@ -10,6 +10,9 @@ export async function onRequest(context) {
   const results = {}
   let total = 0
 
+  // ============================================================
+  // 1. Telegram 图片
+  // ============================================================
   let telegramImages = []
   if (token) {
     telegramImages = await getTelegramImages(token)
@@ -56,7 +59,10 @@ export async function onRequest(context) {
   }))
   total += results['telegram'].length
 
-  let externalImages = {}
+  // ============================================================
+  // 2. ✅ 外部图源 - 独立分类
+  // ============================================================
+  let externalImages = []
   if (token) {
     try {
       const extUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/external.json`
@@ -70,15 +76,37 @@ export async function onRequest(context) {
         const data = await response.json()
         const content = atob(data.content)
         const external = JSON.parse(content)
+        // 合并所有分类的外链
         for (const folder of folders) {
-          externalTotal += (external[folder] || []).length
+          if (external[folder]) {
+            for (const url of external[folder]) {
+              const name = url.split('/').pop() || 'unknown'
+              externalImages.push({
+                name: name,
+                url: url,
+                path: `external/${name}`,
+                sha: '',
+                size: 0,
+                folder: 'external',
+                source: 'external',
+                // ✅ 记录原始分类，方便前端筛选
+                originalFolder: folder
+              })
+            }
+          }
         }
       }
     } catch (e) {
       console.error('Failed to fetch external.json:', e)
     }
   }
+  
+  results['external'] = externalImages
+  total += externalImages.length
 
+  // ============================================================
+  // 3. GitHub + R2 图片
+  // ============================================================
   for (const folder of folders) {
     const images = []
     const seen = new Set()
@@ -130,24 +158,6 @@ export async function onRequest(context) {
         }
       } catch (e) {
         console.error(`R2 list error for ${folder}:`, e)
-      }
-    }
-
-    const extList = externalImages[folder] || []
-    for (const url of extList) {
-      const name = url.split('/').pop()
-      const key = `${folder}/${name}`
-      if (!seen.has(key)) {
-        seen.add(key)
-        images.push({
-          name: name,
-          url: url,
-          path: key,
-          sha: '',
-          size: 0,
-          folder: folder,
-          source: 'external'
-        })
       }
     }
 
