@@ -359,8 +359,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           if (actualStorage === 'telegram' && file.size > 50 * 1024 * 1024) {
             throw new Error('Telegram 直接上传限制 50MB')
           }
-          if (actualStorage !== 'telegram' && file.size > 10 * 1024 * 1024) {
-            throw new Error(`${actualStorage === 'github' ? 'GitHub' : 'R2'} 限制 10MB，请切换到 Telegram`)
+          if (actualStorage !== 'telegram' && file.size > 25 * 1024 * 1024) {
+            throw new Error(`${actualStorage === 'github' ? 'GitHub' : 'R2'} 限制 25MB，请切换到 Telegram`)
           }
           
           setIsNormalUploading(true)
