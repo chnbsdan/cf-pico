@@ -1,4 +1,4 @@
-// src/components/ExternalLinksManager.jsx - 简化版，不分类
+// src/components/ExternalLinksManager.jsx - 完整版（带预览）
 import React, { useState, useEffect } from 'react'
 
 export default function ExternalLinksManager() {
@@ -9,6 +9,8 @@ export default function ExternalLinksManager() {
   const [deleting, setDeleting] = useState(null)
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState('success')
+  // ✅ 预览状态
+  const [previewImage, setPreviewImage] = useState(null)
 
   const loadExternalLinks = async () => {
     setLoading(true)
@@ -17,7 +19,6 @@ export default function ExternalLinksManager() {
       const data = await res.json()
       console.log('📸 加载外链数据:', data)
       
-      // ✅ 合并所有分类的外链为一个数组
       const allLinks = []
       const folders = ['wallpaper', 'cover', 'sh', 'sd']
       for (const folder of folders) {
@@ -65,11 +66,10 @@ export default function ExternalLinksManager() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           urls: validUrls,
-          folder: 'wallpaper' // 默认存到 wallpaper，但显示时合并
+          folder: 'wallpaper'
         })
       })
       const data = await res.json()
-      console.log('📤 添加外链响应:', data)
       if (data.success) {
         showMessage(`✅ 成功添加 ${data.added} 条外链`, 'success')
         setNewUrls('')
@@ -90,7 +90,6 @@ export default function ExternalLinksManager() {
     
     setDeleting(url)
     try {
-      // 需要知道它在哪个文件夹，从 links 里找
       const item = links.find(l => l.url === url)
       const folder = item?.folder || 'wallpaper'
       
@@ -148,7 +147,6 @@ export default function ExternalLinksManager() {
         </div>
       )}
 
-      {/* ✅ 显示总数量 */}
       <div className="mb-4 text-sm text-gray-500 dark:text-gray-400">
         共 {links.length} 条外链
       </div>
@@ -173,7 +171,7 @@ export default function ExternalLinksManager() {
         </button>
       </div>
 
-      {/* 外链列表 - 无分类，直接全部显示 */}
+      {/* 外链列表 - 点击图片可预览 */}
       {loading ? (
         <div className="flex justify-center py-10">
           <div className="w-8 h-8 border-2 border-gray-300 border-t-purple-500 rounded-full animate-spin"></div>
@@ -192,10 +190,12 @@ export default function ExternalLinksManager() {
               className="flex items-center justify-between p-3 bg-white/50 dark:bg-gray-700/50 rounded-xl border border-white/30 dark:border-gray-600 hover:border-purple-400 transition group"
             >
               <div className="flex items-center gap-3 flex-1 min-w-0">
+                {/* ✅ 点击图片预览大图 */}
                 <img
                   src={item.url}
                   alt={item.name}
-                  className="w-12 h-12 rounded-lg object-cover bg-gray-200 dark:bg-gray-800 flex-shrink-0"
+                  className="w-12 h-12 rounded-lg object-cover bg-gray-200 dark:bg-gray-800 flex-shrink-0 cursor-pointer hover:opacity-80 transition"
+                  onClick={() => setPreviewImage(item.url)}
                   onError={(e) => {
                     e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect fill="%23eee" width="100" height="100"/%3E%3Ctext x="50" y="55" text-anchor="middle" fill="%23aaa" font-size="30"%3E🖼%3C/text%3E%3C/svg%3E'
                   }}
@@ -248,6 +248,37 @@ export default function ExternalLinksManager() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ✅ 预览弹窗 */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-[300] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={previewImage}
+              alt="预览"
+              className="max-w-[90vw] max-h-[85vh] object-contain rounded-xl"
+              onError={(e) => {
+                e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect fill="%23333" width="100" height="100"/%3E%3Ctext x="50" y="55" text-anchor="middle" fill="%23666" font-size="30"%3E❌%3C/text%3E%3C/svg%3E'
+              }}
+            />
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="absolute top-2 right-2 text-white/70 hover:text-white text-2xl w-10 h-10 flex items-center justify-center rounded-full bg-black/50 hover:bg-black/70 transition"
+            >
+              <i className="fas fa-times"></i>
+            </button>
+            <button
+              onClick={() => window.open(previewImage, '_blank')}
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 hover:text-white text-sm px-4 py-2 rounded-lg bg-black/50 hover:bg-black/70 transition"
+            >
+              <i className="fas fa-external-link-alt mr-1"></i>打开原图
+            </button>
+          </div>
         </div>
       )}
     </div>
