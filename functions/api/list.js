@@ -1,6 +1,5 @@
 // functions/api/list.js - GET /api/list
 import { getFolderImages, getTelegramImages } from './utils/github.js'
-import { GITHUB_USER, GITHUB_REPO } from './utils/helpers.js'
 
 export async function onRequest(context) {
   const { env } = context
@@ -61,8 +60,11 @@ export async function onRequest(context) {
   total += results['telegram'].length
 
   // ============================================================
-  // 2. ✅ 外部图源 - 独立分类
+  // 2. ✅ 外部图源 - 硬编码 GITHUB_USER 和 GITHUB_REPO
   // ============================================================
+  const GITHUB_USER = 'chnbsdan'
+  const GITHUB_REPO = 'cf-pico'
+  
   let externalImages = []
   if (token) {
     try {
@@ -77,7 +79,6 @@ export async function onRequest(context) {
         const data = await response.json()
         const content = atob(data.content)
         const external = JSON.parse(content)
-        // 合并所有分类的外链
         for (const folder of folders) {
           if (external[folder]) {
             for (const url of external[folder]) {
