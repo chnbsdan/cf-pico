@@ -34,10 +34,10 @@ export async function onRequest(context) {
       })
     }
 
-    if (storageType !== 'telegram' && file.size > 10 * 1024 * 1024) {
+    if (storageType !== 'telegram' && file.size > 25 * 1024 * 1024) {
       return new Response(JSON.stringify({ 
         error: `${storageType === 'github' ? 'GitHub' : 'R2'} 不支持超过 10MB 的文件，请切换到 Telegram`,
-        maxSize: 10 * 1024 * 1024
+        maxSize: 25 * 1024 * 1024
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
