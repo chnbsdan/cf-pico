@@ -1,4 +1,5 @@
-// functions/[[path]].js - 路由分发（完整版）
+// functions/[[path]].js - 处理 SPA 路由 + API 兜底
+
 export async function onRequest(context) {
   const { request, params, env } = context
 
@@ -9,32 +10,32 @@ export async function onRequest(context) {
     path = params.path || ''
   }
 
-  console.log(`请求路径: ${path}`)
-
-  // ============================================================
-  // 1. 静态资源直接放行（让 Pages 处理）
-  // ============================================================
-  const staticExts = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'css', 'js', 'woff', 'woff2', 'ttf', 'eot', 'json', 'xml', 'txt']
-  const ext = path.split('.').pop()
-  if (staticExts.includes(ext)) {
-    // 不处理，让 Cloudflare Pages 直接返回静态文件
-    return new Response(null, { status: 404 })
-  }
-
-  // ============================================================
-  // 2. API 请求交给 api/ 目录
-  // ============================================================
+  // ✅ 如果是 API 请求，交给 api/ 目录处理
+  // 如果走到这里，说明 api/ 目录没有匹配的路由
   if (path.startsWith('api/')) {
-    // 如果 api/ 目录没有匹配，返回 404
     return new Response(JSON.stringify({ error: 'API not found', path }), {
       status: 404,
       headers: { 'Content-Type': 'application/json' }
     })
   }
 
-  // ============================================================
-  // 3. 非 API 请求返回 index.html（SPA 路由）
-  // ============================================================
+  // ✅ 非 API 请求：返回 index.html（SPA 路由）
+  // 直接返回 index.html 内容
+  try {
+    // 从环境变量获取静态文件
+    // 在 Cloudflare Pages 中，静态文件通过 env.ASSETS 访问
+    const assets = env.ASSETS
+    if (assets) {
+      const response = await assets.fetch(request)
+      if (response.ok) {
+        return response
+      }
+    }
+  } catch (e) {
+    console.error('从 ASSETS 获取失败:', e)
+  }
+
+  // 备用方案：从当前站点获取 index.html
   try {
     const url = new URL(request.url)
     const origin = `${url.protocol}//${url.hostname}${url.port ? ':' + url.port : ''}`
@@ -43,7 +44,7 @@ export async function onRequest(context) {
       return new Response(indexResponse.body, {
         headers: {
           'Content-Type': 'text/html',
-          'Cache-Control': 'no-cache, no-store, must-revalidate'
+          'Cache-Control': 'no-cache'
         }
       })
     }
