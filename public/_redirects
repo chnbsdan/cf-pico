@@ -1,0 +1,6 @@
+# 静态文件直接放行
+/logo.png -
+/favicon.ico -
+
+# SPA 路由
+/* /index.html 200
