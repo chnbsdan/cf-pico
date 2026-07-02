@@ -432,14 +432,21 @@ function App() {
       </div>
 
       <a
-        href="https://github.com/chnbsdan/cf-pico"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="fixed top-1 left-1 z-50"
-        title="GitHub 仓库"
-      >
-        <img src="/logo.png" alt="Logo" className="w-12 h-12 hover:opacity-80 transition-opacity" />
-      </a>
+  href="https://github.com/chnbsdan/cf-pico"
+  target="_blank"
+  rel="noopener noreferrer"
+  className="fixed top-1 left-1 z-50 group"
+  title="GitHub 仓库"
+>
+  <div className="relative">
+    <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 opacity-0 group-hover:opacity-100 blur-lg transition-opacity duration-300 -inset-1"></div>
+    <img
+      src="/logo.png"
+      alt="Logo"
+      className="w-12 h-12 rounded-xl shadow-lg relative transition-all duration-300 group-hover:animate-logo-shake group-hover:scale-105"
+    />
+  </div>
+</a>
 
       <div className="max-w-4xl mx-auto">
         <Header />
