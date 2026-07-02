@@ -24,7 +24,8 @@
 - ☁️ **R2 存储支持** - 支持 Cloudflare R2 作为存储，CDN 加速
 - ✈️ **Telegram 存储支持** - 支持 Telegram 频道作为存储后端
 - 🌐 **代理访问** - 通过 `/api/image?path=` 统一代理，不暴露后端域名
-- 🚀 **大文件上传** - 最大支持 50MB（Telegram 限制）
+- 🚀 **大文件分片上传** - 支持最大 500MB 文件，分片上传到 Telegram
+- 📦 **流式下载** - 大文件流式传输，不占用服务器内存
 
 ### 管理后台
 - 🔐 **密码保护** - 管理页面需要密码登录（支持环境变量配置）
@@ -38,15 +39,16 @@
 - 📦 **批量操作** - 批量复制链接（URL/Markdown/HTML）、批量删除
 
 ### 图片处理
-- 🔄 **WebP 转换** - 上传时可选择自动转换为 WebP 格式
+- 🔄 **WebP 转换** - 上传时可选择自动转换为 WebP 格式（前端转换）
 - 📷 **原格式保留** - 不转换时保持原格式上传
-- ⚡ **自动压缩** - 超过 5MB 的图片自动压缩
+- ⚡ **自动压缩** - 超过阈值自动压缩（可配置）
 
 ### 界面特性
 - 🎲 **随机背景** - 每次刷新页面背景随机变化
 - 🌫️ **毛玻璃效果** - 现代化毛玻璃界面设计
 - 🌙 **暗色/亮色主题** - 支持一键切换明暗主题
 - 🎨 **响应式布局** - 完美适配 PC、平板、手机
+- 🖱️ **粘贴上传** - 支持 Ctrl+V 粘贴截图上传
 
 ---
 
@@ -142,6 +144,15 @@ FOLDER_COVER=cover
 | `/api/list` | GET | 返回所有图片列表（按分类分组） |
 | `/api/stats` | GET | 返回统计信息 |
 | `/api/image` | GET | 代理访问图片（参数：path=分类/文件名） |
+| `/api/large/{fileId}.{ext}` | GET | 下载大文件（流式传输，支持断点续传） |
+| `/api/short/{filename}` | GET | 短链接访问（用文件名访问 Telegram 文件） |
+
+### 分片上传接口
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/upload/init` | POST | 初始化分片上传 |
+| `/api/upload/chunk` | POST | 上传单个分片 |
+| `/api/upload/complete` | POST | 完成分片上传（合并） |
 
 ### 管理接口
 | 接口 | 方法 | 说明 |
@@ -176,6 +187,12 @@ curl -X POST \
 
 # 代理访问图片
 https://your-domain.com/api/image?path=wallpaper/20260617_image.jpg
+
+# 访问大文件（带扩展名）
+https://your-domain.com/api/large/file_xxx.mp4
+
+# 短链接访问
+https://your-domain.com/api/short/20260701_photo.jpg
 ```
 
 ---
@@ -184,29 +201,58 @@ https://your-domain.com/api/image?path=wallpaper/20260617_image.jpg
 
 ```
 cf-pico/
-├── functions/
-│   └── api/
-│       └── [[path]].js    # Cloudflare Pages Functions（统一 API 入口）
+├── functions/                    # Cloudflare Pages Functions
+│   ├── api/
+│   │   ├── utils/                # 公共工具函数
+│   │   │   ├── helpers.js        # 通用辅助函数
+│   │   │   ├── r2.js             # R2 存储操作
+│   │   │   ├── telegram.js       # Telegram 存储操作
+│   │   │   └── github.js         # GitHub 存储操作
+│   │   ├── upload/               # 分片上传
+│   │   │   ├── init.js           # 初始化分片
+│   │   │   ├── chunk.js          # 上传分片
+│   │   │   └── complete.js       # 完成分片
+│   │   ├── large/                # 大文件操作
+│   │   │   └── [id].js           # 下载/删除大文件
+│   │   ├── short/                # 短链接
+│   │   │   └── [id].js           # 短链接访问
+│   │   ├── upload.js             # 普通上传
+│   │   ├── list.js               # 文件列表
+│   │   ├── stats.js              # 统计信息
+│   │   ├── random.js             # 随机图片
+│   │   ├── wallpaper.js          # 壁纸
+│   │   ├── cover.js              # 封面
+│   │   ├── image.js              # 图片代理
+│   │   ├── tg.js                 # Telegram 随机
+│   │   ├── history.js            # 历史记录
+│   │   └── admin/
+│   │       └── delete.js         # 删除文件
+│   └── [[path]].js               # 路由兜底（SPA 支持）
 ├── src/
-│   ├── components/        # UI 组件
+│   ├── components/               # UI 组件
 │   │   ├── Header.jsx
 │   │   ├── StatsCard.jsx
 │   │   ├── UploadArea.jsx
 │   │   ├── UploadResult.jsx
 │   │   ├── ThemeToggle.jsx
+│   │   ├── FileCard.jsx          # 文件卡片（管理后台）
+│   │   ├── BatchActionBar.jsx    # 批量操作栏
+│   │   ├── FileDetailDialog.jsx  # 文件详情弹窗
+│   │   ├── FilterDropdown.jsx    # 筛选下拉
+│   │   ├── SkeletonLoader.jsx    # 骨架屏加载
 │   │   └── Footer.jsx
 │   ├── pages/
-│   │   ├── Manage.jsx     # 图片管理页面
-│   │   └── ApiDocs.jsx    # API 文档页面
+│   │   ├── Manage.jsx            # 图片管理页面
+│   │   └── ApiDocs.jsx           # API 文档页面
 │   ├── lib/
-│   │   └── api.js         # API 调用封装
+│   │   └── api.js                # API 调用封装
 │   ├── App.jsx
 │   ├── main.jsx
 │   └── index.css
 ├── public/
-│   ├── _redirects         # SPA 路由支持
-│   └── favicon.ico
-├── .env.production        # 生产环境变量（可选）
+│   ├── favicon.ico
+│   └── logo.png                  # 自定义 Logo（可选）
+├── .env.production               # 生产环境变量（可选）
 ├── package.json
 └── README.md
 ```
@@ -229,6 +275,9 @@ cf-pico/
 | 批量复制 | 支持复制 URL/Markdown/HTML |
 | 批量删除 | 勾选多张图片一键删除 |
 | 上传历史 | 查看所有上传记录，支持搜索和批量删除 |
+| 文件详情 | 点击图片查看详细信息（大小、渠道、链接等） |
+| 筛选功能 | 按文件类型、存储渠道、文件夹筛选 |
+| 骨架屏加载 | 加载时显示占位骨架屏，提升体验 |
 
 ---
 
@@ -261,7 +310,6 @@ cf-pico/
 | 变量名 | 必填 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `IMAGES_BUCKET` | ❌ | 无 | R2 存储桶绑定（在 Pages 设置中绑定） |
-| `R2_PUBLIC_URL` | ❌ | 无 | R2 存储桶公共访问 URL（使用 R2 时需要） |
 
 ### Telegram 存储（可选）
 | 变量名 | 必填 | 默认值 | 说明 |
@@ -299,13 +347,26 @@ npm run preview
 |------|------|
 | **前端** | React 18 + Vite + Tailwind CSS |
 | **图标** | Font Awesome 6 |
-| **后端** | Cloudflare Pages Functions |
+| **后端** | Cloudflare Pages Functions（拆分路由） |
 | **存储** | GitHub 私有仓库 + Cloudflare R2 + Telegram 频道 |
 | **部署** | Cloudflare Pages |
 
 ---
 
 ## 🔄 更新日志
+
+### v2.4 (2026-07-02)
+- 🚀 **代码拆分重构** - 将 `[[path]].js` 拆分为 20+ 个独立路由文件
+- 🚀 **短链接支持** - 新增 `/api/short/{filename}` 短链接访问
+- 🚀 **大文件流式下载** - 支持超大文件流式传输，不占用服务器内存
+- 🚀 **管理后台增强** - 新增文件详情弹窗、批量操作栏、筛选下拉、骨架屏加载
+- 🚀 **文件卡片组件** - 统一展示图片/音频/视频文件
+- 🐛 **修复 btoa 错误** - `btoa()` 只在 GitHub 分支执行，MP3/视频走 Telegram 不触发
+- 🐛 **修复链接扩展名** - 大文件链接带 `.mp4`/`.mp3` 等扩展名
+- 🐛 **修复 _redirects 静态资源拦截** - 静态文件不被路由拦截
+- ✨ **图片 WEBP 转换** - 前端 Canvas 转换，更可靠
+- ✨ **前端压缩** - 图片压缩阈值可配置
+- 🎨 **设置弹窗** - 压缩质量、命名方式等设置整合到弹窗
 
 ### v2.3 (2026-06-23)
 - ✨ **新增 Telegram 存储支持** - 用户可选择将图片上传到 Telegram 频道
@@ -356,3 +417,17 @@ npm run preview
 ---
 
 如果觉得这个项目对你有帮助，欢迎 ⭐ Star 支持！
+```
+
+---
+
+## 更新内容总结
+
+| 修改项 | 说明 |
+|--------|------|
+| 项目结构 | 更新为拆分后的真实目录结构 |
+| API 接口 | 新增 `/api/large/`、`/api/short/`、分片上传接口 |
+| 新增组件 | `FileCard.jsx`、`BatchActionBar.jsx`、`FileDetailDialog.jsx`、`FilterDropdown.jsx`、`SkeletonLoader.jsx` |
+| 更新日志 | 新增 v2.4 版本记录 |
+| 功能描述 | 大文件分片上传、流式下载、短链接、前端 WEBP 转换 |
+
