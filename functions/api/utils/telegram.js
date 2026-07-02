@@ -234,3 +234,19 @@ export async function deleteTelegramFile(botToken, chatId, messageId) {
   );
   return response.ok;
 }
+
+// ✅ 新增：从 R2 获取已完成文件元数据
+// 这个函数原本在 r2.js 中，但为了减少 image.js 的导入依赖，直接在这里也导出一份
+export async function getCompletedFile(bucket, fileId) {
+  if (!bucket) return null
+  const key = `completed_files/${fileId}.json`
+  try {
+    const object = await bucket.get(key)
+    if (!object) return null
+    const content = await object.text()
+    return JSON.parse(content)
+  } catch (e) {
+    console.error('获取文件元数据失败:', e)
+    return null
+  }
+}
