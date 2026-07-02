@@ -12,14 +12,15 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const [isChunkUploading, setIsChunkUploading] = useState(false)
   const [isNormalUploading, setIsNormalUploading] = useState(false)
   const fileInputRef = useRef(null)
+  const glowRef = useRef(null)
 
-  // ✅ 新增：上传队列控制
+  // 上传队列控制
   const [uploadQueue, setUploadQueue] = useState([])
   const [activeUploads, setActiveUploads] = useState(0)
   const maxConcurrentUploads = 3
   const abortControllers = useRef(new Map())
 
-  // ✅ 新增：设置状态
+  // 设置状态
   const [showSettings, setShowSettings] = useState(false)
   const [compressQuality, setCompressQuality] = useState(4)
   const [compressBar, setCompressBar] = useState(5)
@@ -27,7 +28,31 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const [autoRetry, setAutoRetry] = useState(true)
   const [uploadNameType, setUploadNameType] = useState('default')
 
-  // ✅ 新增：WebP 转换独立函数
+  const CHUNK_SIZE = 16 * 1024 * 1024
+
+  // ============================================================
+  // 光效函数
+  // ============================================================
+  const handleCardMouseMove = (e) => {
+    const glow = glowRef.current
+    if (!glow) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    glow.style.opacity = '1'
+    glow.style.left = x + 'px'
+    glow.style.top = y + 'px'
+  }
+
+  const handleCardMouseLeave = () => {
+    const glow = glowRef.current
+    if (!glow) return
+    glow.style.opacity = '0'
+  }
+
+  // ============================================================
+  // WebP 转换
+  // ============================================================
   const convertImageToWebp = useCallback((file) => {
     return new Promise((resolve, reject) => {
       if (file.type.includes('gif') || file.type.includes('svg') || file.type.includes('webp')) {
@@ -72,8 +97,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     })
   }, [])
 
-  const CHUNK_SIZE = 16 * 1024 * 1024
-
   const folderOptions = [
     { key: 'wallpaper', label: '横屏图片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
     { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
@@ -92,19 +115,9 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     img.src = url
   }
 
-  // ✅ 新增：处理上传队列
-  const processUploadQueue = useCallback(() => {
-    if (uploadQueue.length === 0 || activeUploads >= maxConcurrentUploads) {
-      return
-    }
-    const nextFile = uploadQueue.shift()
-    if (nextFile) {
-      setUploadQueue([...uploadQueue])
-      // 实际上传由调用方触发
-    }
-  }, [uploadQueue, activeUploads])
-
-  // ✅ 新增：分片上传带重试（指数退避）
+  // ============================================================
+  // 分片上传带重试
+  // ============================================================
   const uploadChunkWithRetry = async (uploadId, chunkIndex, chunk, maxRetries = 3) => {
     let lastError
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -116,7 +129,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         lastError = e.message
       }
       if (attempt < maxRetries) {
-        const delay = 2000 * attempt // 指数退避：2s, 4s, 6s
+        const delay = 2000 * attempt
         await new Promise(r => setTimeout(r, delay))
         setUploadStatus(`重试分片 ${chunkIndex + 1} (${attempt}/${maxRetries})...`)
       }
@@ -124,9 +137,20 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     throw new Error(`分片 ${chunkIndex + 1} 上传失败: ${lastError}`)
   }
 
-  // ✅ 增强版大文件上传（带队列控制）
+  const processUploadQueue = useCallback(() => {
+    if (uploadQueue.length === 0 || activeUploads >= maxConcurrentUploads) {
+      return
+    }
+    const nextFile = uploadQueue.shift()
+    if (nextFile) {
+      setUploadQueue([...uploadQueue])
+    }
+  }, [uploadQueue, activeUploads])
+
+  // ============================================================
+  // 大文件上传
+  // ============================================================
   const uploadLargeFile = async (file, folder) => {
-    // 并发控制
     if (activeUploads >= maxConcurrentUploads) {
       return new Promise((resolve) => {
         setUploadQueue(prev => [...prev, { file, folder, resolve }])
@@ -155,7 +179,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       let uploadedBytes = 0
 
       for (let i = 0; i < chunkCount; i++) {
-        // 检查是否被取消
         if (abortController.signal.aborted) {
           throw new Error('上传已取消')
         }
@@ -200,11 +223,9 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     } catch (error) {
       console.error('大文件上传失败:', error)
       
-      // ✅ 自动重试
       if (autoRetry && error.message !== '上传已取消') {
-        setUploadStatus(`⚠️ 上传失败，${autoRetry ? '自动重试中...' : '请手动重试'}`)
+        setUploadStatus(`⚠️ 上传失败，自动重试中...`)
         await new Promise(r => setTimeout(r, 3000))
-        // 重试逻辑：重新调用自身
         return uploadLargeFile(file, folder)
       }
       
@@ -219,13 +240,14 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     }
   }
 
-  // ✅ 增强版普通上传（支持 WebP 转换 + 压缩）
+  // ============================================================
+  // 普通上传
+  // ============================================================
   const uploadNormalFile = async (file, folder, storage) => {
     return new Promise((resolve, reject) => {
       const processFile = async () => {
         let fileToUpload = file
         
-        // 1. WebP 转换
         if (convertToWebp && file.type && file.type.startsWith('image/')) {
           try {
             const converted = await convertImageToWebp(file)
@@ -238,25 +260,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           }
         }
         
-        // 2. 客户端压缩（如果启用且文件超过阈值）
-     //   if (storage === 'telegram' && fileToUpload.size / 1024 / 1024 > compressBar) {
-     //     try {
-     //       const imageConversion = await import('image-conversion')
-    //        const compressed = await imageConversion.compressAccurately(
-    //          fileToUpload, 
-    //          1024 * compressQuality
-    //        )
-   //         if (compressed && compressed.size < fileToUpload.size) {
-    //          const newFile = new File([compressed], fileToUpload.name, { type: compressed.type })
-  //            fileToUpload = newFile
-       //       setUploadStatus(`✅ 压缩完成 (${(file.size / 1024 / 1024).toFixed(1)}MB → ${(compressed.size / 1024 / 1024).toFixed(1)}MB)`)
-    //        }
-  //        } catch (e) {
-  //          console.log('⚠️ 压缩失败，使用原图:', e.message)
-  //        }
-  //      }
-        
-        // 发送请求
         const xhr = new XMLHttpRequest()
         xhr.open('POST', '/api/upload')
 
@@ -319,6 +322,9 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     })
   }
 
+  // ============================================================
+  // 处理文件
+  // ============================================================
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
 
@@ -329,7 +335,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       if (!file) continue
 
       try {
-        // 检测文件类型
         const ext = file.name.split('.').pop().toLowerCase()
         const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a']
         const videoExts = ['mp4', 'webm', 'avi', 'mov', 'mkv']
@@ -463,112 +468,195 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
 
   return (
     <div className="mb-4">
+      {/* ============================================================
+      顶部工具栏
+      ============================================================ */}
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 className="font-semibold text-green-500 text-sm flex items-center gap-1">
           <i className="fas fa-upload text-orange-600 text-sm"></i>
           上传文件
         </h3>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <button
             onClick={refreshBackground}
             className={`text-xs transition flex items-center gap-1 px-2 py-1 rounded-lg ${bgRefresh ? 'bg-green-700 text-white shadow-md' : 'bg-green-500 text-white hover:bg-green-400'}`}
             title="换一张背景"
           >
-            <i className="fas fa-sync-alt text-xs"></i> 换背景
+            <i className="fas fa-sync-alt text-xs"></i>
           </button>
-          {folderOptions.map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => setFolder(opt.key)}
-              className={`px-3 py-1 rounded-lg text-xs flex items-center gap-1 transition-all ${folder === opt.key ? `bg-${opt.color}-600 text-white shadow-md` : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700'}`}
-            >
-              <i className={`fas ${opt.icon} text-xs`}></i> {opt.label}
-            </button>
-          ))}
-          {/* ✅ 设置按钮 */}
+
+          <select
+            value={storageType}
+            onChange={(e) => setStorageType(e.target.value)}
+            className="px-2 py-1 rounded-lg text-xs bg-white/20 text-white border border-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-white/30 transition"
+          >
+            <option value="github" className="text-gray-800">📦 GitHub</option>
+            <option value="r2" className="text-gray-800">☁️ R2</option>
+            <option value="telegram" className="text-gray-800">✈️ TG</option>
+          </select>
+
+          <select
+            value={folder}
+            onChange={(e) => setFolder(e.target.value)}
+            className="px-2 py-1 rounded-lg text-xs bg-white/20 text-white border border-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-white/30 transition max-w-[80px]"
+          >
+            <option value="wallpaper" className="text-gray-800">横屏</option>
+            <option value="cover" className="text-gray-800">竖屏</option>
+            <option value="sh" className="text-gray-800">横屏(sh)</option>
+            <option value="sd" className="text-gray-800">竖屏(sd)</option>
+          </select>
+
+          <button
+            onClick={() => onConvertChange?.(!convertToWebp)}
+            className={`text-xs px-2 py-1 rounded-lg transition flex items-center gap-1 ${
+              convertToWebp 
+                ? 'bg-green-500/80 text-white' 
+                : 'bg-white/20 text-white/60 hover:bg-white/30'
+            }`}
+            title={convertToWebp ? 'WebP已开启' : '转换为WebP'}
+          >
+            <i className="fas fa-file-image text-xs"></i>
+            {convertToWebp && <span className="text-[10px]">WebP</span>}
+          </button>
+
           <button
             onClick={() => setShowSettings(true)}
-            className="px-3 py-1 rounded-lg text-xs flex items-center gap-1 transition-all bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700"
+            className="text-xs px-2 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white/70 hover:text-white transition"
+            title="上传设置"
           >
             <i className="fas fa-cog text-xs"></i>
           </button>
         </div>
       </div>
 
-      <div className="flex justify-center items-center mb-4">
-        <div className="flex items-center gap-4 bg-white/10 backdrop-blur-sm rounded-lg px-4 py-2 flex-wrap justify-center">
-          <span className="text-white/70 text-sm"><i className="fas fa-database mr-1"></i>存储方式：</span>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="storageType" value="github" checked={storageType === 'github'} onChange={(e) => setStorageType(e.target.value)} className="w-3.5 h-3.5 accent-blue-500" />
-            <span className="text-white/80 text-sm"><i className="fab fa-github mr-1"></i>GitHub</span>
-            <span className="text-white/30 text-[10px]">(仅图片)</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="storageType" value="r2" checked={storageType === 'r2'} onChange={(e) => setStorageType(e.target.value)} className="w-3.5 h-3.5 accent-orange-500" />
-            <span className="text-white/80 text-sm"><i className="fas fa-cloud-upload-alt mr-1"></i>R2</span>
-            <span className="text-white/30 text-[10px]">(仅图片)</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="radio" name="storageType" value="telegram" checked={storageType === 'telegram'} onChange={(e) => setStorageType(e.target.value)} className="w-3.5 h-3.5 accent-green-500" />
-            <span className="text-white/80 text-sm"><i className="fab fa-telegram-plane mr-1"></i>Telegram</span>
-            <span className="text-white/30 text-[10px]">(支持所有文件)</span>
-          </label>
-        </div>
-      </div>
-
-      <div className="flex justify-center items-center mb-4">
-        <label className="flex items-center gap-2 cursor-pointer group" onClick={(e) => e.stopPropagation()}>
-          <input type="checkbox" checked={convertToWebp || false} onChange={(e) => onConvertChange?.(e.target.checked)} className="w-4 h-4 rounded border-gray-300 bg-white/80 checked:bg-blue-500 checked:border-blue-500 focus:ring-2 focus:ring-blue-400 focus:ring-offset-0 cursor-pointer" />
-          <span className="text-white/80 text-sm group-hover:text-white/100 transition"><i className="fas fa-file-image mr-1"></i>自动转换为 WebP 格式</span>
-          <span className="text-white/40 text-xs hidden sm:inline">(前端转换)</span>
-        </label>
-      </div>
-
+      {/* ============================================================
+      上传卡片 - Sanyue-ImgHub 风格
+      ============================================================ */}
       <div
-        className={`upload-area rounded-xl border-2 border-dashed p-8 text-center transition-all duration-200 cursor-pointer ${dragOver ? 'border-blue-500 bg-sky-100 dark:bg-sky-900/30' : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 hover:bg-sky-100 dark:hover:bg-sky-900/30 hover:border-sky-400'}`}
-        onClick={() => fileInputRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
+        className="relative upload-card-wrapper group"
+        onMouseMove={handleCardMouseMove}
+        onMouseLeave={handleCardMouseLeave}
       >
-        <i className="fas fa-cloud-upload-alt text-4xl text-gray-400 mb-3 block"></i>
-        <p className="text-gray-600 dark:text-gray-300 text-base mb-2">点击或拖拽文件到此处上传</p>
-        <p className="text-xs text-gray-400 dark:text-gray-500">支持图片、音频、视频 | 媒体文件自动走 Telegram</p>
-        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1"><i className="fas fa-paste mr-1"></i>也可直接 Ctrl+V 粘贴截图上传</p>
+        <div
+          ref={glowRef}
+          className="upload-card-glow"
+          style={{
+            position: 'absolute',
+            width: '300px',
+            height: '300px',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(96, 165, 250, 0.15) 0%, transparent 70%)',
+            pointerEvents: 'none',
+            transform: 'translate(-50%, -50%)',
+            opacity: 0,
+            transition: 'opacity 0.3s ease',
+            zIndex: 10
+          }}
+        />
 
-        <p className="text-xs mt-2 flex items-center justify-center gap-1 flex-wrap">
-          {storageType === 'github' ? (
-            <span className="text-blue-400"><i className="fab fa-github mr-1"></i>存储到 GitHub（仅图片）</span>
-          ) : storageType === 'r2' ? (
-            <span className="text-orange-400"><i className="fas fa-cloud-upload-alt mr-1"></i>存储到 R2（仅图片）</span>
-          ) : (
-            <span className="text-green-400"><i className="fab fa-telegram-plane mr-1"></i>存储到 Telegram（支持所有文件）</span>
+        <div
+          className={`upload-card relative rounded-2xl border-2 border-dashed transition-all duration-300 cursor-pointer overflow-hidden
+            ${dragOver ? 'border-blue-500 bg-blue-500/10' : 'border-white/30 hover:border-blue-400/50'}
+            ${isUploading ? 'is-uploading' : ''}
+          `}
+          style={{
+            background: 'rgba(255,255,255,0.05)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            minHeight: '280px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '40px 20px'
+          }}
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+        >
+          {isUploading && (
+            <div className="uploading-border" style={{
+              position: 'absolute',
+              inset: '-2px',
+              borderRadius: '16px',
+              padding: '2px',
+              background: 'conic-gradient(from var(--border-angle), transparent 0deg, transparent 30deg, #409eff 60deg, rgba(64, 158, 255, 0.7) 90deg, transparent 120deg, transparent 180deg, rgba(64, 158, 255, 0.7) 210deg, #409eff 240deg, transparent 270deg, transparent 360deg)',
+              animation: 'borderRotate 2s linear infinite',
+              pointerEvents: 'none',
+              zIndex: 1,
+              WebkitMask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+              WebkitMaskComposite: 'xor',
+              mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+              maskComposite: 'exclude'
+            }} />
           )}
-        </p>
 
-        {isUploading && (
-          <div className="mt-4 bg-white/10 backdrop-blur-sm rounded-lg p-4 border border-white/10">
-            <div className="flex justify-between items-center text-sm text-gray-800 dark:text-white/80 mb-2">
-              <span>{uploadStatus || '上传中...'}</span>
-              <div className="flex items-center gap-3">
-                {uploadSpeed && <span className="text-xs text-green-600 dark:text-green-400">{uploadSpeed}</span>}
-                <span className="font-mono text-gray-800 dark:text-white">{uploadProgress}%</span>
-              </div>
-            </div>
-            <div className="w-full bg-gray-300 dark:bg-gray-700/50 rounded-full h-3 overflow-hidden">
-              <div 
-                className="bg-gradient-to-r from-blue-500 to-green-500 h-3 rounded-full transition-all duration-300 ease-out" 
-                style={{ width: `${Math.max(uploadProgress, 0)}%` }}
-              ></div>
+          <div className="mb-4 relative z-10">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500/20 to-blue-600/20 flex items-center justify-center mx-auto">
+              <i className="fas fa-cloud-upload-alt text-5xl text-blue-400/70"></i>
             </div>
           </div>
-        )}
 
-        {convertToWebp && (
-          <p className="text-xs text-green-600 dark:text-green-400 mt-2"><i className="fas fa-exchange-alt mr-1"></i>已开启 WebP 转换</p>
-        )}
+          <p className="text-white/80 text-lg font-medium mb-1 relative z-10">
+            {isUploading ? '上传中...' : '点击或拖拽文件到此处上传'}
+          </p>
+          <p className="text-white/40 text-sm relative z-10">
+            {isUploading ? uploadStatus : '支持图片、音频、视频'}
+          </p>
+          {!isUploading && (
+            <p className="text-white/25 text-xs mt-2 relative z-10">
+              也可直接 Ctrl+V 粘贴截图上传
+            </p>
+          )}
 
-        <p className="text-xs text-blue-500 mt-3"><i className="fas fa-folder-open mr-1"></i>当前上传到: {currentFolder.label}</p>
+          {isUploading && (
+            <div className="mt-4 w-full max-w-xs relative z-10">
+              <div className="flex justify-between text-xs text-white/60 mb-1">
+                <span>{uploadStatus || '上传中...'}</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-blue-500 to-green-500 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 星空背景 */}
+          <div className="stars-layer absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700 z-0">
+            <div className="stars-1 absolute inset-0" style={{
+              backgroundImage: `
+                radial-gradient(2px 2px at 10% 10%, rgba(255,255,255,0.3) 50%, transparent 0),
+                radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,0.3) 50%, transparent 0),
+                radial-gradient(2px 2px at 30% 10%, rgba(255,255,255,0.3) 50%, transparent 0),
+                radial-gradient(2px 2px at 40% 30%, rgba(255,255,255,0.3) 50%, transparent 0),
+                radial-gradient(2px 2px at 50% 10%, rgba(255,255,255,0.3) 50%, transparent 0),
+                radial-gradient(2px 2px at 60% 30%, rgba(255,255,255,0.3) 50%, transparent 0),
+                radial-gradient(2px 2px at 70% 10%, rgba(255,255,255,0.3) 50%, transparent 0),
+                radial-gradient(2px 2px at 80% 30%, rgba(255,255,255,0.3) 50%, transparent 0),
+                radial-gradient(2px 2px at 90% 10%, rgba(255,255,255,0.3) 50%, transparent 0)
+              `,
+              backgroundSize: '200px 200px',
+              opacity: 0.3,
+              animation: 'starScroll 60s linear infinite'
+            }} />
+            <div className="stars-2 absolute inset-0" style={{
+              backgroundImage: `
+                radial-gradient(3px 3px at 15% 15%, rgba(255,255,255,0.5) 50%, transparent 0),
+                radial-gradient(3px 3px at 50% 50%, rgba(255,255,255,0.5) 50%, transparent 0),
+                radial-gradient(3px 3px at 85% 85%, rgba(255,255,255,0.5) 50%, transparent 0),
+                radial-gradient(2.5px 2.5px at 35% 65%, rgba(255,255,255,0.5) 50%, transparent 0),
+                radial-gradient(2.5px 2.5px at 65% 35%, rgba(255,255,255,0.5) 50%, transparent 0)
+              `,
+              backgroundSize: '150px 150px',
+              opacity: 0.5,
+              animation: 'starScroll 40s linear infinite, starPulse 4s ease-in-out infinite'
+            }} />
+          </div>
+        </div>
       </div>
 
       <input 
@@ -580,7 +668,9 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         onChange={handleFileSelect} 
       />
 
-      {/* ✅ 设置弹窗 */}
+      {/* ============================================================
+      设置弹窗
+      ============================================================ */}
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowSettings(false)}>
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -591,7 +681,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
               </button>
             </div>
 
-            {/* 文件命名 */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">文件命名方式</label>
               <div className="grid grid-cols-2 gap-2">
@@ -615,7 +704,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
               </div>
             </div>
 
-            {/* 压缩设置 */}
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">客户端压缩</label>
@@ -651,7 +739,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
               </div>
             </div>
 
-            {/* 自动重试 */}
             <div className="flex items-center justify-between mb-4">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">失败自动重试</label>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -669,6 +756,29 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           </div>
         </div>
       )}
+
+      {/* ============================================================
+      全局动画样式
+      ============================================================ */}
+      <style>{`
+        @property --border-angle {
+          syntax: '<angle>';
+          initial-value: 0deg;
+          inherits: false;
+        }
+        @keyframes borderRotate {
+          0% { --border-angle: 0deg; }
+          100% { --border-angle: 360deg; }
+        }
+        @keyframes starScroll {
+          from { background-position: 0 0; }
+          to { background-position: 100px 100px; }
+        }
+        @keyframes starPulse {
+          0%, 100% { opacity: 0.5; }
+          50% { opacity: 0.2; }
+        }
+      `}</style>
     </div>
   )
 }
