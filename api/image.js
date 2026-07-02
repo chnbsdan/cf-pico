@@ -1,7 +1,6 @@
 // api/image.js - GET /api/image 图片代理
 import { getTelegramImages } from './utils/github.js'
-import { getCompletedFile } from './utils/r2.js'
-import { getTelegramFileContentByFileId } from './utils/telegram.js'
+import { getCompletedFile, getTelegramFileContentByFileId } from './utils/telegram.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -32,6 +31,7 @@ export async function onRequest(context) {
 
     let fileId = null
 
+    // 方法1: 从 R2 completed_files 查找
     if (bucket) {
       const metaKey = `completed_files/${filename}.json`
       try {
@@ -46,6 +46,7 @@ export async function onRequest(context) {
       } catch (e) {}
     }
 
+    // 方法2: 从 GitHub 记录查找
     if (!fileId && token) {
       try {
         const images = await getTelegramImages(token)
@@ -56,6 +57,7 @@ export async function onRequest(context) {
       } catch (e) {}
     }
 
+    // 方法3: 直接用 filename 作为 fileId
     if (!fileId) {
       fileId = filename
     }
