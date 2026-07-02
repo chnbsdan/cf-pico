@@ -2,6 +2,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { fetchImageList, copyToClipboard, batchCopyLinks } from '../lib/api'
 import ThemeToggle from '../components/ThemeToggle'
+// ✅ 新增：从 Sanyue-ImgHub 借鉴的组件
+import FileCard from '../components/FileCard'
+import BatchActionBar from '../components/BatchActionBar'
+import FileDetailDialog from '../components/FileDetailDialog'
+import FilterDropdown from '../components/FilterDropdown'
+import SkeletonLoader from '../components/SkeletonLoader'
 
 // 占位图
 const PLACEHOLDER_SVG = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect fill="%23f0f0f0" width="100" height="100"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23ccc" font-size="20"%3E🖼%3C/text%3E%3C/svg%3E'
@@ -70,6 +76,10 @@ export default function Manage() {
   
   const [loadedImages, setLoadedImages] = useState(new Set())
   const [bgImage, setBgImage] = useState('')
+
+  // ✅ 新增：Sanyue-ImgHub 组件状态
+  const [detailFile, setDetailFile] = useState(null)
+  const [filters, setFilters] = useState({ type: '', source: '', folder: '' })
 
   // ============================================================
   // 预览缩放函数
@@ -155,7 +165,6 @@ export default function Manage() {
   // 获取图片代理链接
   // ============================================================
   const getProxyUrl = (img) => {
-    // 如果是分片文件（telegram_chunks），使用 /api/large/ 路径
     if (img.source === 'telegram_chunks' || (img.fileId && img.chunkCount)) {
       const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
       return `${baseUrl}/api/large/${img.fileId}`
@@ -184,7 +193,6 @@ export default function Manage() {
   }
 
   const getImageAspect = (img) => {
-    // 音频/视频文件用正方形
     if (isMediaFile(img.name)) return 'aspect-square'
     
     if (img.folder === 'wallpaper' || img.folder === 'sh') return 'aspect-video'
@@ -416,6 +424,16 @@ export default function Manage() {
     await loadImages()
   }
 
+  // ✅ 批量复制（使用新组件）
+  const handleBatchCopy = async () => {
+    const urls = paginatedImages
+      .filter(img => selectedImages.has(img.name))
+      .map(img => getProxyUrl(img))
+    if (urls.length === 0) return alert('请先选择图片')
+    await batchCopyLinks(urls, 'url')
+    alert(`✅ 已复制 ${urls.length} 个链接`)
+  }
+
   // ============================================================
   // 标签页切换
   // ============================================================
@@ -450,22 +468,28 @@ export default function Manage() {
     }
   }
 
-  const handleBatchCopy = async (format) => {
-    const selectedUrls = paginatedImages
-      .filter(img => selectedImages.has(img.name))
-      .map(img => getProxyUrl(img))
-    if (selectedUrls.length === 0) return alert('请先选择图片')
-    await batchCopyLinks(selectedUrls, format)
-    setShowBatchMenu(false)
-  }
-
   // ============================================================
   // 分页和搜索
   // ============================================================
   const allImages = images[activeTab] || []
-  const filteredImages = searchKeyword.trim() === ''
-    ? allImages
-    : allImages.filter(img => img.name.toLowerCase().includes(searchKeyword.toLowerCase()))
+  
+  // ✅ 应用筛选
+  const filteredImages = allImages.filter(img => {
+    // 搜索关键词
+    if (searchKeyword.trim() && !img.name.toLowerCase().includes(searchKeyword.toLowerCase())) {
+      return false
+    }
+    // 类型筛选
+    if (filters.type === 'image' && isMediaFile(img.name)) return false
+    if (filters.type === 'audio' && !isAudioFile(img.name)) return false
+    if (filters.type === 'video' && !isVideoFile(img.name)) return false
+    // 来源筛选
+    if (filters.source && img.source !== filters.source) return false
+    // 文件夹筛选
+    if (filters.folder && !img.folder?.includes(filters.folder)) return false
+    return true
+  })
+  
   const totalCount = filteredImages.length
   const totalPages = Math.ceil(totalCount / pageSize)
   const startIndex = (currentPage - 1) * pageSize
@@ -489,7 +513,7 @@ export default function Manage() {
   }, [activeTab, currentPage, searchKeyword, paginatedImages])
 
   // ============================================================
-  // 未登录界面（统一风格）
+  // 未登录界面
   // ============================================================
   if (!isAuthenticated) {
     return (
@@ -537,7 +561,7 @@ export default function Manage() {
   }
 
   // ============================================================
-  // 已登录界面（统一毛玻璃风格）
+  // 已登录界面
   // ============================================================
   return (
     <div
@@ -551,7 +575,6 @@ export default function Manage() {
     >
       <ThemeToggle />
 
-      {/* 移动端菜单按钮 */}
       <button
         onClick={() => setMobileMenuOpen(true)}
         className="fixed top-4 left-4 z-50 lg:hidden bg-white/20 backdrop-blur-sm hover:bg-white/30 transition p-2.5 rounded-lg text-white shadow-md"
@@ -566,7 +589,7 @@ export default function Manage() {
         />
       )}
 
-      {/* 左侧菜单 - 毛玻璃效果 */}
+      {/* 左侧菜单 */}
       <div
         className={`
           fixed top-0 left-0 h-full z-50 w-64 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md shadow-2xl transition-transform duration-300 ease-in-out
@@ -598,10 +621,7 @@ export default function Manage() {
         </div>
 
         <div className="p-3 border-b border-gray-200/30 dark:border-gray-800/30">
-          <a
-            href="/"
-            className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600 transition"
-          >
+          <a href="/" className="flex items-center gap-2 w-full p-2 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600 transition">
             <i className="fas fa-home w-4 text-blue-500"></i>
             <span className="text-sm">返回首页</span>
           </a>
@@ -618,7 +638,6 @@ export default function Manage() {
         </div>
 
         <div className="p-2">
-          {/* 分类列表 */}
           {['wallpaper', 'cover', 'sh', 'sd'].map((folderName) => {
             const displayName = {
               wallpaper: '横屏图片',
@@ -658,7 +677,6 @@ export default function Manage() {
             )
           })}
 
-          {/* Telegram 分类 */}
           <div
             onClick={() => handleTabChange('telegram')}
             className={`
@@ -678,7 +696,6 @@ export default function Manage() {
             </span>
           </div>
 
-          {/* 历史记录 */}
           <div
             onClick={() => handleTabChange('history')}
             className={`
@@ -764,10 +781,10 @@ export default function Manage() {
           </div>
         </div>
 
-        {/* 搜索框 */}
+        {/* ✅ 搜索框 + 筛选下拉 */}
         {activeTab !== 'history' && (
-          <div className="mb-4">
-            <div className="relative">
+          <div className="mb-4 flex flex-wrap gap-2">
+            <div className="relative flex-1 min-w-[200px]">
               <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 dark:text-blue-400 text-sm"></i>
               <input
                 type="text"
@@ -788,6 +805,12 @@ export default function Manage() {
                 </button>
               )}
             </div>
+            {/* ✅ 筛选下拉 */}
+            <FilterDropdown
+              filters={filters}
+              onFilterChange={setFilters}
+              label="筛选"
+            />
           </div>
         )}
 
@@ -823,7 +846,7 @@ export default function Manage() {
           </div>
         )}
 
-        {/* 批量操作栏 */}
+        {/* 批量操作栏（保留原有逻辑） */}
         {activeTab !== 'history' && selectedImages.size > 0 && (
           <div className="bg-blue-50/80 dark:bg-blue-900/30 backdrop-blur-sm rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-blue-200/50 dark:border-blue-800/50">
             <span className="text-blue-700 dark:text-blue-300 text-sm flex items-center gap-2">
@@ -844,38 +867,13 @@ export default function Manage() {
                 <i className="fas fa-trash-alt"></i>
                 批量删除 ({selectedImages.size})
               </button>
-              <div className="relative">
-                <button
-                  onClick={() => setShowBatchMenu(!showBatchMenu)}
-                  className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 hover:bg-white/70 dark:hover:bg-gray-600/70 text-gray-700 dark:text-white text-sm flex items-center gap-2 transition backdrop-blur-sm"
-                >
-                  <i className="fas fa-copy"></i>
-                  批量复制
-                  <i className="fas fa-chevron-down text-xs"></i>
-                </button>
-                {showBatchMenu && (
-                  <div className="absolute right-0 bottom-full mb-2 w-44 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md rounded-xl shadow-lg overflow-hidden z-[200] border border-white/30 dark:border-gray-700">
-                    <button
-                      onClick={() => handleBatchCopy('url')}
-                      className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-white/50 dark:hover:bg-gray-700/50 text-sm flex items-center gap-2"
-                    >
-                      <i className="fas fa-link"></i> 复制链接 (URL)
-                    </button>
-                    <button
-                      onClick={() => handleBatchCopy('markdown')}
-                      className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-white/50 dark:hover:bg-gray-700/50 text-sm flex items-center gap-2"
-                    >
-                      <i className="fab fa-markdown"></i> 复制 Markdown
-                    </button>
-                    <button
-                      onClick={() => handleBatchCopy('html')}
-                      className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-200 hover:bg-white/50 dark:hover:bg-gray-700/50 text-sm flex items-center gap-2"
-                    >
-                      <i className="fab fa-html5"></i> 复制 HTML
-                    </button>
-                  </div>
-                )}
-              </div>
+              <button
+                onClick={handleBatchCopy}
+                className="px-3 py-1.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-sm flex items-center gap-2 transition"
+              >
+                <i className="fas fa-copy"></i>
+                批量复制 ({selectedImages.size})
+              </button>
             </div>
           </div>
         )}
@@ -904,7 +902,7 @@ export default function Manage() {
         )}
 
         {/* ============================================================
-            内容区域
+            内容区域 - ✅ 使用新组件
             ============================================================ */}
         {activeTab === 'history' ? (
           historyLoading ? (
@@ -984,9 +982,8 @@ export default function Manage() {
             </div>
           )
         ) : loading ? (
-          <div className="flex justify-center items-center py-20">
-            <i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i>
-          </div>
+          // ✅ 使用骨架屏
+          <SkeletonLoader count={12} type="card" />
         ) : paginatedImages.length === 0 ? (
           <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl">
             <i className="fas fa-folder-open text-5xl text-gray-400 mb-3"></i>
@@ -1010,117 +1007,21 @@ export default function Manage() {
                 const aspectClass = getImageAspect(img)
                 const isLoaded = loadedImages.has(img.name)
 
+                // ✅ 使用 FileCard 组件
                 return (
-                  <div
+                  <FileCard
                     key={img.sha || idx}
-                    className="group bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-xl overflow-hidden border border-white/30 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-600 transition-all hover:scale-105 hover:shadow-xl relative"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedImages.has(img.name)}
-                      onChange={(e) => toggleSelect(img.name, e)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="absolute top-2 left-2 z-10 w-3.5 h-3.5 rounded border-gray-300 bg-white/80 checked:bg-blue-500 cursor-pointer"
-                    />
-                    <div
-                      className={`${aspectClass} bg-gray-100/50 dark:bg-gray-900/50 overflow-hidden cursor-pointer relative`}
-                      onClick={() => openPreview(img)}
-                    >
-                      {isAudioFile(img.name) ? (
-                        // 音频文件：显示播放器
-                        <div className="flex flex-col items-center justify-center h-full bg-gradient-to-b from-gray-800 to-gray-900 p-3">
-                          <i className="fas fa-music text-4xl text-blue-400 mb-2"></i>
-                          <audio 
-                            controls 
-                            className="w-full max-w-[120px] scale-75 origin-center"
-                            src={proxyUrl}
-                            preload="metadata"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            您的浏览器不支持音频播放
-                          </audio>
-                          <span className="text-white/50 text-[8px] mt-1 truncate w-full text-center">
-                            {img.name}
-                          </span>
-                        </div>
-                      ) : isVideoFile(img.name) ? (
-                        // 视频文件：显示视频预览
-                        <div className="flex items-center justify-center h-full bg-black">
-                          <video 
-                            className="w-full h-full object-cover"
-                            src={proxyUrl}
-                            muted
-                            preload="metadata"
-                            playsInline
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </div>
-                      ) : (
-                        // 图片文件：正常显示
-                        <img
-                          src={isLoaded ? proxyUrl : PLACEHOLDER_SVG}
-                          alt={img.name}
-                          loading="lazy"
-                          decoding="async"
-                          className={`w-full h-full object-cover transition-opacity duration-300 ${
-                            isLoaded ? 'opacity-100' : 'opacity-50'
-                          } group-hover:scale-110 transition-transform duration-300`}
-                          onError={(e) => {
-                            e.target.src = PLACEHOLDER_SVG
-                          }}
-                          onLoad={() => {
-                            setLoadedImages(prev => new Set(prev).add(img.name))
-                          }}
-                        />
-                      )}
-                      {!isLoaded && !isMediaFile(img.name) && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                        <i className="fas fa-search-plus text-white text-sm"></i>
-                      </div>
-                    </div>
-                    <div className="p-1.5">
-                      <p className="text-gray-600 dark:text-gray-300 text-[9px] lg:text-[10px] truncate" title={img.name}>
-                        {img.name}
-                      </p>
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-[8px] text-gray-400">
-                          {img.source === 'external' ? '🌐' : 
-                           img.source === 'r2' ? '☁️' : 
-                           img.source === 'telegram' || img.source === 'telegram_chunks' ? '✈️' : '📦'}
-                        </span>
-                        <div className="flex gap-0.5">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleCopy(proxyUrl, img.name, e)
-                            }}
-                            className="text-gray-400 hover:text-green-500 transition text-[9px] px-1 py-0.5 rounded"
-                          >
-                            {copiedId === img.name ? (
-                              <i className="fas fa-check"></i>
-                            ) : (
-                              <i className="fas fa-copy"></i>
-                            )}
-                          </button>
-                          <button
-                            onClick={(e) => handleDelete(img, activeTab, e)}
-                            disabled={deletingId === img.name}
-                            className="text-gray-400 hover:text-red-500 transition text-[9px] px-1 py-0.5 rounded disabled:opacity-30"
-                          >
-                            {deletingId === img.name ? (
-                              <i className="fas fa-spinner fa-pulse"></i>
-                            ) : (
-                              <i className="fas fa-trash-alt"></i>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                    file={img}
+                    selected={selectedImages.has(img.name)}
+                    onSelect={(e) => {
+                      e.stopPropagation()
+                      toggleSelect(img.name, e)
+                    }}
+                    onClick={() => setDetailFile(img)}
+                    onCopy={() => handleCopy(proxyUrl, img.name)}
+                    onDelete={() => handleDelete(img, activeTab)}
+                    getFileUrl={getProxyUrl}
+                  />
                 )
               })}
             </div>
@@ -1165,8 +1066,37 @@ export default function Manage() {
       </div>
 
       {/* ============================================================
-          预览弹窗 - 支持滚轮缩放 + 拖拽平移
-           ============================================================ */}
+          ✅ 文件详情弹窗（来自 Sanyue-ImgHub）
+          ============================================================ */}
+      <FileDetailDialog
+        file={detailFile}
+        visible={!!detailFile}
+        onClose={() => setDetailFile(null)}
+        onDelete={(file) => {
+          handleDelete(file, activeTab)
+          setDetailFile(null)
+        }}
+        onCopy={(url) => handleCopy(url, detailFile?.name)}
+        getFileUrl={getProxyUrl}
+      />
+
+      {/* ============================================================
+          ✅ 批量操作栏（来自 Sanyue-ImgHub）- 固定在底部
+          ============================================================ */}
+      {activeTab !== 'history' && (
+        <BatchActionBar
+          selectedCount={selectedImages.size}
+          totalCount={paginatedImages.length}
+          onSelectAll={selectAll}
+          onClearSelection={() => setSelectedImages(new Set())}
+          onBatchDelete={handleBatchDelete}
+          onBatchCopy={handleBatchCopy}
+        />
+      )}
+
+      {/* ============================================================
+          预览弹窗 - 保持原有逻辑
+          ============================================================ */}
       {previewImage && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
@@ -1181,7 +1111,6 @@ export default function Manage() {
             className="relative w-full h-full flex items-center justify-center"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* 图片容器 */}
             <div
               id="previewContainer"
               className="w-full h-full flex items-center justify-center overflow-hidden cursor-grab active:cursor-grabbing select-none"
@@ -1196,7 +1125,6 @@ export default function Manage() {
               style={{ touchAction: 'none' }}
             >
               {isAudioFile(previewImage.name) ? (
-                // 预览音频文件
                 <div className="flex flex-col items-center justify-center bg-gray-900/90 rounded-2xl p-8 max-w-[400px] w-full">
                   <i className="fas fa-music text-6xl text-blue-400 mb-4"></i>
                   <p className="text-white text-sm truncate w-full text-center mb-4">{previewImage.name}</p>
@@ -1205,7 +1133,6 @@ export default function Manage() {
                   </audio>
                 </div>
               ) : isVideoFile(previewImage.name) ? (
-                // 预览视频文件
                 <video 
                   controls 
                   className="max-w-[95vw] max-h-[88vh] object-contain rounded-2xl"
@@ -1213,7 +1140,6 @@ export default function Manage() {
                   autoPlay
                 />
               ) : (
-                // 预览图片文件
                 <img
                   id="previewImage"
                   src={getProxyUrl(previewImage)}
@@ -1229,7 +1155,6 @@ export default function Manage() {
               )}
             </div>
 
-            {/* 关闭按钮 */}
             <button
               onClick={() => {
                 setPreviewImage(null)
@@ -1243,33 +1168,24 @@ export default function Manage() {
               <i className="fas fa-times"></i>
             </button>
 
-            {/* 底部工具栏 */}
             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[101] bg-black/50 backdrop-blur-md rounded-xl px-3 py-2 border border-white/10 flex items-center gap-1 flex-wrap justify-center">
-              {/* 文件名 */}
               <span className="text-white/70 text-xs px-2 truncate max-w-[120px] sm:max-w-[200px]">
                 {previewImage.name}
               </span>
 
               <div className="w-px h-5 bg-white/20 mx-1"></div>
 
-              {/* 缩放控制（仅图片有效） */}
               {!isMediaFile(previewImage.name) && (
                 <>
                   <button
-                    onClick={() => {
-                      setPreviewScale(Math.min(previewScale + 0.2, 5))
-                    }}
+                    onClick={() => setPreviewScale(Math.min(previewScale + 0.2, 5))}
                     className="text-white/60 hover:text-white text-xs p-1.5 rounded hover:bg-white/10 transition"
-                    title="放大"
                   >
                     <i className="fas fa-search-plus"></i>
                   </button>
                   <button
-                    onClick={() => {
-                      setPreviewScale(Math.max(previewScale - 0.2, 0.2))
-                    }}
+                    onClick={() => setPreviewScale(Math.max(previewScale - 0.2, 0.2))}
                     className="text-white/60 hover:text-white text-xs p-1.5 rounded hover:bg-white/10 transition"
-                    title="缩小"
                   >
                     <i className="fas fa-search-minus"></i>
                   </button>
@@ -1280,7 +1196,6 @@ export default function Manage() {
                       setPreviewTranslateY(0)
                     }}
                     className="text-white/60 hover:text-white text-xs p-1.5 rounded hover:bg-white/10 transition"
-                    title="重置"
                   >
                     <i className="fas fa-expand"></i>
                   </button>
@@ -1291,14 +1206,12 @@ export default function Manage() {
                 </>
               )}
 
-              {/* 操作按钮 */}
               <a
                 href={getProxyUrl(previewImage)}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
                 className="text-white/60 hover:text-blue-400 text-xs p-1.5 rounded hover:bg-white/10 transition"
-                title="打开原图"
               >
                 <i className="fas fa-external-link-alt"></i>
               </a>
@@ -1310,7 +1223,6 @@ export default function Manage() {
                   setTimeout(() => setCopiedId(null), 2000)
                 }}
                 className="text-white/60 hover:text-green-400 text-xs p-1.5 rounded hover:bg-white/10 transition"
-                title="复制链接"
               >
                 <i className="fas fa-copy"></i>
               </button>
@@ -1327,7 +1239,6 @@ export default function Manage() {
                   }
                 }}
                 className="text-white/60 hover:text-red-400 text-xs p-1.5 rounded hover:bg-white/10 transition"
-                title="删除"
               >
                 <i className="fas fa-trash-alt"></i>
               </button>
