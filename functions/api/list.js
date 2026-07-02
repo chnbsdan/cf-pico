@@ -1,5 +1,6 @@
 // functions/api/list.js - GET /api/list
 import { getFolderImages, getTelegramImages } from './utils/github.js'
+import { GITHUB_USER, GITHUB_REPO } from './utils/helpers.js'
 
 export async function onRequest(context) {
   const { env } = context
@@ -89,7 +90,6 @@ export async function onRequest(context) {
                 size: 0,
                 folder: 'external',
                 source: 'external',
-                // ✅ 记录原始分类，方便前端筛选
                 originalFolder: folder
               })
             }
