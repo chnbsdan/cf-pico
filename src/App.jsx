@@ -438,7 +438,7 @@ function App() {
         className="fixed top-1 left-1 z-50"
         title="GitHub 仓库"
       >
-        <img src="/favicon.ico" alt="Logo" className="w-12 h-12 hover:opacity-80 transition-opacity" />
+        <img src="/logo.png" alt="Logo" className="w-12 h-12 hover:opacity-80 transition-opacity" />
       </a>
 
       <div className="max-w-4xl mx-auto">
