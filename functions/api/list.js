@@ -60,7 +60,7 @@ export async function onRequest(context) {
   total += results['telegram'].length
 
   // ============================================================
-  // 2. ✅ 外部图源 - 全部集中到 external 分类
+  // 2. ✅ 外部图源 - 硬编码 GITHUB_USER 和 GITHUB_REPO
   // ============================================================
   const GITHUB_USER = 'chnbsdan'
   const GITHUB_REPO = 'cf-pico'
@@ -79,7 +79,6 @@ export async function onRequest(context) {
         const data = await response.json()
         const content = atob(data.content)
         const external = JSON.parse(content)
-        // ✅ 合并所有分类的外链到 external
         for (const folder of folders) {
           if (external[folder]) {
             for (const url of external[folder]) {
@@ -91,7 +90,8 @@ export async function onRequest(context) {
                 sha: '',
                 size: 0,
                 folder: 'external',
-                source: 'external'
+                source: 'external',
+                originalFolder: folder
               })
             }
           }
@@ -106,7 +106,7 @@ export async function onRequest(context) {
   total += externalImages.length
 
   // ============================================================
-  // 3. GitHub + R2 图片（wallpaper, cover, sh, sd）
+  // 3. GitHub + R2 图片
   // ============================================================
   for (const folder of folders) {
     const images = []
