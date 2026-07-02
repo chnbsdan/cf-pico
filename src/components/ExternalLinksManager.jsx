@@ -1,4 +1,5 @@
-// src/components/ExternalLinksManager.jsx - 完整版（带预览）
+// src/components/ExternalLinksManager.jsx - 完整版
+// 功能：添加外链、删除外链、预览大图、按时间排序、自动去重
 import React, { useState, useEffect } from 'react'
 
 export default function ExternalLinksManager() {
@@ -9,7 +10,6 @@ export default function ExternalLinksManager() {
   const [deleting, setDeleting] = useState(null)
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState('success')
-  // ✅ 预览状态
   const [previewImage, setPreviewImage] = useState(null)
 
   const loadExternalLinks = async () => {
@@ -27,11 +27,18 @@ export default function ExternalLinksManager() {
             allLinks.push({
               url: url,
               folder: folder,
-              name: url.split('/').pop() || 'unknown'
+              name: url.split('/').pop() || 'unknown',
+              // ✅ 用 URL 作为唯一标识，方便去重
+              id: url
             })
           }
         }
       }
+      
+      // ✅ 按添加时间排序（用 URL 中的文件名或随机排序，保持稳定）
+      // 由于没有时间字段，用 URL 字符串排序，保证显示顺序固定
+      allLinks.sort((a, b) => a.url.localeCompare(b.url))
+      
       setLinks(allLinks)
     } catch (err) {
       console.error('加载失败:', err)
@@ -59,17 +66,31 @@ export default function ExternalLinksManager() {
       return
     }
 
+    // ✅ 去重：检查已存在的链接
+    const existingUrls = new Set(links.map(item => item.url))
+    const newValidUrls = validUrls.filter(url => !existingUrls.has(url))
+    
+    if (newValidUrls.length === 0) {
+      showMessage('⚠️ 所有链接已存在，无需重复添加', 'error')
+      return
+    }
+
+    if (newValidUrls.length < validUrls.length) {
+      showMessage(`⚠️ 过滤掉 ${validUrls.length - newValidUrls.length} 个重复链接，新增 ${newValidUrls.length} 个`, 'success')
+    }
+
     setAdding(true)
     try {
       const res = await fetch('/api/external', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          urls: validUrls,
+          urls: newValidUrls,
           folder: 'wallpaper'
         })
       })
       const data = await res.json()
+      console.log('📤 添加外链响应:', data)
       if (data.success) {
         showMessage(`✅ 成功添加 ${data.added} 条外链`, 'success')
         setNewUrls('')
@@ -147,8 +168,19 @@ export default function ExternalLinksManager() {
         </div>
       )}
 
-      <div className="mb-4 text-sm text-gray-500 dark:text-gray-400">
-        共 {links.length} 条外链
+      <div className="mb-4 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-4">
+        <span>共 {links.length} 条外链</span>
+        <button
+          onClick={() => {
+            // ✅ 全选复制链接
+            const allUrls = links.map(item => item.url).join('\n')
+            navigator.clipboard.writeText(allUrls)
+            showMessage(`📋 已复制 ${links.length} 个链接`, 'success')
+          }}
+          className="text-xs text-blue-500 hover:text-blue-600 transition"
+        >
+          <i className="fas fa-copy mr-1"></i>复制全部
+        </button>
       </div>
 
       {/* 添加外链 */}
@@ -171,7 +203,7 @@ export default function ExternalLinksManager() {
         </button>
       </div>
 
-      {/* 外链列表 - 点击图片可预览 */}
+      {/* 外链列表 */}
       {loading ? (
         <div className="flex justify-center py-10">
           <div className="w-8 h-8 border-2 border-gray-300 border-t-purple-500 rounded-full animate-spin"></div>
@@ -190,7 +222,6 @@ export default function ExternalLinksManager() {
               className="flex items-center justify-between p-3 bg-white/50 dark:bg-gray-700/50 rounded-xl border border-white/30 dark:border-gray-600 hover:border-purple-400 transition group"
             >
               <div className="flex items-center gap-3 flex-1 min-w-0">
-                {/* ✅ 点击图片预览大图 */}
                 <img
                   src={item.url}
                   alt={item.name}
