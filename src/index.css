@@ -402,3 +402,26 @@
   background: rgba(64, 158, 255, 0.08) !important;
   box-shadow: 0 0 40px rgba(64, 158, 255, 0.15);
 }
+
+/* LOGO 悬停动画 - Sanyue-ImgHub 风格 */
+@keyframes logo-shake {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    transform: rotate(8deg) scale(1.08);
+  }
+  50% {
+    transform: rotate(-4deg) scale(1.05);
+  }
+  75% {
+    transform: rotate(4deg) scale(1.08);
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+.animate-logo-shake {
+  animation: logo-shake 0.6s ease-in-out;
+}
