@@ -23,6 +23,7 @@ export default function ExternalLinksManager() {
     try {
       const res = await fetch('/api/external')
       const data = await res.json()
+      console.log('📸 加载外链数据:', data)
       if (data.error) {
         console.error('加载失败:', data.error)
         setLinks({ wallpaper: [], cover: [], sh: [], sd: [] })
@@ -66,6 +67,7 @@ export default function ExternalLinksManager() {
         })
       })
       const data = await res.json()
+      console.log('📤 添加外链响应:', data)
       if (data.success) {
         showMessage(`✅ 成功添加 ${data.added} 条外链`, 'success')
         setNewUrls('')
@@ -74,6 +76,7 @@ export default function ExternalLinksManager() {
         showMessage('❌ 添加失败: ' + (data.error || '未知错误'), 'error')
       }
     } catch (err) {
+      console.error('添加失败:', err)
       showMessage('❌ 请求失败: ' + err.message, 'error')
     } finally {
       setAdding(false)
@@ -101,6 +104,7 @@ export default function ExternalLinksManager() {
         showMessage('❌ 删除失败: ' + (data.error || '未知错误'), 'error')
       }
     } catch (err) {
+      console.error('删除失败:', err)
       showMessage('❌ 请求失败: ' + err.message, 'error')
     } finally {
       setDeleting(null)
@@ -119,12 +123,12 @@ export default function ExternalLinksManager() {
     <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-white/30 p-6">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
-          <i className="fas fa-link text-blue-500 mr-2"></i>
+          <i className="fas fa-link text-purple-500 mr-2"></i>
           自定义外链图片
         </h3>
         <button
           onClick={loadExternalLinks}
-          className="text-sm text-blue-500 hover:text-blue-600 transition"
+          className="text-sm text-purple-500 hover:text-purple-600 transition"
         >
           <i className="fas fa-sync-alt mr-1"></i>刷新
         </button>
@@ -148,7 +152,7 @@ export default function ExternalLinksManager() {
             onClick={() => setActiveFolder(f.key)}
             className={`px-4 py-2 rounded-xl text-sm transition ${
               activeFolder === f.key
-                ? 'bg-blue-500 text-white shadow-lg'
+                ? 'bg-purple-500 text-white shadow-lg'
                 : 'bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70'
             }`}
           >
@@ -166,12 +170,12 @@ export default function ExternalLinksManager() {
           value={newUrls}
           onChange={(e) => setNewUrls(e.target.value)}
           placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.png"
-          className="w-full px-4 py-3 rounded-xl bg-white/60 dark:bg-gray-800/60 border border-white/30 dark:border-gray-700 text-gray-700 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition resize-y min-h-[80px]"
+          className="w-full px-4 py-3 rounded-xl bg-white/60 dark:bg-gray-800/60 border border-white/30 dark:border-gray-700 text-gray-700 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 transition resize-y min-h-[80px]"
         />
         <button
           onClick={handleAddLinks}
           disabled={adding}
-          className="mt-3 px-6 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white text-sm transition disabled:opacity-50"
+          className="mt-3 px-6 py-2 rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-sm transition disabled:opacity-50"
         >
           {adding ? '添加中...' : '添加外链'}
         </button>
@@ -180,11 +184,11 @@ export default function ExternalLinksManager() {
       {/* 外链列表 */}
       {loading ? (
         <div className="flex justify-center py-10">
-          <div className="w-8 h-8 border-2 border-gray-300 border-t-blue-500 rounded-full animate-spin"></div>
+          <div className="w-8 h-8 border-2 border-gray-300 border-t-purple-500 rounded-full animate-spin"></div>
         </div>
       ) : currentLinks.length === 0 ? (
         <div className="text-center py-10 text-gray-500 dark:text-gray-400">
-          <i className="fas fa-inbox text-4xl mb-2 block"></i>
+          <i className="fas fa-link text-4xl mb-2 block"></i>
           <p>暂无外链图片</p>
           <p className="text-xs mt-1">在上方添加外部图片链接</p>
         </div>
@@ -195,7 +199,7 @@ export default function ExternalLinksManager() {
             return (
               <div
                 key={idx}
-                className="flex items-center justify-between p-3 bg-white/50 dark:bg-gray-700/50 rounded-xl border border-white/30 dark:border-gray-600 hover:border-blue-400 transition group"
+                className="flex items-center justify-between p-3 bg-white/50 dark:bg-gray-700/50 rounded-xl border border-white/30 dark:border-gray-600 hover:border-purple-400 transition group"
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <img
@@ -214,7 +218,7 @@ export default function ExternalLinksManager() {
                       href={url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-blue-500 hover:text-blue-600 truncate block"
+                      className="text-xs text-purple-500 hover:text-purple-600 truncate block"
                       title={url}
                     >
                       {url}
@@ -224,7 +228,7 @@ export default function ExternalLinksManager() {
                 <div className="flex gap-1 ml-2 flex-shrink-0">
                   <button
                     onClick={() => window.open(url, '_blank')}
-                    className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-600/50 transition text-gray-400 hover:text-blue-500"
+                    className="p-1.5 rounded-lg hover:bg-white/50 dark:hover:bg-gray-600/50 transition text-gray-400 hover:text-purple-500"
                     title="打开"
                   >
                     <i className="fas fa-external-link-alt text-xs"></i>
