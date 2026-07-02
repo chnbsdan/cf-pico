@@ -6,6 +6,10 @@ export async function onRequest(context) {
   const folders = ['wallpaper', 'cover', 'sh', 'sd']
   const bucket = env.IMAGES_BUCKET
   const token = env.GITHUB_TOKEN
+
+  // ✅ 硬编码
+  const GITHUB_USER = 'chnbsdan'
+  const GITHUB_REPO = 'cf-pico'
   
   const githubFolders = {}
   let githubTotal = 0
