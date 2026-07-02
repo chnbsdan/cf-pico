@@ -1,5 +1,12 @@
 [
   {
+    "id": "1782995035000-20260702_cf01.webp",
+    "filename": "20260702_cf01.webp",
+    "url": "https://pico-beige.vercel.app/api/image?path=cover/20260702_cf01.webp",
+    "folder": "cover",
+    "time": "2026-07-02T20:23:55+08:00"
+  },
+  {
     "id": "1782988840000-20260702_sh1.webp",
     "filename": "20260702_sh1.webp",
     "url": "https://pico-beige.vercel.app/api/image?path=wallpaper/20260702_sh1.webp",
