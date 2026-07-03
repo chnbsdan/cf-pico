@@ -185,7 +185,7 @@ export async function onRequest(context) {
       }
       
       try {
-        const hfPath = filename;  // ✅ 直接改成这样
+        const hfPath = `w/${filename}`;  // ✅ 直接改成这样能改变文件夹名称
         // ✅ 关键修改：传入 request 参数
         const result = await uploadToHuggingFace(processedFile, hfPath, env, request)
         
