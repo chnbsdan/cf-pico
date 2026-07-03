@@ -22,7 +22,9 @@ export async function onRequest(context) {
     return new Response('Invalid folder', { status: 403 })
   }
 
+  // ============================================================
   // Telegram 文件
+  // ============================================================
   if (folder === 'telegram') {
     const botToken = env.TG_BOT_TOKEN;
     if (!botToken) {
@@ -67,7 +69,9 @@ export async function onRequest(context) {
     }
   }
 
+  // ============================================================
   // R2 存储
+  // ============================================================
   if (bucket) {
     try {
       const object = await bucket.get(path)
@@ -89,7 +93,9 @@ export async function onRequest(context) {
     }
   }
 
+  // ============================================================
   // GitHub 存储
+  // ============================================================
   if (!token) {
     return new Response('GITHUB_TOKEN not configured', { status: 500 })
   }
@@ -105,7 +111,6 @@ export async function onRequest(context) {
     })
 
     if (!response.ok) {
-      // GitHub 找不到，尝试 HuggingFace
       return await tryHuggingFace(path, filename, env)
     }
 
@@ -128,7 +133,6 @@ export async function onRequest(context) {
     })
   } catch (error) {
     console.error('GitHub fetch error:', error)
-    // GitHub 异常，尝试 HuggingFace
     return await tryHuggingFace(path, filename, env)
   }
 }
