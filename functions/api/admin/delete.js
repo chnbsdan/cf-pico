@@ -1,4 +1,4 @@
-// functions/api/admin/delete.js - POST /api/admin/delete 删除文件
+// functions/api/admin/delete.js - POST /api/admin/delete 删除文件（调试版）
 import { getTelegramImages, saveTelegramImages } from '../utils/github.js'
 import { deleteCompletedFile } from '../utils/r2.js'
 import { deleteTelegramFile } from '../utils/telegram.js'
@@ -12,6 +12,8 @@ export async function onRequest(context) {
   try {
     const body = await request.json()
     const { filename, folder, sha, source, tgMessageId, fileId } = body
+
+    console.log('🔍 删除请求:', { filename, folder, source })
 
     if (!filename || !folder) {
       return new Response(JSON.stringify({ error: 'Missing filename or folder' }), {
@@ -70,29 +72,32 @@ export async function onRequest(context) {
       }
     }
 
-    // ✅ 删除 HuggingFace 存储的文件
+    // ✅ 删除 HuggingFace 存储的文件（调试版）
     if (source === 'huggingface') {
       if (env.HF_TOKEN && env.HF_REPO) {
         try {
-          // 如果 folder 是 'huggingface'，filename 已经包含完整路径（如 wallpaper/xxx.jpg）
           let hfPath = filename
-          // 如果 filename 不包含 /，说明没有文件夹路径，需要拼接
           if (!filename.includes('/')) {
             hfPath = `${folder}/${filename}`
           }
+          console.log('🔍 HuggingFace 删除路径:', hfPath)
+          
           const result = await deleteFromHuggingFace(hfPath, env)
+          console.log('🔍 HuggingFace 删除结果:', JSON.stringify(result))
+          
           if (result.success) {
             deleted = true
             console.log(`✅ HuggingFace 已删除: ${hfPath}`)
           } else {
-            deleteErrors.push(`HuggingFace 删除失败: ${result.error}`)
+            // ✅ 把具体错误信息传给前端
+            deleteErrors.push(`HuggingFace 删除失败: ${result.error || '未知错误'}`)
           }
         } catch (e) {
           console.error('HuggingFace delete error:', e)
-          deleteErrors.push('HuggingFace 删除异常')
+          deleteErrors.push(`HuggingFace 删除异常: ${e.message}`)
         }
       } else {
-        deleteErrors.push('HuggingFace 未配置')
+        deleteErrors.push('HuggingFace 未配置 (HF_TOKEN 或 HF_REPO 缺失)')
       }
     }
 
@@ -162,7 +167,10 @@ export async function onRequest(context) {
     }
   } catch (error) {
     console.error('Delete error:', error)
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
+    return new Response(JSON.stringify({ 
+      error: 'Internal server error',
+      details: error.message 
+    }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     })
