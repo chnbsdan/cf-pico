@@ -1,22 +1,15 @@
-// src/pages/Manage.jsx - 图片管理页面（密码从环境变量读取 + 历史记录搜索 + Telegram 分类 + 外链图片 + HuggingFace）
+// src/pages/Manage.jsx - 图片管理页面
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { fetchImageList, copyToClipboard, batchCopyLinks } from '../lib/api'
 import ThemeToggle from '../components/ThemeToggle'
-// ✅ 新增：从 Sanyue-ImgHub 借鉴的组件
 import FileCard from '../components/FileCard'
 import BatchActionBar from '../components/BatchActionBar'
 import FileDetailDialog from '../components/FileDetailDialog'
 import FilterDropdown from '../components/FilterDropdown'
 import SkeletonLoader from '../components/SkeletonLoader'
-// ✅ 新增：外链图片管理
 import ExternalLinksManager from '../components/ExternalLinksManager'
 
-// 占位图
 const PLACEHOLDER_SVG = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect fill="%23f0f0f0" width="100" height="100"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23ccc" font-size="20"%3E🖼%3C/text%3E%3C/svg%3E'
-
-// ============================================================
-// 文件类型判断工具函数
-// ============================================================
 
 const isAudioFile = (filename) => {
   if (!filename) return false
@@ -37,14 +30,10 @@ const isMediaFile = (filename) => {
 }
 
 export default function Manage() {
-  // ============================================================
-  // 基础状态
-  // ============================================================
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [password, setPassword] = useState('')
   const [passwordError, setPasswordError] = useState(false)
   
-  // ✅ 添加 huggingface: [] 
   const [images, setImages] = useState({ wallpaper: [], cover: [], sh: [], sd: [], telegram: [], huggingface: [], external: [] })
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('wallpaper')
@@ -53,9 +42,6 @@ export default function Manage() {
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 48
   
-  // ============================================================
-  // 预览大图状态 + 缩放拖拽
-  // ============================================================
   const [previewImage, setPreviewImage] = useState(null)
   const [previewScale, setPreviewScale] = useState(1)
   const [previewTranslateX, setPreviewTranslateX] = useState(0)
@@ -80,13 +66,9 @@ export default function Manage() {
   const [loadedImages, setLoadedImages] = useState(new Set())
   const [bgImage, setBgImage] = useState('')
 
-  // ✅ 新增：Sanyue-ImgHub 组件状态
   const [detailFile, setDetailFile] = useState(null)
   const [filters, setFilters] = useState({ type: '', source: '', folder: '' })
 
-  // ============================================================
-  // 预览缩放函数
-  // ============================================================
   const updatePreviewTransform = useCallback(() => {
     const img = document.getElementById('previewImage');
     if (img) {
@@ -165,9 +147,23 @@ export default function Manage() {
   }, []);
 
   // ============================================================
-  // 获取图片代理链接
+  // ✅ 核心修改：getProxyUrl 增加 HuggingFace 处理
   // ============================================================
   const getProxyUrl = (img) => {
+    // 优先处理 HuggingFace
+    if (img.source === 'huggingface') {
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+      // 如果 url 已经是 /api/hf/ 开头，直接返回
+      if (img.url && img.url.startsWith('/api/hf/')) {
+        return img.url
+      }
+      // 否则根据 path 生成
+      if (img.path) {
+        return `${baseUrl}/api/hf/${img.path}`
+      }
+      return img.url || ''
+    }
+
     if (img.source === 'telegram_chunks' || (img.fileId && img.chunkCount)) {
       const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
       return `${baseUrl}/api/large/${img.fileId}`
@@ -197,16 +193,12 @@ export default function Manage() {
 
   const getImageAspect = (img) => {
     if (isMediaFile(img.name)) return 'aspect-square'
-    
     if (img.folder === 'wallpaper' || img.folder === 'sh') return 'aspect-video'
     if (img.folder === 'cover' || img.folder === 'sd') return 'aspect-9/16'
     if (img.folder === 'telegram') return 'aspect-square'
     return 'aspect-square'
   }
 
-  // ============================================================
-  // 背景图：只加载一次
-  // ============================================================
   useEffect(() => {
     const img = new Image()
     const url = `/api/wallpaper?t=${Date.now()}`
@@ -216,9 +208,6 @@ export default function Manage() {
     img.src = url
   }, [])
 
-  // ============================================================
-  // 检查登录状态
-  // ============================================================
   useEffect(() => {
     const savedAuth = localStorage.getItem('manage_auth')
     if (savedAuth === 'true') {
@@ -227,9 +216,6 @@ export default function Manage() {
     }
   }, [])
 
-  // ============================================================
-  // 历史记录相关
-  // ============================================================
   const loadHistory = async () => {
     setHistoryLoading(true)
     try {
@@ -312,9 +298,6 @@ export default function Manage() {
     )
   }
 
-  // ============================================================
-  // 登录相关
-  // ============================================================
   const handleLogin = (e) => {
     e.preventDefault()
     const correctPassword = import.meta.env.VITE_ADMIN_PASSWORD || 'admin123'
@@ -330,9 +313,6 @@ export default function Manage() {
     }
   }
 
-  // ============================================================
-  // 图片相关
-  // ============================================================
   const loadImages = async () => {
     setLoading(true)
     setLoadedImages(new Set())
@@ -427,7 +407,6 @@ export default function Manage() {
     await loadImages()
   }
 
-  // ✅ 批量复制
   const handleBatchCopy = async () => {
     const urls = paginatedImages
       .filter(img => selectedImages.has(img.name))
@@ -437,9 +416,6 @@ export default function Manage() {
     alert(`✅ 已复制 ${urls.length} 个链接`)
   }
 
-  // ============================================================
-  // 标签页切换
-  // ============================================================
   const handleTabChange = (tab) => {
     setActiveTab(tab)
     setCurrentPage(1)
@@ -471,24 +447,16 @@ export default function Manage() {
     }
   }
 
-  // ============================================================
-  // 分页和搜索
-  // ============================================================
   const allImages = images[activeTab] || []
   
-  // ✅ 应用筛选
   const filteredImages = allImages.filter(img => {
-    // 搜索关键词
     if (searchKeyword.trim() && !img.name.toLowerCase().includes(searchKeyword.toLowerCase())) {
       return false
     }
-    // 类型筛选
     if (filters.type === 'image' && isMediaFile(img.name)) return false
     if (filters.type === 'audio' && !isAudioFile(img.name)) return false
     if (filters.type === 'video' && !isVideoFile(img.name)) return false
-    // 来源筛选
     if (filters.source && img.source !== filters.source) return false
-    // 文件夹筛选
     if (filters.folder && !img.folder?.includes(filters.folder)) return false
     return true
   })
@@ -499,12 +467,8 @@ export default function Manage() {
   const paginatedImages = filteredImages.slice(startIndex, startIndex + pageSize)
 
   const formatTime = (isoString) => new Date(isoString).toLocaleString('zh-CN')
-
   const filteredHistory = getFilteredHistory()
 
-  // ============================================================
-  // 预加载首屏图片
-  // ============================================================
   useEffect(() => {
     if (activeTab !== 'history' && paginatedImages.length > 0) {
       const preloadCount = Math.min(4, paginatedImages.length)
@@ -515,9 +479,6 @@ export default function Manage() {
     }
   }, [activeTab, currentPage, searchKeyword, paginatedImages])
 
-  // ============================================================
-  // 未登录界面
-  // ============================================================
   if (!isAuthenticated) {
     return (
       <div
@@ -563,9 +524,6 @@ export default function Manage() {
     )
   }
 
-  // ============================================================
-  // 已登录界面
-  // ============================================================
   return (
     <div
       className="min-h-screen py-6 px-4"
@@ -592,7 +550,6 @@ export default function Manage() {
         />
       )}
 
-      {/* 左侧菜单 */}
       <div
         className={`
           fixed top-0 left-0 h-full z-50 w-64 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md shadow-2xl transition-transform duration-300 ease-in-out
@@ -699,7 +656,6 @@ export default function Manage() {
             </span>
           </div>
 
-          {/* ✅ HuggingFace 菜单 */}
           <div
             onClick={() => handleTabChange('huggingface')}
             className={`
@@ -719,7 +675,6 @@ export default function Manage() {
             </span>
           </div>
 
-          {/* ✅ 外链图片 */}
           <div
             onClick={() => handleTabChange('external')}
             className={`
@@ -760,7 +715,6 @@ export default function Manage() {
         </div>
       </div>
 
-      {/* 主内容区 */}
       <div className="lg:pl-[250px]">
         <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-white/30 p-4 mb-6 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -837,7 +791,6 @@ export default function Manage() {
           </div>
         </div>
 
-        {/* ✅ 搜索框 + 筛选下拉（外链页面不显示） */}
         {activeTab !== 'history' && activeTab !== 'external' && (
           <div className="mb-4 flex flex-wrap gap-2">
             <div className="relative flex-1 min-w-[200px]">
@@ -869,7 +822,6 @@ export default function Manage() {
           </div>
         )}
 
-        {/* 历史记录搜索框 */}
         {activeTab === 'history' && (
           <div className="mb-4">
             <div className="relative">
@@ -901,7 +853,6 @@ export default function Manage() {
           </div>
         )}
 
-        {/* 批量操作栏（外链页面不显示） */}
         {activeTab !== 'history' && activeTab !== 'external' && selectedImages.size > 0 && (
           <div className="bg-blue-50/80 dark:bg-blue-900/30 backdrop-blur-sm rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-blue-200/50 dark:border-blue-800/50">
             <span className="text-blue-700 dark:text-blue-300 text-sm flex items-center gap-2">
@@ -933,7 +884,6 @@ export default function Manage() {
           </div>
         )}
 
-        {/* 批量操作栏（历史记录） */}
         {activeTab === 'history' && selectedHistoryIds.size > 0 && (
           <div className="bg-teal-50/80 dark:bg-teal-900/30 backdrop-blur-sm rounded-xl p-3 mb-4 flex items-center justify-between flex-wrap gap-2 border border-teal-200/50 dark:border-teal-800/50">
             <span className="text-teal-700 dark:text-teal-300 text-sm flex items-center gap-2">
@@ -956,11 +906,7 @@ export default function Manage() {
           </div>
         )}
 
-        {/* ============================================================
-            内容区域
-            ============================================================ */}
         {activeTab === 'external' ? (
-          // ✅ 外链图片管理
           <ExternalLinksManager />
         ) : activeTab === 'history' ? (
           historyLoading ? (
@@ -1061,9 +1007,6 @@ export default function Manage() {
             <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 sm:gap-3">
               {paginatedImages.map((img, idx) => {
                 const proxyUrl = getProxyUrl(img)
-                const aspectClass = getImageAspect(img)
-                const isLoaded = loadedImages.has(img.name)
-
                 return (
                   <FileCard
                     key={img.sha || idx}
@@ -1121,9 +1064,6 @@ export default function Manage() {
         )}
       </div>
 
-      {/* ============================================================
-          文件详情弹窗
-          ============================================================ */}
       <FileDetailDialog
         file={detailFile}
         visible={!!detailFile}
@@ -1136,9 +1076,6 @@ export default function Manage() {
         getFileUrl={getProxyUrl}
       />
 
-      {/* ============================================================
-          批量操作栏 - 固定在底部（外链页面不显示）
-          ============================================================ */}
       {activeTab !== 'history' && activeTab !== 'external' && (
         <BatchActionBar
           selectedCount={selectedImages.size}
@@ -1150,9 +1087,6 @@ export default function Manage() {
         />
       )}
 
-      {/* ============================================================
-          预览弹窗
-          ============================================================ */}
       {previewImage && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
