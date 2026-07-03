@@ -6,6 +6,7 @@ export async function onRequest(context) {
   const { request, env } = context
   const url = new URL(request.url)
   const path = url.searchParams.get('path')
+  const source = url.searchParams.get('source') || 'github' // 获取 source 参数
   
   if (!path) {
     return new Response('Missing path parameter', { status: 400 })
@@ -18,11 +19,57 @@ export async function onRequest(context) {
   const filename = parts.slice(1).join('/')
   const allowedFolders = ['wallpaper', 'cover', 'sh', 'sd', 'telegram']
 
-  if (!allowedFolders.includes(folder)) {
-    return new Response('Invalid folder', { status: 403 })
+  // ============================================================
+  // HuggingFace 存储（新增）
+  // ============================================================
+  if (source === 'huggingface') {
+    const hfToken = env.HF_TOKEN
+    const hfRepo = env.HF_REPO
+    
+    if (!hfToken || !hfRepo) {
+      return new Response('HuggingFace 未配置', { status: 500 })
+    }
+    
+    try {
+      // HuggingFace Dataset 的 raw 文件地址
+      const hfUrl = `https://huggingface.co/datasets/${hfRepo}/raw/main/${path}`
+      
+      const response = await fetch(hfUrl, {
+        headers: {
+          'Authorization': `Bearer ${hfToken}`
+        }
+      })
+      
+      if (!response.ok) {
+        return new Response('Image not found', { status: 404 })
+      }
+      
+      const ext = filename.split('.').pop().toLowerCase()
+      const contentTypes = {
+        'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+        'webp': 'image/webp', 'gif': 'image/gif', 'avif': 'image/avif',
+        'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'ogg': 'audio/ogg',
+        'mp4': 'video/mp4', 'webm': 'video/webm'
+      }
+      const contentType = contentTypes[ext] || 'image/jpeg'
+      const body = await response.arrayBuffer()
+      
+      return new Response(body, {
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=86400',
+          'Access-Control-Allow-Origin': '*'
+        }
+      })
+    } catch (error) {
+      console.error('HuggingFace fetch error:', error)
+      return new Response('HuggingFace proxy error', { status: 500 })
+    }
   }
 
+  // ============================================================
   // Telegram 文件
+  // ============================================================
   if (folder === 'telegram') {
     const botToken = env.TG_BOT_TOKEN;
     if (!botToken) {
@@ -67,7 +114,9 @@ export async function onRequest(context) {
     }
   }
 
+  // ============================================================
   // R2 存储
+  // ============================================================
   if (bucket) {
     try {
       const object = await bucket.get(path)
@@ -89,7 +138,9 @@ export async function onRequest(context) {
     }
   }
 
-  // GitHub 存储
+  // ============================================================
+  // GitHub 存储（默认）
+  // ============================================================
   if (!token) {
     return new Response('GITHUB_TOKEN not configured', { status: 500 })
   }
