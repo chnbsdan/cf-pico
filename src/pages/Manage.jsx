@@ -1,4 +1,4 @@
-// src/pages/Manage.jsx - 图片管理页面（密码从环境变量读取 + 历史记录搜索 + Telegram 分类 + 外链图片）
+// src/pages/Manage.jsx - 图片管理页面（密码从环境变量读取 + 历史记录搜索 + Telegram 分类 + 外链图片 + HuggingFace）
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { fetchImageList, copyToClipboard, batchCopyLinks } from '../lib/api'
 import ThemeToggle from '../components/ThemeToggle'
@@ -44,8 +44,8 @@ export default function Manage() {
   const [password, setPassword] = useState('')
   const [passwordError, setPasswordError] = useState(false)
   
-  // ✅ 添加 external: [] 
-  const [images, setImages] = useState({ wallpaper: [], cover: [], sh: [], sd: [], telegram: [], external: [] })
+  // ✅ 添加 huggingface: [] 
+  const [images, setImages] = useState({ wallpaper: [], cover: [], sh: [], sd: [], telegram: [], huggingface: [], external: [] })
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('wallpaper')
   const [copiedId, setCopiedId] = useState(null)
@@ -338,7 +338,7 @@ export default function Manage() {
     setLoadedImages(new Set())
     try {
       const data = await fetchImageList()
-      setImages(data.folders || { wallpaper: [], cover: [], sh: [], sd: [], telegram: [], external: [] })
+      setImages(data.folders || { wallpaper: [], cover: [], sh: [], sd: [], telegram: [], huggingface: [], external: [] })
     } catch (err) {
       console.error('加载图片列表失败:', err)
     } finally {
@@ -699,6 +699,26 @@ export default function Manage() {
             </span>
           </div>
 
+          {/* ✅ HuggingFace 菜单 */}
+          <div
+            onClick={() => handleTabChange('huggingface')}
+            className={`
+              flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 mt-2
+              ${activeTab === 'huggingface'
+                ? 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 bg-white/20 backdrop-blur-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600'
+              }
+            `}
+          >
+            <div className="flex items-center gap-2">
+              <i className="fas fa-hugging-face text-sm"></i>
+              <span className="text-sm font-medium">HuggingFace</span>
+            </div>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-white/30 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300">
+              {images['huggingface']?.length || 0}
+            </span>
+          </div>
+
           {/* ✅ 外链图片 */}
           <div
             onClick={() => handleTabChange('external')}
@@ -754,6 +774,8 @@ export default function Manage() {
                     ? 'fa-mobile-alt text-purple-500'
                     : activeTab === 'telegram'
                     ? 'fa-paper-plane text-green-500'
+                    : activeTab === 'huggingface'
+                    ? 'fa-hugging-face text-yellow-500'
                     : activeTab === 'external'
                     ? 'fa-link text-purple-500'
                     : 'fa-history text-teal-500'
@@ -769,6 +791,8 @@ export default function Manage() {
                   ? '竖屏图片 (sd)'
                   : activeTab === 'telegram'
                   ? 'Telegram 图片'
+                  : activeTab === 'huggingface'
+                  ? 'HuggingFace 图片'
                   : activeTab === 'external'
                   ? '外链图片'
                   : '上传历史'}
