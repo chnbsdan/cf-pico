@@ -1,4 +1,4 @@
-// functions/api/admin/delete.js - POST /api/admin/delete 删除文件（调试版）
+// functions/api/admin/delete.js - POST /api/admin/delete 删除文件
 import { getTelegramImages, saveTelegramImages } from '../utils/github.js'
 import { deleteCompletedFile } from '../utils/r2.js'
 import { deleteTelegramFile } from '../utils/telegram.js'
@@ -11,9 +11,7 @@ export async function onRequest(context) {
 
   try {
     const body = await request.json()
-    const { filename, folder, sha, source, tgMessageId, fileId } = body
-
-    console.log('🔍 删除请求:', { filename, folder, source })
+    const { filename, folder, sha, source, tgMessageId, fileId, path } = body
 
     if (!filename || !folder) {
       return new Response(JSON.stringify({ error: 'Missing filename or folder' }), {
@@ -25,7 +23,9 @@ export async function onRequest(context) {
     let deleted = false
     let deleteErrors = []
 
-    // 删除 Telegram 文件（包括分片文件）
+    // ============================================================
+    // 1. 删除 Telegram 文件（包括分片文件）
+    // ============================================================
     if (source === 'telegram' || source === 'telegram_chunks') {
       const botToken = env.TG_BOT_TOKEN;
       const chatId = env.TG_CHAT_ID;
@@ -72,36 +72,36 @@ export async function onRequest(context) {
       }
     }
 
-    // ✅ 删除 HuggingFace 存储的文件（调试版）
+    // ============================================================
+    // 2. 删除 HuggingFace 存储的文件
+    // ============================================================
     if (source === 'huggingface') {
       if (env.HF_TOKEN && env.HF_REPO) {
         try {
-          let hfPath = filename
-          if (!filename.includes('/')) {
-            hfPath = `${folder}/${filename}`
-          }
+          // ✅ 优先使用 path（完整路径如 wallpaper/xxx.jpg）
+          // 如果没有 path，fallback 到 filename
+          const hfPath = path || filename
           console.log('🔍 HuggingFace 删除路径:', hfPath)
           
           const result = await deleteFromHuggingFace(hfPath, env)
-          console.log('🔍 HuggingFace 删除结果:', JSON.stringify(result))
-          
           if (result.success) {
             deleted = true
             console.log(`✅ HuggingFace 已删除: ${hfPath}`)
           } else {
-            // ✅ 把具体错误信息传给前端
-            deleteErrors.push(`HuggingFace 删除失败: ${result.error || '未知错误'}`)
+            deleteErrors.push(`HuggingFace 删除失败: ${result.error}`)
           }
         } catch (e) {
           console.error('HuggingFace delete error:', e)
-          deleteErrors.push(`HuggingFace 删除异常: ${e.message}`)
+          deleteErrors.push('HuggingFace 删除异常')
         }
       } else {
-        deleteErrors.push('HuggingFace 未配置 (HF_TOKEN 或 HF_REPO 缺失)')
+        deleteErrors.push('HuggingFace 未配置')
       }
     }
 
-    // 删除 R2 存储的文件
+    // ============================================================
+    // 3. 删除 R2 存储的文件
+    // ============================================================
     if (source === 'r2' || (!source && !tgMessageId && source !== 'telegram_chunks' && source !== 'huggingface')) {
       if (bucket) {
         try {
@@ -116,7 +116,9 @@ export async function onRequest(context) {
       }
     }
 
-    // 删除 GitHub 存储的文件
+    // ============================================================
+    // 4. 删除 GitHub 存储的文件
+    // ============================================================
     if (source === 'github' || (!source && !tgMessageId && source !== 'telegram_chunks' && source !== 'huggingface')) {
       if (token && sha) {
         try {
@@ -149,6 +151,9 @@ export async function onRequest(context) {
       }
     }
 
+    // ============================================================
+    // 返回结果
+    // ============================================================
     if (deleted) {
       return new Response(JSON.stringify({ 
         success: true,
@@ -167,10 +172,7 @@ export async function onRequest(context) {
     }
   } catch (error) {
     console.error('Delete error:', error)
-    return new Response(JSON.stringify({ 
-      error: 'Internal server error',
-      details: error.message 
-    }), {
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     })
