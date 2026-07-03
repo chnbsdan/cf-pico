@@ -1,5 +1,5 @@
 // functions/api/utils/huggingface.js
-// HuggingFace Git LFS 上传模块 - cf-pico 专用
+// HuggingFace Git LFS 上传模块 - 修复 0 字节问题
 
 function getHFConfig(env) {
   const token = env.HF_TOKEN;
@@ -29,6 +29,8 @@ export async function uploadToHuggingFace(file, path, env, request) {
     const oid = await computeSHA256(fileBuffer);
     const sample = await getFileSample(file);
 
+    console.log(`📤 开始上传: ${path}, 大小: ${fileSize} bytes, OID: ${oid}`);
+
     // 1. Preupload
     const preuploadRes = await fetch(`https://huggingface.co/api/datasets/${repo}/preupload/main`, {
       method: 'POST',
@@ -37,6 +39,8 @@ export async function uploadToHuggingFace(file, path, env, request) {
     });
     if (!preuploadRes.ok) throw new Error(`Preupload 失败: ${await preuploadRes.text()}`);
     const preuploadData = await preuploadRes.json();
+    console.log('Preupload 结果:', JSON.stringify(preuploadData));
+    
     if (preuploadData.files?.[0]?.uploadMode !== 'lfs') {
       throw new Error('此文件不需要 LFS 上传');
     }
@@ -59,33 +63,50 @@ export async function uploadToHuggingFace(file, path, env, request) {
     });
     if (!batchRes.ok) throw new Error(`LFS Batch 失败: ${await batchRes.text()}`);
     const batchData = await batchRes.json();
-    const uploadAction = batchData.objects?.[0]?.actions?.upload;
-    if (!uploadAction) throw new Error('无法获取 LFS 上传地址');
+    console.log('LFS Batch 结果:', JSON.stringify(batchData));
+    
+    const obj = batchData.objects?.[0];
+    if (obj?.error) {
+      throw new Error(`LFS 对象错误: ${obj.error.message}`);
+    }
+    
+    // 如果文件已存在，直接跳过上传
+    if (obj?.actions?.upload) {
+      const uploadAction = obj.actions.upload;
+      console.log('上传到 LFS:', uploadAction.href);
+      
+      // ✅ 重新读取文件为 Blob，确保 body 可用
+      const fileBlob = await file.slice(0, file.size);
+      const uploadRes = await fetch(uploadAction.href, {
+        method: 'PUT',
+        headers: uploadAction.header || {},
+        body: fileBlob
+      });
+      
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text();
+        throw new Error(`LFS 上传失败 (${uploadRes.status}): ${errText}`);
+      }
+      console.log('✅ LFS 上传成功');
+    } else {
+      console.log('ℹ️ 文件已存在于 LFS 存储中');
+    }
 
-    // 3. 上传到 LFS 存储
-    const uploadRes = await fetch(uploadAction.href, {
-      method: 'PUT',
-      headers: uploadAction.header || {},
-      body: file
-    });
-    if (!uploadRes.ok) throw new Error(`LFS 上传失败: ${await uploadRes.text()}`);
-
-    // 4. Commit
+    // 4. Commit - 使用 lfsFile 方式（更可靠）
     const commitBody = [
       JSON.stringify({ key: 'header', value: { summary: `Upload ${path}` } }),
       JSON.stringify({ 
-        key: 'file', 
+        key: 'lfsFile', 
         value: { 
           path: path, 
-          content: '',
-          lfs: true,
-          oid: oid,
+          oid: oid, 
           size: fileSize,
           algo: 'sha256'
         } 
       })
     ].join('\n');
 
+    console.log('提交 Commit...');
     const commitRes = await fetch(`https://huggingface.co/api/datasets/${repo}/commit/main`, {
       method: 'POST',
       headers: {
@@ -98,14 +119,44 @@ export async function uploadToHuggingFace(file, path, env, request) {
     if (!commitRes.ok) {
       const errorText = await commitRes.text();
       console.error('Commit 失败:', errorText);
-      throw new Error(`提交失败: ${errorText}`);
+      
+      // ✅ 备用方案：使用 file + lfs: true
+      console.log('尝试备用 Commit 格式...');
+      const fallbackBody = [
+        JSON.stringify({ key: 'header', value: { summary: `Upload ${path}` } }),
+        JSON.stringify({ 
+          key: 'file', 
+          value: { 
+            path: path, 
+            content: '', 
+            lfs: true,
+            oid: oid,
+            size: fileSize,
+            algo: 'sha256'
+          } 
+        })
+      ].join('\n');
+
+      const fallbackRes = await fetch(`https://huggingface.co/api/datasets/${repo}/commit/main`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/x-ndjson'
+        },
+        body: fallbackBody
+      });
+      if (!fallbackRes.ok) {
+        throw new Error(`备用提交失败: ${await fallbackRes.text()}`);
+      }
+      console.log('✅ 备用 Commit 成功');
+    } else {
+      console.log('✅ Commit 成功');
     }
 
-    // ✅ 返回统一格式链接（不带 source 参数）
+    // 返回统一格式链接
     const baseUrl = new URL(request.url).origin;
     const fileUrl = `${baseUrl}/api/image?path=${path}`;
 
-    console.log(`✅ HuggingFace 上传成功: ${path}`);
     return { success: true, url: fileUrl, source: 'huggingface', path };
 
   } catch (error) {
