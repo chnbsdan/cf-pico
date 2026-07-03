@@ -173,7 +173,7 @@ export async function onRequest(context) {
         });
       }
 
-    // 2. HuggingFace 存储 ⬅️ 新增
+        // 2. HuggingFace 存储
     } else if (storageType === 'huggingface') {
       const hfToken = env.HF_TOKEN
       const hfRepo = env.HF_REPO
@@ -181,6 +181,17 @@ export async function onRequest(context) {
       if (!hfToken || !hfRepo) {
         return new Response(JSON.stringify({ error: 'HuggingFace 存储未配置，请设置 HF_TOKEN 和 HF_REPO' }), {
           status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      
+      // HuggingFace 文件大小检查（建议 100MB 以内）
+      if (file.size > 100 * 1024 * 1024) {
+        return new Response(JSON.stringify({ 
+          error: 'HuggingFace 建议上传 100MB 以内的文件',
+          maxSize: 100 * 1024 * 1024
+        }), {
+          status: 400,
           headers: { 'Content-Type': 'application/json' }
         })
       }
@@ -196,6 +207,7 @@ export async function onRequest(context) {
         uploadedUrl = result.url
         usedStorage = 'huggingface'
         console.log(`✅ HuggingFace 上传成功: ${hfPath}`)
+        console.log(`✅ 文件链接: ${uploadedUrl}`)
       } catch (error) {
         console.error('HuggingFace upload error:', error)
         return new Response(JSON.stringify({ error: error.message }), {
