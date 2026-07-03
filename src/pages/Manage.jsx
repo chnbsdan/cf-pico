@@ -389,6 +389,7 @@ export default function Manage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             filename: img.name,
+            path: img.path || '',        // ✅ 加这一行，解决批量删除HF问题
             folder: activeTab,
             sha: img.sha,
             source: img.source,
