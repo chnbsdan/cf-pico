@@ -1,5 +1,6 @@
 // functions/api/list.js - GET /api/list
 import { getFolderImages, getTelegramImages } from './utils/github.js'
+import { listFilesFromHuggingFace } from './utils/huggingface.js' // ⬅️ 新增
 
 export async function onRequest(context) {
   const { env } = context
@@ -58,6 +59,33 @@ export async function onRequest(context) {
     extension: img.extension || ''
   }))
   total += results['telegram'].length
+
+  // ============================================================
+  // 1.5 HuggingFace 图片 ⬅️ 新增
+  // ============================================================
+  let huggingfaceImages = []
+  if (env.HF_TOKEN && env.HF_REPO) {
+    try {
+      const result = await listFilesFromHuggingFace(env)
+      if (result.success) {
+        huggingfaceImages = result.files.map(img => ({
+          name: img.name,
+          url: img.url,
+          path: img.path,
+          sha: '',
+          size: img.size || 0,
+          folder: 'huggingface',
+          source: 'huggingface',
+          originalFolder: img.folder || ''
+        }))
+      }
+    } catch (e) {
+      console.error('HuggingFace list error:', e)
+    }
+  }
+
+  results['huggingface'] = huggingfaceImages
+  total += huggingfaceImages.length
 
   // ============================================================
   // 2. ✅ 外部图源 - 硬编码 GITHUB_USER 和 GITHUB_REPO
