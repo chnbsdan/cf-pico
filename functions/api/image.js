@@ -16,10 +16,58 @@ export async function onRequest(context) {
   const parts = path.split('/')
   const folder = parts[0]
   const filename = parts.slice(1).join('/')
-  const allowedFolders = ['wallpaper', 'cover', 'sh', 'sd', 'telegram']
+  const allowedFolders = ['wallpaper', 'cover', 'sh', 'sd', 'telegram', 'huggingface']
 
   if (!allowedFolders.includes(folder)) {
     return new Response('Invalid folder', { status: 403 })
+  }
+
+  // ============================================================
+  // HuggingFace 存储
+  // ============================================================
+  if (folder === 'huggingface') {
+    const hfToken = env.HF_TOKEN
+    const hfRepo = env.HF_REPO
+    
+    if (!hfToken || !hfRepo) {
+      return new Response('HuggingFace 未配置', { status: 500 })
+    }
+    
+    try {
+      // 去掉开头的 huggingface/，得到真实路径
+      const realPath = parts.slice(1).join('/')
+      const hfUrl = `https://huggingface.co/datasets/${hfRepo}/raw/main/${realPath}`
+      const response = await fetch(hfUrl, {
+        headers: {
+          'Authorization': `Bearer ${hfToken}`
+        }
+      })
+      
+      if (!response.ok) {
+        return new Response('Image not found', { status: 404 })
+      }
+      
+      const ext = filename.split('.').pop().toLowerCase()
+      const contentTypes = {
+        'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+        'webp': 'image/webp', 'gif': 'image/gif', 'avif': 'image/avif',
+        'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'ogg': 'audio/ogg',
+        'mp4': 'video/mp4', 'webm': 'video/webm'
+      }
+      const contentType = contentTypes[ext] || 'image/jpeg'
+      const body = await response.arrayBuffer()
+      
+      return new Response(body, {
+        headers: {
+          'Content-Type': contentType,
+          'Cache-Control': 'public, max-age=86400',
+          'Access-Control-Allow-Origin': '*'
+        }
+      })
+    } catch (error) {
+      console.error('HuggingFace fetch error:', error)
+      return new Response('HuggingFace proxy error', { status: 500 })
+    }
   }
 
   // ============================================================
@@ -111,7 +159,7 @@ export async function onRequest(context) {
     })
 
     if (!response.ok) {
-      return await tryHuggingFace(path, filename, env)
+      return new Response('Image not found', { status: 404 })
     }
 
     const ext = filename.split('.').pop().toLowerCase()
@@ -133,52 +181,6 @@ export async function onRequest(context) {
     })
   } catch (error) {
     console.error('GitHub fetch error:', error)
-    return await tryHuggingFace(path, filename, env)
-  }
-}
-
-// ============================================================
-// HuggingFace 兜底函数
-// ============================================================
-async function tryHuggingFace(path, filename, env) {
-  const hfToken = env.HF_TOKEN
-  const hfRepo = env.HF_REPO
-  
-  if (!hfToken || !hfRepo) {
-    return new Response('Image not found', { status: 404 })
-  }
-  
-  try {
-    const hfUrl = `https://huggingface.co/datasets/${hfRepo}/raw/main/${path}`
-    const response = await fetch(hfUrl, {
-      headers: {
-        'Authorization': `Bearer ${hfToken}`
-      }
-    })
-    
-    if (!response.ok) {
-      return new Response('Image not found', { status: 404 })
-    }
-    
-    const ext = filename.split('.').pop().toLowerCase()
-    const contentTypes = {
-      'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
-      'webp': 'image/webp', 'gif': 'image/gif', 'avif': 'image/avif',
-      'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'ogg': 'audio/ogg',
-      'mp4': 'video/mp4', 'webm': 'video/webm'
-    }
-    const contentType = contentTypes[ext] || 'image/jpeg'
-    const body = await response.arrayBuffer()
-    
-    return new Response(body, {
-      headers: {
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400',
-        'Access-Control-Allow-Origin': '*'
-      }
-    })
-  } catch (error) {
-    console.error('HuggingFace fallback error:', error)
-    return new Response('Image not found', { status: 404 })
+    return new Response('Internal error', { status: 500 })
   }
 }
