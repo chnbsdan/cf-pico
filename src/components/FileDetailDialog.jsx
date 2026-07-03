@@ -36,6 +36,19 @@ export default function FileDetailDialog({ file, visible, onClose, onDelete, onC
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // 获取存储渠道显示名称
+  const getSourceLabel = (source) => {
+    const map = {
+      'github': 'GitHub',
+      'r2': 'R2',
+      'telegram': 'Telegram',
+      'telegram_chunks': 'Telegram (分片)',
+      'huggingface': 'HuggingFace',
+      'external': '外链'
+    }
+    return map[source] || source || '未知'
+  }
+
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-7xl w-full max-h-[100vh] overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -76,9 +89,7 @@ export default function FileDetailDialog({ file, visible, onClose, onDelete, onC
             </div>
             <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-700">
               <span className="text-gray-500 dark:text-gray-400">存储渠道</span>
-              <span className="text-gray-800 dark:text-white">
-                {file.source === 'github' ? 'GitHub' : file.source === 'r2' ? 'R2' : file.source === 'telegram' ? 'Telegram' : file.source === 'telegram_chunks' ? 'Telegram (分片)' : file.folder}
-              </span>
+              <span className="text-gray-800 dark:text-white">{getSourceLabel(file.source)}</span>
             </div>
             <div className="flex justify-between py-1">
               <span className="text-gray-500 dark:text-gray-400">链接</span>
