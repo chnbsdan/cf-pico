@@ -2,7 +2,7 @@
 import { GITHUB_USER, GITHUB_REPO, generateFilename } from './utils/helpers.js'
 import { getTelegramImages, saveTelegramImages } from './utils/github.js'
 import { uploadToTelegram } from './utils/telegram.js'
-import { uploadToHuggingFace } from './utils/huggingface.js' // ⬅️ 新增
+import { uploadToHuggingFace } from './utils/huggingface.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -35,10 +35,9 @@ export async function onRequest(context) {
       })
     }
 
-    // HuggingFace 文件大小检查（建议 100MB 以内）
     if (storageType === 'huggingface' && file.size > 100 * 1024 * 1024) {
       return new Response(JSON.stringify({ 
-        error: 'HuggingFace 建议上传 100MB 以内的文件，大文件请使用 Telegram 分片上传',
+        error: 'HuggingFace 建议上传 100MB 以内的文件',
         maxSize: 100 * 1024 * 1024
       }), {
         status: 400,
@@ -173,7 +172,7 @@ export async function onRequest(context) {
         });
       }
 
-        // 2. HuggingFace 存储
+    // 2. HuggingFace 存储
     } else if (storageType === 'huggingface') {
       const hfToken = env.HF_TOKEN
       const hfRepo = env.HF_REPO
@@ -185,20 +184,10 @@ export async function onRequest(context) {
         })
       }
       
-      // HuggingFace 文件大小检查（建议 100MB 以内）
-      if (file.size > 100 * 1024 * 1024) {
-        return new Response(JSON.stringify({ 
-          error: 'HuggingFace 建议上传 100MB 以内的文件',
-          maxSize: 100 * 1024 * 1024
-        }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        })
-      }
-      
       try {
         const hfPath = `${folder}/${filename}`
-        const result = await uploadToHuggingFace(processedFile, hfPath, env)
+        // ✅ 关键修改：传入 request 参数
+        const result = await uploadToHuggingFace(processedFile, hfPath, env, request)
         
         if (!result.success) {
           throw new Error(result.error || 'HuggingFace 上传失败')
@@ -207,7 +196,7 @@ export async function onRequest(context) {
         uploadedUrl = result.url
         usedStorage = 'huggingface'
         console.log(`✅ HuggingFace 上传成功: ${hfPath}`)
-        console.log(`✅ 文件链接: ${uploadedUrl}`)
+        console.log(`✅ 链接: ${uploadedUrl}`)
       } catch (error) {
         console.error('HuggingFace upload error:', error)
         return new Response(JSON.stringify({ error: error.message }), {
