@@ -349,6 +349,7 @@ export default function Manage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           filename: img.name,
+          path: img.path || '',        // ✅ 新增这一行，解决HF的删除路径
           folder: folder,
           sha: img.sha,
           source: img.source,
