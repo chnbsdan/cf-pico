@@ -42,7 +42,10 @@ export default function FilterDropdown({ filters, onFilterChange, label = '筛�
               {key === 'source' && (
                 <select value={value || ''} onChange={(e) => handleFilterChange(key, e.target.value)} className="w-full px-2 py-1 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-700 dark:text-gray-300 text-sm border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
                   <option value="">全部</option>
-                  <option value="github">GitHub</option><option value="r2">R2</option><option value="telegram">Telegram</option>
+                  <option value="github">GitHub</option>
+                  <option value="r2">R2</option>
+                  <option value="telegram">Telegram</option>
+                  <option value="huggingface">HuggingFace</option>
                 </select>
               )}
               {key === 'folder' && (
