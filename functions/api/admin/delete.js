@@ -2,6 +2,7 @@
 import { getTelegramImages, saveTelegramImages } from '../utils/github.js'
 import { deleteCompletedFile } from '../utils/r2.js'
 import { deleteTelegramFile } from '../utils/telegram.js'
+import { deleteFromHuggingFace } from '../utils/huggingface.js' // ⬅️ 新增
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -69,8 +70,29 @@ export async function onRequest(context) {
       }
     }
 
+    // 删除 HuggingFace 存储的文件 ⬅️ 新增
+    if (source === 'huggingface') {
+      if (env.HF_TOKEN && env.HF_REPO) {
+        try {
+          const hfPath = `${folder}/${filename}`
+          const result = await deleteFromHuggingFace(hfPath, env)
+          if (result.success) {
+            deleted = true
+            console.log(`✅ HuggingFace 已删除: ${hfPath}`)
+          } else {
+            deleteErrors.push(`HuggingFace 删除失败: ${result.error}`)
+          }
+        } catch (e) {
+          console.error('HuggingFace delete error:', e)
+          deleteErrors.push('HuggingFace 删除异常')
+        }
+      } else {
+        deleteErrors.push('HuggingFace 未配置')
+      }
+    }
+
     // 删除 R2 存储的文件
-    if (source === 'r2' || (!source && !tgMessageId && source !== 'telegram_chunks')) {
+    if (source === 'r2' || (!source && !tgMessageId && source !== 'telegram_chunks' && source !== 'huggingface')) {
       if (bucket) {
         try {
           const key = `${folder}/${filename}`
@@ -85,7 +107,7 @@ export async function onRequest(context) {
     }
 
     // 删除 GitHub 存储的文件
-    if (source === 'github' || (!source && !tgMessageId && source !== 'telegram_chunks')) {
+    if (source === 'github' || (!source && !tgMessageId && source !== 'telegram_chunks' && source !== 'huggingface')) {
       if (token && sha) {
         try {
           const apiUrl = `https://api.github.com/repos/chnbsdan/cf-pico/contents/${folder}/${filename}`
