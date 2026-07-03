@@ -1,5 +1,5 @@
 // functions/api/utils/huggingface.js
-// HuggingFace Git LFS 上传模块 - cf-pico 专用完整版
+// HuggingFace Git LFS 上传模块 - cf-pico 专用
 
 function getHFConfig(env) {
   const token = env.HF_TOKEN;
@@ -74,10 +74,12 @@ export async function uploadToHuggingFace(file, path, env, request) {
     const commitBody = [
       JSON.stringify({ key: 'header', value: { summary: `Upload ${path}` } }),
       JSON.stringify({ 
-        key: 'lfsFile', 
+        key: 'file', 
         value: { 
           path: path, 
-          oid: oid, 
+          content: null,
+          lfs: true,
+          oid: oid,
           size: fileSize,
           algo: 'sha256'
         } 
@@ -95,38 +97,15 @@ export async function uploadToHuggingFace(file, path, env, request) {
 
     if (!commitRes.ok) {
       const errorText = await commitRes.text();
-      console.warn('Commit 失败 (lfsFile):', errorText);
-      
-      const fallbackBody = [
-        JSON.stringify({ key: 'header', value: { summary: `Upload ${path}` } }),
-        JSON.stringify({ 
-          key: 'file', 
-          value: { 
-            path: path, 
-            content: null,
-            lfs: true,
-            oid: oid,
-            size: fileSize,
-            algo: 'sha256'
-          } 
-        })
-      ].join('\n');
-
-      const fallbackRes = await fetch(`https://huggingface.co/api/datasets/${repo}/commit/main`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/x-ndjson'
-        },
-        body: fallbackBody
-      });
-      if (!fallbackRes.ok) throw new Error(`提交失败: ${await fallbackRes.text()}`);
+      console.error('Commit 失败:', errorText);
+      throw new Error(`提交失败: ${errorText}`);
     }
 
-    // 返回统一代理链接
+    // ✅ 返回统一格式链接（不带 source 参数）
     const baseUrl = new URL(request.url).origin;
-    const fileUrl = `${baseUrl}/api/image?path=${path}&source=huggingface`;
+    const fileUrl = `${baseUrl}/api/image?path=${path}`;
 
+    console.log(`✅ HuggingFace 上传成功: ${path}`);
     return { success: true, url: fileUrl, source: 'huggingface', path };
 
   } catch (error) {
