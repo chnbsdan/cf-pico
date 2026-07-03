@@ -669,7 +669,7 @@ export default function Manage() {
             `}
           >
             <div className="flex items-center gap-2">
-              <i className="fas fa-hugging-face text-sm"></i>
+              <i className="fas fa-brain text-sm"></i>  {/* ← 改这里 */}
               <span className="text-sm font-medium">HuggingFace</span>
             </div>
             <span className="text-xs px-2 py-0.5 rounded-full bg-white/30 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300">
