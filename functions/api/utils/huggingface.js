@@ -1,5 +1,5 @@
 // functions/api/utils/huggingface.js
-// ✅ 使用 HuggingFace Hub API（兼容 Git 风格）
+// cf-pico 专用 HuggingFace 存储模块
 
 function getHFConfig(env) {
   const token = env.HF_TOKEN
@@ -13,41 +13,24 @@ function getHFConfig(env) {
 }
 
 /**
- * 将文件转换为 Base64（用于 Git 风格 API）
- */
-function fileToBase64(fileBuffer) {
-  const uint8Array = new Uint8Array(fileBuffer)
-  let binary = ''
-  for (let i = 0; i < uint8Array.length; i++) {
-    binary += String.fromCharCode(uint8Array[i])
-  }
-  return btoa(binary)
-}
-
-/**
  * 上传文件到 HuggingFace Dataset
- * 使用 HuggingFace Hub 的 Git 风格 API
+ * 使用 HuggingFace 官方 API
  */
 export async function uploadToHuggingFace(file, path, env) {
   try {
     const { token, repo } = getHFConfig(env)
     const fileBuffer = await file.arrayBuffer()
-    const base64Content = fileToBase64(fileBuffer)
     
-    // ✅ 使用 Hub API 的 upload 端点
+    // 使用 HuggingFace 官方上传 API
     const uploadUrl = `https://huggingface.co/api/datasets/${repo}/upload/${path}`
     
     const response = await fetch(uploadUrl, {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/octet-stream',
       },
-      body: JSON.stringify({
-        content: base64Content,
-        encoding: 'base64',
-        description: `Upload ${path}`,
-      }),
+      body: fileBuffer,
     })
     
     if (!response.ok) {
@@ -132,7 +115,6 @@ export async function listFilesFromHuggingFace(env, folder = '') {
     
     let files = data.siblings || []
     
-    // 过滤掉目录和常见配置文件
     files = files.filter(file => {
       const name = file.rfilename || ''
       if (name.endsWith('/')) return false
