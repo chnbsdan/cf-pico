@@ -60,8 +60,8 @@ export async function onRequest(context) {
   }))
   total += results['telegram'].length
 
-  // ============================================================
-  // 1.5 HuggingFace 图片 ⬅️ 新增
+    // ============================================================
+  // 1.5 HuggingFace 图片
   // ============================================================
   let huggingfaceImages = []
   if (env.HF_TOKEN && env.HF_REPO) {
@@ -78,6 +78,7 @@ export async function onRequest(context) {
           source: 'huggingface',
           originalFolder: img.folder || ''
         }))
+        console.log(`✅ HuggingFace 文件列表获取成功: ${huggingfaceImages.length} 个文件`)
       }
     } catch (e) {
       console.error('HuggingFace list error:', e)
