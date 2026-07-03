@@ -1,5 +1,5 @@
 // functions/api/utils/huggingface.js
-// HuggingFace Git LFS 上传模块 - 修复 0 字节问题
+// HuggingFace Git LFS 上传模块 - cf-pico 专用
 
 function getHFConfig(env) {
   const token = env.HF_TOKEN;
@@ -75,7 +75,6 @@ export async function uploadToHuggingFace(file, path, env, request) {
       const uploadAction = obj.actions.upload;
       console.log('上传到 LFS:', uploadAction.href);
       
-      // ✅ 重新读取文件为 Blob，确保 body 可用
       const fileBlob = await file.slice(0, file.size);
       const uploadRes = await fetch(uploadAction.href, {
         method: 'PUT',
@@ -92,7 +91,7 @@ export async function uploadToHuggingFace(file, path, env, request) {
       console.log('ℹ️ 文件已存在于 LFS 存储中');
     }
 
-    // 4. Commit - 使用 lfsFile 方式（更可靠）
+    // 4. Commit
     const commitBody = [
       JSON.stringify({ key: 'header', value: { summary: `Upload ${path}` } }),
       JSON.stringify({ 
@@ -120,7 +119,6 @@ export async function uploadToHuggingFace(file, path, env, request) {
       const errorText = await commitRes.text();
       console.error('Commit 失败:', errorText);
       
-      // ✅ 备用方案：使用 file + lfs: true
       console.log('尝试备用 Commit 格式...');
       const fallbackBody = [
         JSON.stringify({ key: 'header', value: { summary: `Upload ${path}` } }),
@@ -153,10 +151,11 @@ export async function uploadToHuggingFace(file, path, env, request) {
       console.log('✅ Commit 成功');
     }
 
-    // 返回统一格式链接
+    // ✅ 返回带 huggingface 前缀的链接，避免与 GitHub/R2 混淆
     const baseUrl = new URL(request.url).origin;
-    const fileUrl = `${baseUrl}/api/image?path=${path}`;
+    const fileUrl = `${baseUrl}/api/image?path=huggingface/${path}`;
 
+    console.log(`✅ HuggingFace 上传成功: ${path}`);
     return { success: true, url: fileUrl, source: 'huggingface', path };
 
   } catch (error) {
