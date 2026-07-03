@@ -1018,10 +1018,11 @@ export default function Manage() {
                       e.stopPropagation()
                       toggleSelect(img.name, e)
                     }}
-                    onClick={() => setDetailFile(img)}
-                    onCopy={() => handleCopy(proxyUrl, img.name)}
-                    onDelete={() => handleDelete(img, activeTab)}
-                    getFileUrl={getProxyUrl}
+                   onPreview={() => openPreview(img)}          // ✅ 点击图片 → 预览大图
+                   onDetail={() => setDetailFile(img)}         // ✅ 点击详情按钮 → 弹窗详情
+                   onCopy={() => handleCopy(proxyUrl, img.name)}
+                   onDelete={() => handleDelete(img, activeTab)}
+                   getFileUrl={getProxyUrl}
                   />
                 )
               })}
