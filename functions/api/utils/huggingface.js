@@ -1,5 +1,5 @@
 // functions/api/utils/huggingface.js
-// ✅ 使用 HuggingFace Commit API（最新官方推荐方式）
+// ✅ 使用 HuggingFace Hub API（兼容 Git 风格）
 
 function getHFConfig(env) {
   const token = env.HF_TOKEN
@@ -13,7 +13,7 @@ function getHFConfig(env) {
 }
 
 /**
- * 将文件转换为 Base64
+ * 将文件转换为 Base64（用于 Git 风格 API）
  */
 function fileToBase64(fileBuffer) {
   const uint8Array = new Uint8Array(fileBuffer)
@@ -26,7 +26,7 @@ function fileToBase64(fileBuffer) {
 
 /**
  * 上传文件到 HuggingFace Dataset
- * 使用 Commit API
+ * 使用 HuggingFace Hub 的 Git 风格 API
  */
 export async function uploadToHuggingFace(file, path, env) {
   try {
@@ -34,29 +34,20 @@ export async function uploadToHuggingFace(file, path, env) {
     const fileBuffer = await file.arrayBuffer()
     const base64Content = fileToBase64(fileBuffer)
     
-    // ✅ Commit API: POST /api/datasets/{repo}/commit
-    const commitUrl = `https://huggingface.co/api/datasets/${repo}/commit`
+    // ✅ 使用 Hub API 的 upload 端点
+    const uploadUrl = `https://huggingface.co/api/datasets/${repo}/upload/${path}`
     
-    const commitBody = {
-      description: `Upload ${path}`,
-      summary: `Upload ${path}`,
-      operations: [
-        {
-          operation: 'add_or_update',
-          path: path,
-          content: base64Content,
-          encoding: 'base64'
-        }
-      ]
-    }
-    
-    const response = await fetch(commitUrl, {
+    const response = await fetch(uploadUrl, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(commitBody),
+      body: JSON.stringify({
+        content: base64Content,
+        encoding: 'base64',
+        description: `Upload ${path}`,
+      }),
     })
     
     if (!response.ok) {
@@ -85,33 +76,18 @@ export async function uploadToHuggingFace(file, path, env) {
 
 /**
  * 从 HuggingFace Dataset 删除文件
- * 使用 Commit API
  */
 export async function deleteFromHuggingFace(path, env) {
   try {
     const { token, repo } = getHFConfig(env)
     
-    // ✅ Commit API: POST /api/datasets/{repo}/commit
-    const commitUrl = `https://huggingface.co/api/datasets/${repo}/commit`
+    const deleteUrl = `https://huggingface.co/api/datasets/${repo}/delete/${path}`
     
-    const commitBody = {
-      description: `Delete ${path}`,
-      summary: `Delete ${path}`,
-      operations: [
-        {
-          operation: 'delete',
-          path: path,
-        }
-      ]
-    }
-    
-    const response = await fetch(commitUrl, {
-      method: 'POST',
+    const response = await fetch(deleteUrl, {
+      method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
       },
-      body: JSON.stringify(commitBody),
     })
     
     if (!response.ok) {
@@ -119,12 +95,9 @@ export async function deleteFromHuggingFace(path, env) {
       throw new Error(`删除失败 (${response.status}): ${errorText}`)
     }
     
-    const data = await response.json()
-    
     return {
       success: true,
       message: '文件已删除',
-      data: data,
     }
   } catch (error) {
     console.error('HuggingFace 删除错误:', error)
@@ -142,7 +115,6 @@ export async function listFilesFromHuggingFace(env, folder = '') {
   try {
     const { token, repo } = getHFConfig(env)
     
-    // GET /api/datasets/{repo}
     const listUrl = `https://huggingface.co/api/datasets/${repo}`
     
     const response = await fetch(listUrl, {
@@ -158,7 +130,6 @@ export async function listFilesFromHuggingFace(env, folder = '') {
     
     const data = await response.json()
     
-    // Dataset 的文件列表在 siblings 字段中
     let files = data.siblings || []
     
     // 过滤掉目录和常见配置文件
