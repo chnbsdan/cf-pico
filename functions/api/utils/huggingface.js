@@ -1,13 +1,9 @@
 // functions/api/utils/huggingface.js
-
-/**
- * HuggingFace 存储操作模块
- * 基于 HuggingFace Spaces 的 API 实现
- */
+// ✅ Dataset 专用版本 - 适用于 https://huggingface.co/datasets/kekelove1688/imgbed
 
 function getHFConfig(env) {
   const token = env.HF_TOKEN
-  const repo = env.HF_REPO // 格式: "username/space-name"
+  const repo = env.HF_REPO // 格式: "username/dataset-name"
   
   if (!token || !repo) {
     throw new Error('HuggingFace 配置缺失: 请设置 HF_TOKEN 和 HF_REPO')
@@ -17,17 +13,19 @@ function getHFConfig(env) {
 }
 
 /**
- * 上传文件到 HuggingFace Space
+ * 上传文件到 HuggingFace Dataset
+ * 使用 HuggingFace Hub API
  */
 export async function uploadToHuggingFace(file, path, env) {
   try {
     const { token, repo } = getHFConfig(env)
     const fileBuffer = await file.arrayBuffer()
     
-    const uploadUrl = `https://huggingface.co/api/spaces/${repo}/files/${path}`
+    // ✅ Dataset API: POST /api/datasets/{repo}/upload/{path}
+    const uploadUrl = `https://huggingface.co/api/datasets/${repo}/upload/${path}`
     
     const response = await fetch(uploadUrl, {
-      method: 'PUT',
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/octet-stream',
@@ -41,7 +39,8 @@ export async function uploadToHuggingFace(file, path, env) {
     }
     
     const data = await response.json()
-    const fileUrl = `https://huggingface.co/spaces/${repo}/raw/main/${path}`
+    // ✅ Dataset 的 raw 文件访问链接
+    const fileUrl = `https://huggingface.co/datasets/${repo}/raw/main/${path}`
     
     return {
       success: true,
@@ -60,13 +59,14 @@ export async function uploadToHuggingFace(file, path, env) {
 }
 
 /**
- * 从 HuggingFace Space 删除文件
+ * 从 HuggingFace Dataset 删除文件
  */
 export async function deleteFromHuggingFace(path, env) {
   try {
     const { token, repo } = getHFConfig(env)
     
-    const deleteUrl = `https://huggingface.co/api/spaces/${repo}/files/${path}`
+    // ✅ Dataset API: DELETE /api/datasets/{repo}/delete/{path}
+    const deleteUrl = `https://huggingface.co/api/datasets/${repo}/delete/${path}`
     
     const response = await fetch(deleteUrl, {
       method: 'DELETE',
@@ -94,13 +94,14 @@ export async function deleteFromHuggingFace(path, env) {
 }
 
 /**
- * 获取 HuggingFace Space 的文件列表
+ * 获取 HuggingFace Dataset 的文件列表
  */
 export async function listFilesFromHuggingFace(env, folder = '') {
   try {
     const { token, repo } = getHFConfig(env)
     
-    const listUrl = `https://huggingface.co/api/spaces/${repo}/files`
+    // ✅ Dataset API: GET /api/datasets/{repo}
+    const listUrl = `https://huggingface.co/api/datasets/${repo}`
     
     const response = await fetch(listUrl, {
       method: 'GET',
@@ -114,20 +115,30 @@ export async function listFilesFromHuggingFace(env, folder = '') {
     }
     
     const data = await response.json()
-    let files = data.files || []
+    
+    // Dataset 的文件列表在 siblings 字段中
+    let files = data.siblings || []
+    
+    // 过滤掉目录和常见配置文件
+    files = files.filter(file => {
+      const name = file.rfilename || ''
+      if (name.endsWith('/')) return false
+      if (['.gitattributes', 'README.md', '.gitignore'].includes(name)) return false
+      return true
+    })
     
     if (folder) {
-      files = files.filter(file => file.path.startsWith(folder + '/'))
+      files = files.filter(file => (file.rfilename || '').startsWith(folder + '/'))
     }
     
     const formattedFiles = files.map(file => ({
-      name: file.path.split('/').pop(),
-      path: file.path,
+      name: (file.rfilename || '').split('/').pop(),
+      path: file.rfilename || '',
       size: file.size || 0,
       lastModified: file.lastModified || new Date().toISOString(),
-      url: `https://huggingface.co/spaces/${repo}/raw/main/${file.path}`,
+      url: `https://huggingface.co/datasets/${repo}/raw/main/${file.rfilename}`,
       source: 'huggingface',
-      folder: file.path.split('/')[0] || '',
+      folder: (file.rfilename || '').split('/')[0] || '',
     }))
     
     return {
