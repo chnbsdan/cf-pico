@@ -1,5 +1,5 @@
 // functions/api/utils/huggingface.js
-// HuggingFace Git LFS 上传模块 - cf-pico 专用
+// HuggingFace Git LFS 上传模块 - 完整版
 
 function getHFConfig(env) {
   const token = env.HF_TOKEN;
@@ -29,7 +29,7 @@ export async function uploadToHuggingFace(file, path, env, request) {
     const oid = await computeSHA256(fileBuffer);
     const sample = await getFileSample(file);
 
-    console.log(`📤 开始上传: ${path}, 大小: ${fileSize} bytes, OID: ${oid}`);
+    console.log(`📤 开始上传: ${path}, 大小: ${fileSize} bytes`);
 
     // 1. Preupload
     const preuploadRes = await fetch(`https://huggingface.co/api/datasets/${repo}/preupload/main`, {
@@ -39,7 +39,6 @@ export async function uploadToHuggingFace(file, path, env, request) {
     });
     if (!preuploadRes.ok) throw new Error(`Preupload 失败: ${await preuploadRes.text()}`);
     const preuploadData = await preuploadRes.json();
-    console.log('Preupload 结果:', JSON.stringify(preuploadData));
     
     if (preuploadData.files?.[0]?.uploadMode !== 'lfs') {
       throw new Error('此文件不需要 LFS 上传');
@@ -63,18 +62,15 @@ export async function uploadToHuggingFace(file, path, env, request) {
     });
     if (!batchRes.ok) throw new Error(`LFS Batch 失败: ${await batchRes.text()}`);
     const batchData = await batchRes.json();
-    console.log('LFS Batch 结果:', JSON.stringify(batchData));
     
     const obj = batchData.objects?.[0];
     if (obj?.error) {
       throw new Error(`LFS 对象错误: ${obj.error.message}`);
     }
     
-    // 如果文件已存在，直接跳过上传
+    // 3. 上传到 LFS 存储
     if (obj?.actions?.upload) {
       const uploadAction = obj.actions.upload;
-      console.log('上传到 LFS:', uploadAction.href);
-      
       const fileBlob = await file.slice(0, file.size);
       const uploadRes = await fetch(uploadAction.href, {
         method: 'PUT',
@@ -105,7 +101,6 @@ export async function uploadToHuggingFace(file, path, env, request) {
       })
     ].join('\n');
 
-    console.log('提交 Commit...');
     const commitRes = await fetch(`https://huggingface.co/api/datasets/${repo}/commit/main`, {
       method: 'POST',
       headers: {
@@ -119,7 +114,6 @@ export async function uploadToHuggingFace(file, path, env, request) {
       const errorText = await commitRes.text();
       console.error('Commit 失败:', errorText);
       
-      console.log('尝试备用 Commit 格式...');
       const fallbackBody = [
         JSON.stringify({ key: 'header', value: { summary: `Upload ${path}` } }),
         JSON.stringify({ 
@@ -151,11 +145,10 @@ export async function uploadToHuggingFace(file, path, env, request) {
       console.log('✅ Commit 成功');
     }
 
-    // ✅ 返回带 huggingface 前缀的链接，避免与 GitHub/R2 混淆
+    // ✅ 返回 /api/hf/{path} 格式
     const baseUrl = new URL(request.url).origin;
-    const fileUrl = `${baseUrl}/api/image?path=huggingface/${path}`;
+    const fileUrl = `${baseUrl}/api/hf/${path}`;
 
-    console.log(`✅ HuggingFace 上传成功: ${path}`);
     return { success: true, url: fileUrl, source: 'huggingface', path };
 
   } catch (error) {
