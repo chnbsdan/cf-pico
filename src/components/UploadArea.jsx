@@ -493,6 +493,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             <option value="github" className="text-gray-800">📦 GitHub</option>
             <option value="r2" className="text-gray-800">☁️ R2</option>
             <option value="telegram" className="text-gray-800">✈️ TG</option>
+            <option value="huggingface" className="text-gray-800">🤗 HF</option>  {/* ⬅️ 新增 */}
           </select>
 
           <select
