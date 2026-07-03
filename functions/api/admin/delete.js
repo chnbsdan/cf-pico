@@ -70,7 +70,7 @@ export async function onRequest(context) {
       }
     }
 
-    // 删除 HuggingFace 存储的文件 ⬅️ 新增
+        // 删除 HuggingFace 存储的文件
     if (source === 'huggingface') {
       if (env.HF_TOKEN && env.HF_REPO) {
         try {
