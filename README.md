@@ -1,6 +1,6 @@
 # CF-Pico - Cloudflare Pages 现代化的个人图床服务
 
-> 基于 Cloudflare Pages + GitHub 私有仓库 + R2 存储 + Telegram 频道的现代化个人图床服务
+> 基于 Cloudflare Pages + GitHub 私有仓库 + R2 存储 + Telegram 频道 + **HuggingFace** 的现代化个人图床服务
 
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare_Pages-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://pages.cloudflare.com)
 [![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org)
@@ -10,7 +10,7 @@
 
 ## 📖 项目简介
 
-`CF-Pico` 是一个基于 Cloudflare Pages 的现代化个人图床服务，支持 **GitHub 私有仓库**、**Cloudflare R2** 和 **Telegram 频道** 三种存储方式。提供随机图片 API、分类管理、批量上传、管理后台等完整功能，界面采用毛玻璃效果，支持暗色/亮色主题。
+`CF-Pico` 是一个基于 Cloudflare Pages 的现代化个人图床服务，支持 **GitHub 私有仓库**、**Cloudflare R2**、**Telegram 频道** 和 **HuggingFace Dataset** 四种存储方式。提供随机图片 API、分类管理、批量上传、管理后台等完整功能，界面采用毛玻璃效果，支持暗色/亮色主题。
 
 ---
 
@@ -18,25 +18,26 @@
 
 ### 核心功能
 - 🖼️ **随机图片 API** - `/api/random`、`/api/wallpaper`、`api/cover`、`/api/tg`
-- 📂 **分类管理** - 支持横屏（wallpaper/sh）和竖屏（cover/sd）分类 + Telegram 独立分类
+- 📂 **分类管理** - 支持横屏（wallpaper/sh）和竖屏（cover/sd）分类 + Telegram 独立分类 + HuggingFace 独立分类
 - 📤 **批量上传** - 多文件选择、拖拽上传、粘贴上传（Ctrl+V）
 - 🔒 **私有仓库** - 图片存储在 GitHub 私有仓库中，安全可控
 - ☁️ **R2 存储支持** - 支持 Cloudflare R2 作为存储，CDN 加速
 - ✈️ **Telegram 存储支持** - 支持 Telegram 频道作为存储后端
+- 🤗 **HuggingFace 存储支持** - 支持 HuggingFace Dataset 作为存储后端，**100GB 免费空间**
 - 🌐 **代理访问** - 通过 `/api/image?path=` 统一代理，不暴露后端域名
 - 🚀 **大文件分片上传** - 支持最大 500MB 文件，分片上传到 Telegram
-- 📦 **流式下载** - 大文件流式传输，不占用服务器内存
 
 ### 管理后台
 - 🔐 **密码保护** - 管理页面需要密码登录（支持环境变量配置）
 - 🖼️ **图片预览** - 网格视图展示，支持点击放大预览
 - 📋 **一键复制** - 点击复制图片链接（自动补全域名）
-- 🗑️ **删除图片** - 网页上直接删除，同步到 GitHub/R2/Telegram
+- 🗑️ **删除图片** - 网页上直接删除，同步到 GitHub/R2/Telegram/HuggingFace
 - 📊 **分页浏览** - 每页 48 张图片，支持翻页
 - 📁 **目录树** - 左侧显示分类及图片数量
 - 📜 **上传历史** - 记录所有上传图片，支持搜索和批量删除
 - 🔍 **图片搜索** - 按文件名快速搜索图片
 - 📦 **批量操作** - 批量复制链接（URL/Markdown/HTML）、批量删除
+- 🎯 **筛选功能** - 按文件类型、存储渠道、文件夹筛选
 
 ### 图片处理
 - 🔄 **WebP 转换** - 上传时可选择自动转换为 WebP 格式（前端转换）
@@ -94,6 +95,8 @@ npm install
 | `VITE_LOGIN_PASSWORD` | 加密文本 | ❌ | `admin123` | 网站登录密码 |
 | `TG_BOT_TOKEN` | 加密文本 | ❌ | 无 | Telegram Bot Token（使用 Telegram 存储时需要） |
 | `TG_CHAT_ID` | 加密文本 | ❌ | 无 | Telegram 频道 ID（使用 Telegram 存储时需要） |
+| `HF_TOKEN` | 加密文本 | ❌ | 无 | HuggingFace Access Token（使用 HuggingFace 存储时需要） |
+| `HF_REPO` | 纯文本 | ❌ | 无 | HuggingFace Dataset 名称（如 `username/dataset-name`） |
 | `FOLDER_WALLPAPER` | 纯文本 | ❌ | `wallpaper` | 横屏图片存储文件夹 |
 | `FOLDER_COVER` | 纯文本 | ❌ | `cover` | 竖屏图片存储文件夹 |
 
@@ -109,6 +112,8 @@ VITE_ADMIN_PASSWORD=你的管理密码
 VITE_LOGIN_PASSWORD=你的登录密码
 TG_BOT_TOKEN=你的Telegram_Bot_Token
 TG_CHAT_ID=你的Telegram频道ID
+HF_TOKEN=你的HuggingFace_Token
+HF_REPO=你的HuggingFace_Dataset名称
 FOLDER_WALLPAPER=wallpaper
 FOLDER_COVER=cover
 ```
@@ -182,7 +187,7 @@ curl https://your-domain.com/api/stats
 curl -X POST \
   -F "file=@image.jpg" \
   -F "folder=wallpaper" \
-  -F "storage=telegram" \
+  -F "storage=huggingface" \
   https://your-domain.com/api/upload
 
 # 代理访问图片
@@ -207,7 +212,10 @@ cf-pico/
 │   │   │   ├── helpers.js        # 通用辅助函数
 │   │   │   ├── r2.js             # R2 存储操作
 │   │   │   ├── telegram.js       # Telegram 存储操作
-│   │   │   └── github.js         # GitHub 存储操作
+│   │   │   ├── github.js         # GitHub 存储操作
+│   │   │   └── huggingface.js    # HuggingFace 存储操作
+│   │   ├── hf/                   # HuggingFace 路由
+│   │   │   └── [path].js         # HuggingFace 图片代理
 │   │   ├── upload/               # 分片上传
 │   │   │   ├── init.js           # 初始化分片
 │   │   │   ├── chunk.js          # 上传分片
@@ -268,8 +276,8 @@ cf-pico/
 |------|------|
 | 图片预览 | 网格视图展示，支持点击放大 |
 | 复制链接 | 一键复制完整域名链接 |
-| 删除图片 | 确认后删除，同步到 GitHub/R2/Telegram |
-| 分类筛选 | 横屏/竖屏/Telegram 分类切换 |
+| 删除图片 | 确认后删除，同步到 GitHub/R2/Telegram/HuggingFace |
+| 分类筛选 | 横屏/竖屏/Telegram/HuggingFace 分类切换 |
 | 分页浏览 | 每页 48 张，支持翻页 |
 | 图片搜索 | 按文件名实时搜索 |
 | 批量复制 | 支持复制 URL/Markdown/HTML |
@@ -317,6 +325,12 @@ cf-pico/
 | `TG_BOT_TOKEN` | ❌ | 无 | Telegram Bot Token（需 `sendDocument` 权限） |
 | `TG_CHAT_ID` | ❌ | 无 | Telegram 频道 ID（格式：`-100xxxxx`） |
 
+### HuggingFace 存储（可选）
+| 变量名 | 必填 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `HF_TOKEN` | ❌ | 无 | HuggingFace Access Token（需 `write` 权限） |
+| `HF_REPO` | ❌ | 无 | HuggingFace Dataset 名称（如 `username/dataset-name`） |
+
 ---
 
 ## 🛠️ 本地开发
@@ -348,12 +362,19 @@ npm run preview
 | **前端** | React 18 + Vite + Tailwind CSS |
 | **图标** | Font Awesome 6 |
 | **后端** | Cloudflare Pages Functions（拆分路由） |
-| **存储** | GitHub 私有仓库 + Cloudflare R2 + Telegram 频道 |
+| **存储** | GitHub 私有仓库 + Cloudflare R2 + Telegram 频道 + HuggingFace Dataset |
 | **部署** | Cloudflare Pages |
 
 ---
 
 ## 🔄 更新日志
+
+### v2.5 (2026-07-03)
+- 🤗 **新增 HuggingFace 存储支持** - 支持 HuggingFace Dataset 作为存储后端，**100GB 免费空间**
+- 🚀 **独立 HuggingFace 路由** - `/api/hf/{path}` 独立代理，不与其他存储混淆
+- 🎯 **后台完整集成** - 列表、筛选、单个删除、批量删除全支持
+- 📋 **文件详情优化** - 自动补全完整域名链接
+- 🐛 **修复批量删除路径问题** - HuggingFace 批量删除传 `path` 字段
 
 ### v2.4 (2026-07-02)
 - 🚀 **代码拆分重构** - 将 `[[path]].js` 拆分为 20+ 个独立路由文件
@@ -406,6 +427,7 @@ npm run preview
 - [GitHub 仓库](https://github.com/chnbsdan/cf-pico)
 - [Cloudflare Pages](https://pages.cloudflare.com)
 - [GitHub Token 申请](https://github.com/settings/tokens)
+- [HuggingFace](https://huggingface.co)
 
 ---
 
@@ -417,7 +439,6 @@ npm run preview
 ---
 
 如果觉得这个项目对你有帮助，欢迎 ⭐ Star 支持！
-```
 
 ---
 
@@ -425,9 +446,9 @@ npm run preview
 
 | 修改项 | 说明 |
 |--------|------|
-| 项目结构 | 更新为拆分后的真实目录结构 |
-| API 接口 | 新增 `/api/large/`、`/api/short/`、分片上传接口 |
-| 新增组件 | `FileCard.jsx`、`BatchActionBar.jsx`、`FileDetailDialog.jsx`、`FilterDropdown.jsx`、`SkeletonLoader.jsx` |
-| 更新日志 | 新增 v2.4 版本记录 |
-| 功能描述 | 大文件分片上传、流式下载、短链接、前端 WEBP 转换 |
-
+| HuggingFace 支持 | 新增第四种存储渠道，100GB 免费空间 |
+| 项目结构 | 新增 `functions/api/hf/` 和 `utils/huggingface.js` |
+| API 接口 | 新增 `/api/hf/{path}` HuggingFace 图片代理 |
+| 管理后台 | HuggingFace 分类、筛选、删除全支持 |
+| 环境变量 | 新增 `HF_TOKEN`、`HF_REPO` |
+| 更新日志 | 新增 v2.5 版本记录 |
