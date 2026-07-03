@@ -15,6 +15,18 @@ export default function FileDetailDialog({ file, visible, onClose, onDelete, onC
 
   const url = getFileUrl ? getFileUrl(file) : file.url
 
+  // ✅ 补全相对路径为完整 URL
+  const getFullUrl = (url) => {
+    if (!url) return ''
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url
+    }
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+    return baseUrl + url
+  }
+
+  const fullUrl = getFullUrl(url)
+
   const isImage = (filename) => {
     const ext = filename?.split('.').pop()?.toLowerCase() || ''
     return ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'svg', 'ico'].includes(ext)
@@ -31,12 +43,11 @@ export default function FileDetailDialog({ file, visible, onClose, onDelete, onC
   }
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(url)
+    navigator.clipboard.writeText(fullUrl)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // 获取存储渠道显示名称
   const getSourceLabel = (source) => {
     const map = {
       'github': 'GitHub',
@@ -62,14 +73,14 @@ export default function FileDetailDialog({ file, visible, onClose, onDelete, onC
         <div className="p-6 overflow-y-auto max-h-[100vh]">
           <div className="mb-4 bg-gray-100 dark:bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center min-h-[200px]">
             {isImage(file.name) ? (
-              <img src={url} alt={file.name} className="max-w-full max-h-[400px] object-contain" />
+              <img src={fullUrl} alt={file.name} className="max-w-full max-h-[400px] object-contain" />
             ) : isAudio(file.name) ? (
               <div className="w-full p-8 flex flex-col items-center">
                 <i className="fas fa-music text-6xl text-blue-400 mb-4"></i>
-                <audio controls className="w-full" src={url} />
+                <audio controls className="w-full" src={fullUrl} />
               </div>
             ) : isVideo(file.name) ? (
-              <video controls className="max-w-full max-h-[400px]" src={url} />
+              <video controls className="max-w-full max-h-[400px]" src={fullUrl} />
             ) : (
               <div className="p-8 flex flex-col items-center">
                 <i className="fas fa-file text-6xl text-gray-400 mb-2"></i>
@@ -99,13 +110,13 @@ export default function FileDetailDialog({ file, visible, onClose, onDelete, onC
               </button>
             </div>
             <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-900 rounded-lg">
-              <code className="text-xs text-gray-500 dark:text-gray-400 break-all">{url}</code>
+              <code className="text-xs text-gray-500 dark:text-gray-400 break-all">{fullUrl}</code>
             </div>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-          <a href={url} target="_blank" rel="noopener noreferrer" className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm transition">
+          <a href={fullUrl} target="_blank" rel="noopener noreferrer" className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm transition">
             <i className="fas fa-external-link-alt mr-1"></i> 打开
           </a>
           <button onClick={() => { onDelete?.(file); onClose() }} className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm transition">
