@@ -6,7 +6,7 @@ export async function onRequest(context) {
   const { request, env } = context
   const url = new URL(request.url)
   const path = url.searchParams.get('path')
-  const source = url.searchParams.get('source') || 'github' // 获取 source 参数
+  const source = url.searchParams.get('source') || 'github'
   
   if (!path) {
     return new Response('Missing path parameter', { status: 400 })
@@ -20,7 +20,7 @@ export async function onRequest(context) {
   const allowedFolders = ['wallpaper', 'cover', 'sh', 'sd', 'telegram']
 
   // ============================================================
-  // HuggingFace 存储（新增）
+  // HuggingFace 存储
   // ============================================================
   if (source === 'huggingface') {
     const hfToken = env.HF_TOKEN
@@ -31,9 +31,7 @@ export async function onRequest(context) {
     }
     
     try {
-      // HuggingFace Dataset 的 raw 文件地址
       const hfUrl = `https://huggingface.co/datasets/${hfRepo}/raw/main/${path}`
-      
       const response = await fetch(hfUrl, {
         headers: {
           'Authorization': `Bearer ${hfToken}`
@@ -139,7 +137,7 @@ export async function onRequest(context) {
   }
 
   // ============================================================
-  // GitHub 存储（默认）
+  // GitHub 存储
   // ============================================================
   if (!token) {
     return new Response('GITHUB_TOKEN not configured', { status: 500 })
