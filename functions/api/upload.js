@@ -2,6 +2,7 @@
 import { GITHUB_USER, GITHUB_REPO, generateFilename } from './utils/helpers.js'
 import { getTelegramImages, saveTelegramImages } from './utils/github.js'
 import { uploadToTelegram } from './utils/telegram.js'
+import { uploadToHuggingFace } from './utils/huggingface.js' // ⬅️ 新增
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -34,9 +35,20 @@ export async function onRequest(context) {
       })
     }
 
-    if (storageType !== 'telegram' && file.size > 25 * 1024 * 1024) {
+    // HuggingFace 文件大小检查（建议 100MB 以内）
+    if (storageType === 'huggingface' && file.size > 100 * 1024 * 1024) {
       return new Response(JSON.stringify({ 
-        error: `${storageType === 'github' ? 'GitHub' : 'R2'} 不支持超过 10MB 的文件，请切换到 Telegram`,
+        error: 'HuggingFace 建议上传 100MB 以内的文件，大文件请使用 Telegram 分片上传',
+        maxSize: 100 * 1024 * 1024
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    }
+
+    if (storageType !== 'telegram' && storageType !== 'huggingface' && file.size > 25 * 1024 * 1024) {
+      return new Response(JSON.stringify({ 
+        error: `${storageType === 'github' ? 'GitHub' : 'R2'} 不支持超过 25MB 的文件，请切换到 Telegram 或 HuggingFace`,
         maxSize: 25 * 1024 * 1024
       }), {
         status: 400,
@@ -161,7 +173,38 @@ export async function onRequest(context) {
         });
       }
 
-    // 2. R2 存储
+    // 2. HuggingFace 存储 ⬅️ 新增
+    } else if (storageType === 'huggingface') {
+      const hfToken = env.HF_TOKEN
+      const hfRepo = env.HF_REPO
+      
+      if (!hfToken || !hfRepo) {
+        return new Response(JSON.stringify({ error: 'HuggingFace 存储未配置，请设置 HF_TOKEN 和 HF_REPO' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+      
+      try {
+        const hfPath = `${folder}/${filename}`
+        const result = await uploadToHuggingFace(processedFile, hfPath, env)
+        
+        if (!result.success) {
+          throw new Error(result.error || 'HuggingFace 上传失败')
+        }
+        
+        uploadedUrl = result.url
+        usedStorage = 'huggingface'
+        console.log(`✅ HuggingFace 上传成功: ${hfPath}`)
+      } catch (error) {
+        console.error('HuggingFace upload error:', error)
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+    // 3. R2 存储
     } else if (storageType === 'r2') {
       if (!bucket) {
         return new Response(JSON.stringify({ error: 'R2 bucket not configured' }), {
@@ -177,7 +220,7 @@ export async function onRequest(context) {
       uploadedUrl = `${baseUrl}/api/image?path=${key}`
       usedStorage = 'r2'
 
-    // 3. GitHub 存储
+    // 4. GitHub 存储
     } else {
       if (!token) {
         return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
