@@ -1,6 +1,6 @@
 // functions/api/list.js - GET /api/list
 import { getFolderImages, getTelegramImages } from './utils/github.js'
-import { listFilesFromHuggingFace } from './utils/huggingface.js' // ⬅️ 新增
+import { listFilesFromHuggingFace } from './utils/huggingface.js'
 
 export async function onRequest(context) {
   const { env } = context
@@ -60,8 +60,8 @@ export async function onRequest(context) {
   }))
   total += results['telegram'].length
 
-    // ============================================================
-  // 1.5 HuggingFace 图片
+  // ============================================================
+  // 2. HuggingFace 图片
   // ============================================================
   let huggingfaceImages = []
   if (env.HF_TOKEN && env.HF_REPO) {
@@ -70,7 +70,7 @@ export async function onRequest(context) {
       if (result.success) {
         huggingfaceImages = result.files.map(img => ({
           name: img.name,
-          url: `/api/hf/${img.path}`,  // ✅ 改成这样，和上传返回的格式一致
+          url: `/api/hf/${img.path}`,
           path: img.path,
           sha: '',
           size: img.size || 0,
@@ -89,7 +89,7 @@ export async function onRequest(context) {
   total += huggingfaceImages.length
 
   // ============================================================
-  // 2. ✅ 外部图源 - 硬编码 GITHUB_USER 和 GITHUB_REPO
+  // 3. ✅ 外部图源 - 硬编码 GITHUB_USER 和 GITHUB_REPO
   // ============================================================
   const GITHUB_USER = 'chnbsdan'
   const GITHUB_REPO = 'cf-pico'
@@ -135,7 +135,7 @@ export async function onRequest(context) {
   total += externalImages.length
 
   // ============================================================
-  // 3. GitHub + R2 图片
+  // 4. GitHub + R2 图片
   // ============================================================
   for (const folder of folders) {
     const images = []
