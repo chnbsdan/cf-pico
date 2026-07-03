@@ -2,7 +2,7 @@
 import { getTelegramImages, saveTelegramImages } from '../utils/github.js'
 import { deleteCompletedFile } from '../utils/r2.js'
 import { deleteTelegramFile } from '../utils/telegram.js'
-import { deleteFromHuggingFace } from '../utils/huggingface.js' // ⬅️ 新增
+import { deleteFromHuggingFace } from '../utils/huggingface.js'
 
 export async function onRequest(context) {
   const { request, env } = context
@@ -70,11 +70,16 @@ export async function onRequest(context) {
       }
     }
 
-        // 删除 HuggingFace 存储的文件
+    // ✅ 删除 HuggingFace 存储的文件
     if (source === 'huggingface') {
       if (env.HF_TOKEN && env.HF_REPO) {
         try {
-          const hfPath = `${folder}/${filename}`
+          // 如果 folder 是 'huggingface'，filename 已经包含完整路径（如 wallpaper/xxx.jpg）
+          let hfPath = filename
+          // 如果 filename 不包含 /，说明没有文件夹路径，需要拼接
+          if (!filename.includes('/')) {
+            hfPath = `${folder}/${filename}`
+          }
           const result = await deleteFromHuggingFace(hfPath, env)
           if (result.success) {
             deleted = true
