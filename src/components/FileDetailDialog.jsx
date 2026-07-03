@@ -38,7 +38,7 @@ export default function FileDetailDialog({ file, visible, onClose, onDelete, onC
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-5xl w-full max-h-[95vh] overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-7xl w-full max-h-[100vh] overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-800 dark:text-white truncate">{file.name}</h3>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
@@ -46,7 +46,7 @@ export default function FileDetailDialog({ file, visible, onClose, onDelete, onC
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-[75vh]">
+        <div className="p-6 overflow-y-auto max-h-[100vh]">
           <div className="mb-4 bg-gray-100 dark:bg-gray-900 rounded-xl overflow-hidden flex items-center justify-center min-h-[200px]">
             {isImage(file.name) ? (
               <img src={url} alt={file.name} className="max-w-full max-h-[400px] object-contain" />
