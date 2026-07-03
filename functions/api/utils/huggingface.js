@@ -1,24 +1,18 @@
 // functions/api/utils/huggingface.js
-// HuggingFace Git LFS 上传模块 - 专为 Dataset 设计
+// HuggingFace Git LFS 上传模块 - cf-pico 专用完整版
 
 function getHFConfig(env) {
   const token = env.HF_TOKEN;
-  const repo = env.HF_REPO; // 格式: "username/dataset-name"
+  const repo = env.HF_REPO;
   if (!token || !repo) throw new Error('HuggingFace 配置缺失');
   return { token, repo };
 }
 
-/**
- * 计算文件 SHA256
- */
 async function computeSHA256(buffer) {
   const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
   return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-/**
- * 将文件对象转换为符合 LFS 要求的 sample (前 512 字节 base64)
- */
 async function getFileSample(file) {
   const sampleBuffer = await file.slice(0, 512).arrayBuffer();
   const bytes = new Uint8Array(sampleBuffer);
@@ -27,10 +21,7 @@ async function getFileSample(file) {
   return btoa(binary);
 }
 
-/**
- * 执行 LFS 上传完整流程
- */
-export async function uploadToHuggingFace(file, path, env) {
+export async function uploadToHuggingFace(file, path, env, request) {
   try {
     const { token, repo } = getHFConfig(env);
     const fileBuffer = await file.arrayBuffer();
@@ -38,7 +29,7 @@ export async function uploadToHuggingFace(file, path, env) {
     const oid = await computeSHA256(fileBuffer);
     const sample = await getFileSample(file);
 
-    // 1. Preupload - 检查文件是否需要 LFS
+    // 1. Preupload
     const preuploadRes = await fetch(`https://huggingface.co/api/datasets/${repo}/preupload/main`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -47,11 +38,10 @@ export async function uploadToHuggingFace(file, path, env) {
     if (!preuploadRes.ok) throw new Error(`Preupload 失败: ${await preuploadRes.text()}`);
     const preuploadData = await preuploadRes.json();
     if (preuploadData.files?.[0]?.uploadMode !== 'lfs') {
-      // 小文件或非 LFS 文件，使用普通上传 (此情况较少，暂不处理)
-      throw new Error('此文件不需要 LFS 上传，请检查文件大小或类型');
+      throw new Error('此文件不需要 LFS 上传');
     }
 
-    // 2. LFS Batch - 获取上传 URL
+    // 2. LFS Batch
     const batchRes = await fetch(`https://huggingface.co/datasets/${repo}.git/info/lfs/objects/batch`, {
       method: 'POST',
       headers: {
@@ -72,7 +62,7 @@ export async function uploadToHuggingFace(file, path, env) {
     const uploadAction = batchData.objects?.[0]?.actions?.upload;
     if (!uploadAction) throw new Error('无法获取 LFS 上传地址');
 
-    // 3. 上传文件到 LFS 存储 (S3)
+    // 3. 上传到 LFS 存储
     const uploadRes = await fetch(uploadAction.href, {
       method: 'PUT',
       headers: uploadAction.header || {},
@@ -80,11 +70,20 @@ export async function uploadToHuggingFace(file, path, env) {
     });
     if (!uploadRes.ok) throw new Error(`LFS 上传失败: ${await uploadRes.text()}`);
 
-    // 4. Commit - 提交 LFS 文件引用
+    // 4. Commit
     const commitBody = [
       JSON.stringify({ key: 'header', value: { summary: `Upload ${path}` } }),
-      JSON.stringify({ key: 'lfsFile', value: { path, algo: 'sha256', size: fileSize, oid } })
+      JSON.stringify({ 
+        key: 'lfsFile', 
+        value: { 
+          path: path, 
+          oid: oid, 
+          size: fileSize,
+          algo: 'sha256'
+        } 
+      })
     ].join('\n');
+
     const commitRes = await fetch(`https://huggingface.co/api/datasets/${repo}/commit/main`, {
       method: 'POST',
       headers: {
@@ -93,9 +92,41 @@ export async function uploadToHuggingFace(file, path, env) {
       },
       body: commitBody
     });
-    if (!commitRes.ok) throw new Error(`提交失败: ${await commitRes.text()}`);
 
-    const fileUrl = `https://huggingface.co/datasets/${repo}/raw/main/${path}`;
+    if (!commitRes.ok) {
+      const errorText = await commitRes.text();
+      console.warn('Commit 失败 (lfsFile):', errorText);
+      
+      const fallbackBody = [
+        JSON.stringify({ key: 'header', value: { summary: `Upload ${path}` } }),
+        JSON.stringify({ 
+          key: 'file', 
+          value: { 
+            path: path, 
+            content: null,
+            lfs: true,
+            oid: oid,
+            size: fileSize,
+            algo: 'sha256'
+          } 
+        })
+      ].join('\n');
+
+      const fallbackRes = await fetch(`https://huggingface.co/api/datasets/${repo}/commit/main`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/x-ndjson'
+        },
+        body: fallbackBody
+      });
+      if (!fallbackRes.ok) throw new Error(`提交失败: ${await fallbackRes.text()}`);
+    }
+
+    // 返回统一代理链接
+    const baseUrl = new URL(request.url).origin;
+    const fileUrl = `${baseUrl}/api/image?path=${path}&source=huggingface`;
+
     return { success: true, url: fileUrl, source: 'huggingface', path };
 
   } catch (error) {
@@ -104,9 +135,6 @@ export async function uploadToHuggingFace(file, path, env) {
   }
 }
 
-/**
- * 从 HuggingFace Dataset 删除文件
- */
 export async function deleteFromHuggingFace(path, env) {
   try {
     const { token, repo } = getHFConfig(env);
@@ -130,9 +158,6 @@ export async function deleteFromHuggingFace(path, env) {
   }
 }
 
-/**
- * 获取 HuggingFace Dataset 的文件列表
- */
 export async function listFilesFromHuggingFace(env, folder = '') {
   try {
     const { token, repo } = getHFConfig(env);
@@ -151,7 +176,7 @@ export async function listFilesFromHuggingFace(env, folder = '') {
       name: f.rfilename.split('/').pop(),
       path: f.rfilename,
       size: f.size || 0,
-      url: `https://huggingface.co/datasets/${repo}/raw/main/${f.rfilename}`,
+      url: `https://huggingface.co/datasets/${repo}/resolve/main/${f.rfilename}`,
       source: 'huggingface',
       folder: f.rfilename.split('/')[0] || ''
     }));
