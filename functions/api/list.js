@@ -70,7 +70,7 @@ export async function onRequest(context) {
       if (result.success) {
         huggingfaceImages = result.files.map(img => ({
           name: img.name,
-          url: img.url,
+          url: `/api/hf/${img.path}`,  // ✅ 改成这样，和上传返回的格式一致
           path: img.path,
           sha: '',
           size: img.size || 0,
