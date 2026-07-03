@@ -77,7 +77,7 @@ export async function uploadToHuggingFace(file, path, env, request) {
         key: 'file', 
         value: { 
           path: path, 
-          content: null,
+          content: '',
           lfs: true,
           oid: oid,
           size: fileSize,
