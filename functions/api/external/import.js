@@ -1,6 +1,4 @@
 // functions/api/external/import.js - 外链转存接口（修复版）
-// 功能：下载外链图片，转存到 GitHub / R2 / Telegram / HuggingFace
-
 import { GITHUB_USER, GITHUB_REPO, generateFilename } from '../utils/helpers.js'
 import { getTelegramImages, saveTelegramImages } from '../utils/github.js'
 import { uploadToTelegram } from '../utils/telegram.js'
@@ -46,12 +44,10 @@ async function downloadImage(url) {
 // 各渠道上传函数
 // ============================================================
 
-// 上传到 GitHub
 async function uploadToGitHubChannel(file, folder, env, request) {
   const token = env.GITHUB_TOKEN
   if (!token) throw new Error('GITHUB_TOKEN 未配置')
   
-  // ✅ 复用 generateFilename
   const filename = generateFilename(file.name)
   const arrayBuffer = await file.arrayBuffer()
   const uint8Array = new Uint8Array(arrayBuffer)
@@ -83,12 +79,10 @@ async function uploadToGitHubChannel(file, folder, env, request) {
   return { url: `${baseUrl}/api/image?path=${folder}/${filename}`, filename }
 }
 
-// 上传到 R2
 async function uploadToR2Channel(file, folder, env, request) {
   const bucket = env.IMAGES_BUCKET
   if (!bucket) throw new Error('R2 未配置')
   
-  // ✅ 复用 generateFilename
   const filename = generateFilename(file.name)
   const arrayBuffer = await file.arrayBuffer()
   const key = `${folder}/${filename}`
@@ -99,26 +93,29 @@ async function uploadToR2Channel(file, folder, env, request) {
   return { url: `${baseUrl}/api/image?path=${key}`, filename }
 }
 
-// ✅ 上传到 Telegram - 严格按照正常上传的逻辑
+// ✅ 上传到 Telegram - 增加日志
 async function uploadToTelegramChannel(file, env, request) {
   const botToken = env.TG_BOT_TOKEN
   const chatId = env.TG_CHAT_ID
   if (!botToken || !chatId) throw new Error('Telegram 未配置')
   
-  // ✅ 复用 generateFilename
   const filename = generateFilename(file.name)
   
-  // 调用 uploadToTelegram（只传三个参数）
+  console.log(`📤 转存到 Telegram: ${filename}, 大小: ${file.size}`)
+  
   const result = await uploadToTelegram(file, botToken, chatId)
+  
+  console.log(`📤 Telegram 上传结果: fileId=${result.fileId}, messageId=${result.messageId}`)
   
   const baseUrl = new URL(request.url).origin
   const fileUrl = `${baseUrl}/api/short/${filename}`
   
-  // ✅ 记录到 GitHub（和正常上传完全一样）
   const token = env.GITHUB_TOKEN
   if (token) {
     try {
       const existingImages = await getTelegramImages(token)
+      console.log(`📤 现有 Telegram 记录数: ${existingImages.length}`)
+      
       const exists = existingImages.some(img => img.fileId === result.fileId)
       if (!exists) {
         existingImages.push({
@@ -135,11 +132,14 @@ async function uploadToTelegramChannel(file, env, request) {
         })
         await saveTelegramImages(token, existingImages)
         console.log(`✅ Telegram 文件已记录到 GitHub: ${filename}`)
+      } else {
+        console.log(`ℹ️ Telegram 文件已存在记录: ${filename}`)
       }
     } catch (e) {
-      console.error('记录 Telegram 文件失败:', e)
-      // ⚠️ 不抛出错误，因为文件已经上传成功了，只是记录失败
+      console.error('❌ 记录到 GitHub 失败:', e.message)
     }
+  } else {
+    console.warn('⚠️ GITHUB_TOKEN 未配置，无法记录 Telegram 文件')
   }
   
   return {
@@ -150,19 +150,21 @@ async function uploadToTelegramChannel(file, env, request) {
   }
 }
 
-// ✅ 上传到 HuggingFace - 严格按照正常上传的逻辑
+// ✅ 上传到 HuggingFace - 增加日志
 async function uploadToHuggingFaceChannel(file, env, request) {
-  // ✅ 复用 generateFilename
   const filename = generateFilename(file.name)
-  const path = filename // 直接放在根目录
-  
-  // ✅ 调用 uploadToHuggingFace，只传三个参数 (file, path, env)
+  const path = filename
+
+  console.log(`📤 转存到 HuggingFace: ${filename}, 大小: ${file.size}`)
+
   const result = await uploadToHuggingFace(file, path, env)
-  
+
+  console.log(`📤 HuggingFace 返回:`, JSON.stringify(result))
+
   if (!result.success) {
-    throw new Error(result.error || 'HuggingFace 上传失败')
+    throw new Error(`HuggingFace 上传失败: ${result.error || '未知错误'}`)
   }
-  
+
   const baseUrl = new URL(request.url).origin
   return {
     url: `${baseUrl}/api/hf/${path}`,
