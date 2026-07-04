@@ -1,6 +1,4 @@
 // src/components/ExternalImport.jsx - 外链转存组件
-// 功能：输入外链 URL，选择存储渠道，转存到自己的存储
-
 import React, { useState } from 'react'
 
 export default function ExternalImport({ onImportComplete }) {
@@ -193,16 +191,18 @@ export default function ExternalImport({ onImportComplete }) {
           )}
         </button>
 
-        {/* 结果 */}
+        {/* ✅ 结果显示 - 优化样式 */}
         {results.length > 0 && (
           <div className="mt-3 max-h-[200px] overflow-y-auto text-xs">
             {results.map((r, i) => (
               <div key={i} className={`py-1 border-b border-gray-100 dark:border-gray-700 flex items-start gap-2 ${
-                r.success ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'
+                r.success ? 'text-green-700 dark:text-green-300' : 'text-red-600 dark:text-red-400'
               }`}>
-                <span className="flex-shrink-0">{r.success ? '✅' : '❌'}</span>
-                <span className="truncate flex-1">{r.originalUrl}</span>
-                <span className="text-gray-400 flex-shrink-0 truncate max-w-[200px]">
+                <span className="flex-shrink-0 mt-0.5">{r.success ? '✅' : '❌'}</span>
+                <span className="truncate flex-1 text-gray-600 dark:text-gray-400" title={r.originalUrl}>
+                  {r.originalUrl}
+                </span>
+                <span className="text-blue-600 dark:text-blue-400 flex-shrink-0 max-w-[200px] sm:max-w-[300px] truncate" title={r.newUrl}>
                   {r.success ? '→ ' + r.newUrl : r.error}
                 </span>
               </div>
