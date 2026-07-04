@@ -385,28 +385,39 @@ const handleDeleteExternal = async (img) => {
   if (!confirm(`确定要删除外链 "${img.name}" 吗？`)) return
 
   try {
-    // ✅ 获取正确的文件夹
-    const folder = img.originalFolder || img.folder || 'wallpaper'
+    // ✅ 直接获取所有外链数据，匹配 URL 所在的分类
+    const extRes = await fetch('/api/external')
+    const extData = await extRes.json()
     
+    const folders = ['wallpaper', 'cover', 'sh', 'sd']
+    let targetFolder = 'wallpaper'  // 默认
+    
+    for (const f of folders) {
+      if (extData[f] && extData[f].includes(img.url)) {
+        targetFolder = f
+        break
+      }
+    }
+
     const response = await fetch('/api/external', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         url: img.url,
-        folder: folder
+        folder: targetFolder
       })
     })
     const result = await response.json()
+    
     if (result.success) {
-      // ✅ 重新加载所有分类的外链数据
-      const extRes = await fetch('/api/external')
-      const extData = await extRes.json()
+      // 刷新所有分类的外链数据
+      const extRes2 = await fetch('/api/external')
+      const extData2 = await extRes2.json()
       
       const allExternalImages = []
-      const folders = ['wallpaper', 'cover', 'sh', 'sd']
       for (const f of folders) {
-        if (extData[f]) {
-          for (const url of extData[f]) {
+        if (extData2[f]) {
+          for (const url of extData2[f]) {
             allExternalImages.push({
               name: url.split('/').pop() || 'unknown',
               url: url,
