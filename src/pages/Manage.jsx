@@ -374,57 +374,68 @@ export default function Manage() {
     }
   }
 
-  // ============================================================
-  // 外链删除（走 /api/external）
-  // ============================================================
-  const handleDeleteExternal = async (img) => {
-    if (!img || !img.url) {
-      alert('❌ 无效的外链')
-      return
-    }
-    if (!confirm(`确定要删除外链 "${img.name}" 吗？`)) return
-
-    try {
-      const response = await fetch('/api/external', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: img.url,
-          folder: 'wallpaper'
-        })
-      })
-      const result = await response.json()
-      if (result.success) {
-        // ✅ 重新加载外链数据
-        const extRes = await fetch('/api/external')
-        const extData = await extRes.json()
-        
-        const externalImages = (extData.wallpaper || []).map(url => ({
-          name: url.split('/').pop() || 'unknown',
-          url: url,
-          path: `external/${url.split('/').pop() || 'unknown'}`,
-          sha: '',
-          size: 0,
-          folder: 'external',
-          source: 'external',
-          originalFolder: 'wallpaper'
-        }))
-        
-        setImages(prev => ({
-          ...prev,
-          external: externalImages
-        }))
-        
-        setSelectedImages(new Set())
-        alert(`✅ 已删除外链 "${img.name}"`)
-      } else {
-        alert(`❌ 删除失败: ${result.error || '未知错误'}`)
-      }
-    } catch (err) {
-      console.error('删除外链失败:', err)
-      alert('❌ 删除失败，请稍后重试')
-    }
+ // ============================================================
+// 外链删除（走 /api/external）
+// ============================================================
+const handleDeleteExternal = async (img) => {
+  if (!img || !img.url) {
+    alert('❌ 无效的外链')
+    return
   }
+  if (!confirm(`确定要删除外链 "${img.name}" 吗？`)) return
+
+  try {
+    // ✅ 获取正确的文件夹
+    const folder = img.originalFolder || img.folder || 'wallpaper'
+    
+    const response = await fetch('/api/external', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: img.url,
+        folder: folder
+      })
+    })
+    const result = await response.json()
+    if (result.success) {
+      // ✅ 重新加载所有分类的外链数据
+      const extRes = await fetch('/api/external')
+      const extData = await extRes.json()
+      
+      const allExternalImages = []
+      const folders = ['wallpaper', 'cover', 'sh', 'sd']
+      for (const f of folders) {
+        if (extData[f]) {
+          for (const url of extData[f]) {
+            allExternalImages.push({
+              name: url.split('/').pop() || 'unknown',
+              url: url,
+              path: `external/${url.split('/').pop() || 'unknown'}`,
+              sha: '',
+              size: 0,
+              folder: 'external',
+              source: 'external',
+              originalFolder: f
+            })
+          }
+        }
+      }
+      
+      setImages(prev => ({
+        ...prev,
+        external: allExternalImages
+      }))
+      
+      setSelectedImages(new Set())
+      alert(`✅ 已删除外链 "${img.name}"`)
+    } else {
+      alert(`❌ 删除失败: ${result.error || '未知错误'}`)
+    }
+  } catch (err) {
+    console.error('删除外链失败:', err)
+    alert('❌ 删除失败，请稍后重试')
+  }
+}
 
   const handleBatchDelete = async () => {
     const selectedCount = selectedImages.size
