@@ -485,16 +485,32 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             <i className="fas fa-sync-alt text-xs"></i>
           </button>
 
-          <select
-            value={storageType}
-            onChange={(e) => setStorageType(e.target.value)}
-            className="px-2 py-1 rounded-lg text-xs bg-white/20 text-white border border-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-white/30 transition"
-          >
-            <option value="github" className="text-gray-800">📦 GitHub</option>
-            <option value="r2" className="text-gray-800">☁️ R2</option>
-            <option value="telegram" className="text-gray-800">✈️ TG</option>
-            <option value="huggingface" className="text-gray-800">🤗 HF</option>  {/* ⬅️ 新增 */}
-          </select>
+          <div className="relative">
+  <button
+    onClick={() => setStorageOpen(!storageOpen)}
+    className="px-3 py-1.5 rounded-lg bg-white/20 text-white border border-white/30 hover:bg-white/30 transition flex items-center gap-2 text-sm"
+  >
+    <i className={`fas ${storageOptions.find(o => o.value === storageType)?.icon}`}></i>
+    <span>{storageOptions.find(o => o.value === storageType)?.label}</span>
+    <i className="fas fa-chevron-down text-xs ml-1"></i>
+  </button>
+  {storageOpen && (
+    <div className="absolute top-full left-0 mt-1 bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-lg shadow-lg border border-white/30 overflow-hidden z-50 min-w-[150px]">
+      {storageOptions.map(opt => (
+        <button
+          key={opt.value}
+          onClick={() => { setStorageType(opt.value); setStorageOpen(false); }}
+          className={`w-full px-3 py-2 text-sm flex items-center gap-2 hover:bg-blue-500/10 transition text-gray-700 dark:text-gray-300 ${
+            storageType === opt.value ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400' : ''
+          }`}
+        >
+          <i className={`fas ${opt.icon} w-4 text-center`}></i>
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )}
+</div>
 
           <select
             value={folder}
