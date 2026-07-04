@@ -111,7 +111,6 @@ export default function ExternalImport({ onImportComplete }) {
       )}
 
       <div className="space-y-3">
-        {/* 链接输入 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             输入外链（每行一个）
@@ -126,7 +125,6 @@ export default function ExternalImport({ onImportComplete }) {
           />
         </div>
 
-        {/* 存储渠道 + 文件夹 */}
         <div className="flex flex-wrap gap-3">
           <div className="flex-1 min-w-[140px]">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -163,7 +161,6 @@ export default function ExternalImport({ onImportComplete }) {
           )}
         </div>
 
-        {/* 进度 */}
         {importing && progress.total > 0 && (
           <div className="flex items-center gap-2">
             <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -178,7 +175,6 @@ export default function ExternalImport({ onImportComplete }) {
           </div>
         )}
 
-        {/* 按钮 */}
         <button
           onClick={handleImport}
           disabled={importing}
@@ -191,20 +187,61 @@ export default function ExternalImport({ onImportComplete }) {
           )}
         </button>
 
-        {/* ✅ 结果显示 - 优化样式 */}
+        {/* ✅ 结果显示 - 带复制和打开按钮 */}
         {results.length > 0 && (
-          <div className="mt-3 max-h-[200px] overflow-y-auto text-xs">
+          <div className="mt-3 max-h-[240px] overflow-y-auto text-xs">
             {results.map((r, i) => (
-              <div key={i} className={`py-1 border-b border-gray-100 dark:border-gray-700 flex items-start gap-2 ${
+              <div key={i} className={`py-2 border-b border-gray-100 dark:border-gray-700 flex items-center gap-2 ${
                 r.success ? 'text-green-700 dark:text-green-300' : 'text-red-600 dark:text-red-400'
               }`}>
-                <span className="flex-shrink-0 mt-0.5">{r.success ? '✅' : '❌'}</span>
-                <span className="truncate flex-1 text-gray-600 dark:text-gray-400" title={r.originalUrl}>
+                <span className="flex-shrink-0">{r.success ? '✅' : '❌'}</span>
+                <span className="truncate flex-1 text-gray-500 dark:text-gray-400 min-w-0" title={r.originalUrl}>
                   {r.originalUrl}
                 </span>
-                <span className="text-blue-600 dark:text-blue-400 flex-shrink-0 max-w-[200px] sm:max-w-[300px] truncate" title={r.newUrl}>
-                  {r.success ? '→ ' + r.newUrl : r.error}
-                </span>
+                <span className="text-gray-400 flex-shrink-0">→</span>
+                {r.success ? (
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <a
+                      href={r.newUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline truncate max-w-[120px] sm:max-w-[200px]"
+                      title={r.newUrl}
+                    >
+                      {r.newUrl}
+                    </a>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(r.newUrl)
+                        const btn = document.getElementById(`copy-btn-${i}`)
+                        if (btn) {
+                          btn.innerHTML = '<i class="fas fa-check text-green-500"></i>'
+                          setTimeout(() => {
+                            btn.innerHTML = '<i class="fas fa-copy text-gray-400"></i>'
+                          }, 1500)
+                        }
+                      }}
+                      id={`copy-btn-${i}`}
+                      className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition flex-shrink-0"
+                      title="复制链接"
+                    >
+                      <i className="fas fa-copy text-gray-400 hover:text-blue-500"></i>
+                    </button>
+                    <a
+                      href={r.newUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition flex-shrink-0"
+                      title="打开链接"
+                    >
+                      <i className="fas fa-external-link-alt text-gray-400 hover:text-blue-500"></i>
+                    </a>
+                  </div>
+                ) : (
+                  <span className="text-red-500 dark:text-red-400 truncate max-w-[120px] sm:max-w-[200px]" title={r.error}>
+                    {r.error}
+                  </span>
+                )}
               </div>
             ))}
           </div>
