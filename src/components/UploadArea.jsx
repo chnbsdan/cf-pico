@@ -103,8 +103,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   // 配置选项
   // ============================================================
   const folderOptions = [
-    { key: 'wallpaper', label: '横屏图片', icon: 'fa-arrows-alt-h', color: 'text-blue-400' },
-    { key: 'cover', label: '竖屏图片', icon: 'fa-mobile-alt', color: 'text-purple-400' },
+    { key: 'wallpaper', label: '横屏', icon: 'fa-arrows-alt-h', color: 'text-blue-400' },
+    { key: 'cover', label: '竖屏', icon: 'fa-mobile-alt', color: 'text-purple-400' },
     { key: 'sh', label: '横屏 (sh)', icon: 'fa-arrows-alt-h', color: 'text-blue-400' },
     { key: 'sd', label: '竖屏 (sd)', icon: 'fa-mobile-alt', color: 'text-purple-400' }
   ]
