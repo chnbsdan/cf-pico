@@ -8,6 +8,7 @@ import FileDetailDialog from '../components/FileDetailDialog'
 import FilterDropdown from '../components/FilterDropdown'
 import SkeletonLoader from '../components/SkeletonLoader'
 import ExternalLinksManager from '../components/ExternalLinksManager'
+import ExternalImport from '../components/ExternalImport'  // ✅ 加这一行
 
 const PLACEHOLDER_SVG = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Crect fill="%23f0f0f0" width="100" height="100"/%3E%3Ctext x="50" y="50" text-anchor="middle" dy=".3em" fill="%23ccc" font-size="20"%3E🖼%3C/text%3E%3C/svg%3E'
 
@@ -984,78 +985,84 @@ const handleDeleteExternal = async (img) => {
         )}
 
         {activeTab === 'external' ? (
-          <>
-            <div className="mb-4">
-              <ExternalLinksManager onLinkAdded={loadImages} />
-            </div>
-            {loading ? (
-              <SkeletonLoader count={12} type="card" />
-            ) : paginatedImages.length === 0 ? (
-              <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl">
-                <i className="fas fa-link text-5xl text-gray-400 mb-3"></i>
-                <p className="text-gray-500">暂无外链图片</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 sm:gap-3">
-                  {paginatedImages.map((img, idx) => {
-                    const proxyUrl = getProxyUrl(img)
-                    return (
-                      <FileCard
-                        key={img.sha || idx}
-                        file={img}
-                        selected={selectedImages.has(img.name)}
-                        onSelect={(e) => {
-                          e.stopPropagation()
-                          toggleSelect(img.name, e)
-                        }}
-                        onPreview={() => openPreview(img)}
-                        onDetail={() => setDetailFile(img)}
-                        onCopy={() => handleCopy(proxyUrl, img.name)}
-                        onDelete={() => handleDeleteExternal(img)}
-                        getFileUrl={getProxyUrl}
-                      />
-                    )
-                  })}
-                </div>
-                {totalPages > 1 && (
-                  <div className="flex justify-center gap-1 sm:gap-2 mt-6">
-                    <button
-                      onClick={() => setCurrentPage(1)}
-                      disabled={currentPage === 1}
-                      className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
-                    >
-                      首页
-                    </button>
-                    <button
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                      className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
-                    >
-                      上一页
-                    </button>
-                    <span className="px-3 py-1.5 rounded-lg bg-white/70 dark:bg-gray-700/70 text-gray-700 dark:text-white text-sm backdrop-blur-sm">
-                      {currentPage} / {totalPages}
-                    </span>
-                    <button
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                      className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
-                    >
-                      下一页
-                    </button>
-                    <button
-                      onClick={() => setCurrentPage(totalPages)}
-                      disabled={currentPage === totalPages}
-                      className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
-                    >
-                      末页
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </>
+  <>
+    {/* 1. 外链转存 */}
+    <div className="mb-4">
+      <ExternalImport onImportComplete={loadImages} />
+    </div>
+    {/* 2. 添加外链 */}
+    <div className="mb-4">
+      <ExternalLinksManager onLinkAdded={loadImages} />
+    </div>
+    {/* 3. 外链图片网格 */}
+    {loading ? (
+      <SkeletonLoader count={12} type="card" />
+    ) : paginatedImages.length === 0 ? (
+      <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl">
+        <i className="fas fa-link text-5xl text-gray-400 mb-3"></i>
+        <p className="text-gray-500">暂无外链图片</p>
+      </div>
+    ) : (
+      <>
+        <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 sm:gap-3">
+          {paginatedImages.map((img, idx) => {
+            const proxyUrl = getProxyUrl(img)
+            return (
+              <FileCard
+                key={img.sha || idx}
+                file={img}
+                selected={selectedImages.has(img.name)}
+                onSelect={(e) => {
+                  e.stopPropagation()
+                  toggleSelect(img.name, e)
+                }}
+                onPreview={() => openPreview(img)}
+                onDetail={() => setDetailFile(img)}
+                onCopy={() => handleCopy(proxyUrl, img.name)}
+                onDelete={() => handleDeleteExternal(img)}
+                getFileUrl={getProxyUrl}
+              />
+            )
+          })}
+        </div>
+        {totalPages > 1 && (
+          <div className="flex justify-center gap-1 sm:gap-2 mt-6">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
+            >
+              首页
+            </button>
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
+            >
+              上一页
+            </button>
+            <span className="px-3 py-1.5 rounded-lg bg-white/70 dark:bg-gray-700/70 text-gray-700 dark:text-white text-sm backdrop-blur-sm">
+              {currentPage} / {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
+            >
+              下一页
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
+            >
+              末页
+            </button>
+          </div>
+        )}
+      </>
+    )}
+  </>
         ) : activeTab === 'history' ? (
           historyLoading ? (
             <div className="flex justify-center items-center py-20">
