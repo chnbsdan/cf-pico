@@ -1,4 +1,4 @@
-// functions/api/external/import.js - 外链转存接口
+// functions/api/external/import.js - 外链转存接口（修复版）
 // 功能：下载外链图片，转存到 GitHub / R2 / Telegram / HuggingFace
 
 import { GITHUB_USER, GITHUB_REPO, generateFilename } from '../utils/helpers.js'
@@ -10,21 +10,10 @@ import { uploadToHuggingFace } from '../utils/huggingface.js'
 // 工具函数
 // ============================================================
 
-function getRandomFilename(originalName) {
-  const now = new Date()
-  const dateStr = now.getFullYear() +
-    String(now.getMonth() + 1).padStart(2, '0') +
-    String(now.getDate()).padStart(2, '0')
-  const random = Math.random().toString(36).substring(2, 8)
-  const ext = originalName.split('.').pop() || 'jpg'
-  return `${dateStr}_${random}.${ext}`
-}
-
 function getFilenameFromUrl(url) {
   try {
     const pathname = new URL(url).pathname
     const filename = pathname.split('/').pop() || 'image.jpg'
-    // 如果文件名没有扩展名，添加 .jpg
     if (!filename.includes('.')) {
       return filename + '.jpg'
     }
@@ -54,7 +43,7 @@ async function downloadImage(url) {
 }
 
 // ============================================================
-// 各渠道上传函数（复用现有逻辑）
+// 各渠道上传函数
 // ============================================================
 
 // 上传到 GitHub
@@ -62,7 +51,8 @@ async function uploadToGitHubChannel(file, folder, env, request) {
   const token = env.GITHUB_TOKEN
   if (!token) throw new Error('GITHUB_TOKEN 未配置')
   
-  const filename = getRandomFilename(file.name)
+  // ✅ 复用 generateFilename
+  const filename = generateFilename(file.name)
   const arrayBuffer = await file.arrayBuffer()
   const uint8Array = new Uint8Array(arrayBuffer)
   let binary = ''
@@ -98,7 +88,8 @@ async function uploadToR2Channel(file, folder, env, request) {
   const bucket = env.IMAGES_BUCKET
   if (!bucket) throw new Error('R2 未配置')
   
-  const filename = getRandomFilename(file.name)
+  // ✅ 复用 generateFilename
+  const filename = generateFilename(file.name)
   const arrayBuffer = await file.arrayBuffer()
   const key = `${folder}/${filename}`
   await bucket.put(key, arrayBuffer, {
@@ -108,16 +99,22 @@ async function uploadToR2Channel(file, folder, env, request) {
   return { url: `${baseUrl}/api/image?path=${key}`, filename }
 }
 
-// 上传到 Telegram
+// ✅ 上传到 Telegram - 严格按照正常上传的逻辑
 async function uploadToTelegramChannel(file, env, request) {
   const botToken = env.TG_BOT_TOKEN
   const chatId = env.TG_CHAT_ID
   if (!botToken || !chatId) throw new Error('Telegram 未配置')
   
-  const filename = getRandomFilename(file.name)
+  // ✅ 复用 generateFilename
+  const filename = generateFilename(file.name)
+  
+  // 调用 uploadToTelegram（只传三个参数）
   const result = await uploadToTelegram(file, botToken, chatId)
   
-  // 记录到 GitHub（和正常上传一样）
+  const baseUrl = new URL(request.url).origin
+  const fileUrl = `${baseUrl}/api/short/${filename}`
+  
+  // ✅ 记录到 GitHub（和正常上传完全一样）
   const token = env.GITHUB_TOKEN
   if (token) {
     try {
@@ -131,39 +128,46 @@ async function uploadToTelegramChannel(file, env, request) {
           fileId: result.fileId,
           messageId: result.messageId,
           filePath: result.filePath,
-          url: `${new URL(request.url).origin}/api/short/${filename}`,
+          url: fileUrl,
           time: new Date().toISOString(),
           size: file.size,
           mimeType: file.type || 'image/jpeg'
         })
         await saveTelegramImages(token, existingImages)
+        console.log(`✅ Telegram 文件已记录到 GitHub: ${filename}`)
       }
     } catch (e) {
       console.error('记录 Telegram 文件失败:', e)
+      // ⚠️ 不抛出错误，因为文件已经上传成功了，只是记录失败
     }
   }
   
-  const baseUrl = new URL(request.url).origin
   return {
-    url: `${baseUrl}/api/short/${filename}`,
+    url: fileUrl,
     filename,
     fileId: result.fileId,
     messageId: result.messageId
   }
 }
 
-// 上传到 HuggingFace
+// ✅ 上传到 HuggingFace - 严格按照正常上传的逻辑
 async function uploadToHuggingFaceChannel(file, env, request) {
-  const filename = getRandomFilename(file.name)
-  const path = filename // 直接放在根目录，不需要文件夹
+  // ✅ 复用 generateFilename
+  const filename = generateFilename(file.name)
+  const path = filename // 直接放在根目录
   
-  // 复用现有的 uploadToHuggingFace 函数
+  // ✅ 调用 uploadToHuggingFace，只传三个参数 (file, path, env)
   const result = await uploadToHuggingFace(file, path, env)
+  
   if (!result.success) {
     throw new Error(result.error || 'HuggingFace 上传失败')
   }
+  
   const baseUrl = new URL(request.url).origin
-  return { url: `${baseUrl}/api/hf/${path}`, filename }
+  return {
+    url: `${baseUrl}/api/hf/${path}`,
+    filename
+  }
 }
 
 // ============================================================
@@ -184,7 +188,6 @@ export async function onRequest(context) {
     const body = await request.json()
     const { urls, storage, folder } = body
     
-    // 验证参数
     if (!urls || !Array.isArray(urls) || urls.length === 0) {
       return new Response(JSON.stringify({ error: '请提供要转存的 URL 列表' }), {
         status: 400,
@@ -199,7 +202,6 @@ export async function onRequest(context) {
       })
     }
 
-    // GitHub 和 R2 需要文件夹
     if ((storage === 'github' || storage === 'r2') && !folder) {
       return new Response(JSON.stringify({ error: 'GitHub/R2 需要选择文件夹' }), {
         status: 400,
@@ -207,7 +209,6 @@ export async function onRequest(context) {
       })
     }
 
-    // 验证 URL
     const validUrls = urls.filter(u => u && typeof u === 'string' && u.startsWith('http'))
     if (validUrls.length === 0) {
       return new Response(JSON.stringify({ error: '没有有效的 URL' }), {
@@ -221,10 +222,8 @@ export async function onRequest(context) {
 
     for (const url of validUrls) {
       try {
-        // 1. 下载图片
         const { file } = await downloadImage(url)
         
-        // 2. 根据存储渠道上传
         let result
         switch (storage) {
           case 'github':
