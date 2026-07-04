@@ -106,10 +106,10 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   ]
 
   const storageOptions = [
-    { value: 'github', label: 'GitHub', icon: 'fa-github' },
+    { value: 'github', label: 'GitHub', icon: 'fab fa-github' },
     { value: 'r2', label: 'R2', icon: 'fa-cloud' },
     { value: 'telegram', label: 'Telegram', icon: 'fa-paper-plane' },
-    { value: 'huggingface', label: 'HuggingFace', icon: 'fa-hugging-face' },
+    { value: 'huggingface', label: 'HuggingFace', icon: 'fa-brain' },
   ]
 
   const refreshBackground = () => {
