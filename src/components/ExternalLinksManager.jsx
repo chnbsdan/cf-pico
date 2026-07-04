@@ -6,6 +6,38 @@ export default function ExternalLinksManager({ onLinkAdded }) {
   const [adding, setAdding] = useState(false)
   const [message, setMessage] = useState('')
   const [messageType, setMessageType] = useState('success')
+  const [links, setLinks] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [deleting, setDeleting] = useState(null)
+
+  const loadExternalLinks = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/external')
+      const data = await res.json()
+      const allLinks = []
+      const folders = ['wallpaper', 'cover', 'sh', 'sd']
+      for (const folder of folders) {
+        if (data[folder]) {
+          for (const url of data[folder]) {
+            allLinks.push({
+              url: url,
+              folder: folder,
+              name: url.split('/').pop() || 'unknown',
+              id: url
+            })
+          }
+        }
+      }
+      allLinks.sort((a, b) => a.url.localeCompare(b.url))
+      setLinks(allLinks)
+    } catch (err) {
+      console.error('加载失败:', err)
+      setLinks([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const showMessage = (text, type) => {
     setMessage(text)
@@ -68,6 +100,7 @@ export default function ExternalLinksManager({ onLinkAdded }) {
       if (data.success) {
         showMessage(`✅ 成功添加 ${data.added} 条外链`, 'success')
         setNewUrls('')
+        await loadExternalLinks()
         if (onLinkAdded) onLinkAdded()
       } else {
         showMessage('❌ 添加失败: ' + (data.error || '未知错误'), 'error')
@@ -80,12 +113,44 @@ export default function ExternalLinksManager({ onLinkAdded }) {
     }
   }
 
+  const handleDeleteLink = async (url) => {
+    if (!confirm(`确定要删除这条外链吗？\n\n${url}`)) return
+    
+    setDeleting(url)
+    try {
+      const res = await fetch('/api/external', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: url,
+          folder: 'wallpaper'
+        })
+      })
+      const data = await res.json()
+      if (data.success) {
+        showMessage('✅ 删除成功', 'success')
+        // ✅ 直接刷新外链列表
+        await loadExternalLinks()
+        // ✅ 通知父组件刷新
+        if (onLinkAdded) onLinkAdded()
+      } else {
+        showMessage('❌ 删除失败: ' + (data.error || '未知错误'), 'error')
+      }
+    } catch (err) {
+      console.error('删除失败:', err)
+      showMessage('❌ 请求失败: ' + err.message, 'error')
+    } finally {
+      setDeleting(null)
+    }
+  }
+
   return (
     <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-white/30 p-4 sm:p-6">
       <div className="flex items-center gap-2 mb-3">
         <i className="fas fa-link text-purple-500"></i>
         <h3 className="text-sm font-semibold text-gray-800 dark:text-white">添加外链图片</h3>
         <span className="text-xs text-gray-400 ml-2">每行一个链接</span>
+        <span className="text-xs text-gray-400 ml-auto">共 {links.length} 条</span>
       </div>
 
       {message && (
