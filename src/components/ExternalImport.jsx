@@ -1,10 +1,12 @@
-// src/components/ExternalImport.jsx - 外链转存组件
+// src/components/ExternalImport.jsx - 外链转存组件（自定义下拉 + Font Awesome）
 import React, { useState } from 'react'
 
 export default function ExternalImport({ onImportComplete }) {
   const [urls, setUrls] = useState('')
   const [storage, setStorage] = useState('github')
+  const [storageOpen, setStorageOpen] = useState(false)
   const [folder, setFolder] = useState('wallpaper')
+  const [folderOpen, setFolderOpen] = useState(false)
   const [importing, setImporting] = useState(false)
   const [progress, setProgress] = useState({ total: 0, done: 0 })
   const [message, setMessage] = useState('')
@@ -12,17 +14,17 @@ export default function ExternalImport({ onImportComplete }) {
   const [results, setResults] = useState([])
 
   const folderOptions = [
-    { value: 'wallpaper', label: '横屏 (wallpaper)' },
-    { value: 'cover', label: '竖屏 (cover)' },
-    { value: 'sh', label: '横屏 (sh)' },
-    { value: 'sd', label: '竖屏 (sd)' }
+    { value: 'wallpaper', label: '横屏 (wallpaper)', icon: 'fa-folder-open', color: 'text-blue-400' },
+    { value: 'cover', label: '竖屏 (cover)', icon: 'fa-folder', color: 'text-purple-400' },
+    { value: 'sh', label: '横屏 (sh)', icon: 'fa-folder-open', color: 'text-blue-400' },
+    { value: 'sd', label: '竖屏 (sd)', icon: 'fa-folder', color: 'text-purple-400' }
   ]
 
   const storageOptions = [
-    { value: 'github', label: '📦 GitHub', needFolder: true },
-    { value: 'r2', label: '☁️ R2', needFolder: true },
-    { value: 'telegram', label: '✈️ Telegram', needFolder: false },
-    { value: 'huggingface', label: '🤗 HuggingFace', needFolder: false }
+    { value: 'github', label: 'GitHub', icon: 'fa-brands fa-github', needFolder: true },
+    { value: 'r2', label: 'R2', icon: 'fas fa-cloud', needFolder: true },
+    { value: 'telegram', label: 'Telegram', icon: 'fas fa-paper-plane', needFolder: false },
+    { value: 'huggingface', label: 'HuggingFace', icon: 'fas fa-brain', needFolder: false }
   ]
 
   const showMessage = (text, type = 'success') => {
@@ -111,6 +113,7 @@ export default function ExternalImport({ onImportComplete }) {
       )}
 
       <div className="space-y-3">
+        {/* 链接输入 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             输入外链（每行一个）
@@ -125,42 +128,84 @@ export default function ExternalImport({ onImportComplete }) {
           />
         </div>
 
+        {/* 存储渠道 + 文件夹 - 自定义下拉 */}
         <div className="flex flex-wrap gap-3">
+          {/* 存储渠道 */}
           <div className="flex-1 min-w-[140px]">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               转存到
             </label>
-            <select
-              value={storage}
-              onChange={(e) => setStorage(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-white/60 dark:bg-gray-800/60 border border-white/30 dark:border-gray-700 text-gray-700 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
-              disabled={importing}
-            >
-              {storageOptions.map(opt => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+            <div className="relative">
+              <button
+                onClick={() => setStorageOpen(!storageOpen)}
+                className="w-full px-3 py-2 rounded-xl bg-white/60 dark:bg-gray-800/60 border border-white/30 dark:border-gray-700 text-gray-700 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition flex items-center justify-between"
+                disabled={importing}
+              >
+                <span className="flex items-center gap-2">
+                  <i className={`${storageOptions.find(o => o.value === storage)?.icon} w-4 text-center`}></i>
+                  <span>{storageOptions.find(o => o.value === storage)?.label}</span>
+                </span>
+                <i className="fas fa-chevron-down text-xs text-gray-400"></i>
+              </button>
+              {storageOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-xl shadow-lg border border-white/30 overflow-hidden z-50">
+                  {storageOptions.map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => { setStorage(opt.value); setStorageOpen(false); }}
+                      className={`w-full px-3 py-2 text-sm flex items-center gap-2 hover:bg-purple-500/10 transition text-gray-700 dark:text-gray-300 ${
+                        storage === opt.value ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400' : ''
+                      }`}
+                    >
+                      <i className={`${opt.icon} w-4 text-center`}></i>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
+          {/* 文件夹 */}
           {needsFolder && (
             <div className="flex-1 min-w-[140px]">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 文件夹
               </label>
-              <select
-                value={folder}
-                onChange={(e) => setFolder(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-white/60 dark:bg-gray-800/60 border border-white/30 dark:border-gray-700 text-gray-700 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
-                disabled={importing}
-              >
-                {folderOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <button
+                  onClick={() => setFolderOpen(!folderOpen)}
+                  className="w-full px-3 py-2 rounded-xl bg-white/60 dark:bg-gray-800/60 border border-white/30 dark:border-gray-700 text-gray-700 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition flex items-center justify-between"
+                  disabled={importing}
+                >
+                  <span className="flex items-center gap-2">
+                    <i className={`fas fa-folder ${folderOptions.find(o => o.value === folder)?.color || ''} w-4 text-center`}></i>
+                    <span>{folderOptions.find(o => o.value === folder)?.label}</span>
+                  </span>
+                  <i className="fas fa-chevron-down text-xs text-gray-400"></i>
+                </button>
+                {folderOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-xl shadow-lg border border-white/30 overflow-hidden z-50">
+                    {folderOptions.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => { setFolder(opt.value); setFolderOpen(false); }}
+                        className={`w-full px-3 py-2 text-sm flex items-center gap-2 hover:bg-purple-500/10 transition text-gray-700 dark:text-gray-300 ${
+                          folder === opt.value ? 'bg-purple-500/20 text-purple-600 dark:text-purple-400' : ''
+                        }`}
+                      >
+                        <i className={`fas fa-folder ${opt.color || ''} w-4 text-center`}></i>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
 
+        {/* 进度 */}
         {importing && progress.total > 0 && (
           <div className="flex items-center gap-2">
             <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -175,6 +220,7 @@ export default function ExternalImport({ onImportComplete }) {
           </div>
         )}
 
+        {/* 按钮 */}
         <button
           onClick={handleImport}
           disabled={importing}
@@ -187,7 +233,7 @@ export default function ExternalImport({ onImportComplete }) {
           )}
         </button>
 
-        {/* ✅ 结果显示 - 带复制和打开按钮 */}
+        {/* 结果显示 */}
         {results.length > 0 && (
           <div className="mt-3 max-h-[240px] overflow-y-auto text-xs">
             {results.map((r, i) => (
