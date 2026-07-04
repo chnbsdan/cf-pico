@@ -322,5 +322,17 @@
     "time": "2026-07-04T12:18:19.725Z",
     "size": 1361769,
     "mimeType": "image/jpeg"
+  },
+  {
+    "id": 1783168526481,
+    "filename": "20260704_sh1.jpg",
+    "originalName": "sh1.jpg",
+    "fileId": "BQACAgUAAyEGAAMBBNJvJQAD-2pI_gwXhtc_AoYnk9Q9RK4ZhSqHAAJOIAAC-LxIVvMGa91zRK_KPAQ",
+    "messageId": 251,
+    "filePath": "documents/file_287.jpg",
+    "url": "https://pico.1356666.xyz/api/short/20260704_sh1.jpg",
+    "time": "2026-07-04T12:35:26.481Z",
+    "size": 3273691,
+    "mimeType": "image/jpeg"
   }
 ]
