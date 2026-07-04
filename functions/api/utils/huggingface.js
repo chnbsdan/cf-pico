@@ -1,5 +1,5 @@
 // functions/api/utils/huggingface.js
-// HuggingFace Git LFS 上传模块 - 完整版
+// HuggingFace Git LFS 上传模块 - 完整版（含直传支持）
 
 function getHFConfig(env) {
   const token = env.HF_TOKEN;
@@ -21,7 +21,10 @@ async function getFileSample(file) {
   return btoa(binary);
 }
 
-export async function uploadToHuggingFace(file, path, env, request) {
+// ============================================================
+// 原有函数：上传（代理模式，用于小文件）
+// ============================================================
+export async function uploadToHuggingFace(file, path, env) {
   try {
     const { token, repo } = getHFConfig(env);
     const fileBuffer = await file.arrayBuffer();
@@ -145,10 +148,7 @@ export async function uploadToHuggingFace(file, path, env, request) {
       console.log('✅ Commit 成功');
     }
 
-    // ✅ 返回 /api/hf/{path} 格式
-    const baseUrl = new URL(request.url).origin;
-    const fileUrl = `${baseUrl}/api/hf/${path}`;
-
+    const fileUrl = `https://huggingface.co/datasets/${repo}/resolve/main/${path}`;
     return { success: true, url: fileUrl, source: 'huggingface', path };
 
   } catch (error) {
@@ -157,6 +157,125 @@ export async function uploadToHuggingFace(file, path, env, request) {
   }
 }
 
+// ============================================================
+// 新增函数：获取 LFS 上传信息（前端直传用）
+// ============================================================
+export async function getLfsUploadInfo(fileSize, filePath, sha256, fileSample, env) {
+  try {
+    const { token, repo } = getHFConfig(env);
+
+    // 1. Preupload
+    const preuploadRes = await fetch(`https://huggingface.co/api/datasets/${repo}/preupload/main`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: [{ path: filePath, size: fileSize, sample: fileSample }] })
+    });
+    if (!preuploadRes.ok) {
+      const err = await preuploadRes.text();
+      throw new Error(`Preupload 失败: ${err}`);
+    }
+    const preuploadData = await preuploadRes.json();
+    const fileInfo = preuploadData.files?.[0];
+    
+    if (fileInfo?.uploadMode !== 'lfs') {
+      return { needsLfs: false };
+    }
+
+    // 2. LFS Batch
+    const batchRes = await fetch(`https://huggingface.co/datasets/${repo}.git/info/lfs/objects/batch`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.git-lfs+json',
+        'Content-Type': 'application/vnd.git-lfs+json'
+      },
+      body: JSON.stringify({
+        operation: 'upload',
+        transfers: ['basic'],
+        hash_algo: 'sha256',
+        ref: { name: 'main' },
+        objects: [{ oid: sha256, size: fileSize }]
+      })
+    });
+    if (!batchRes.ok) {
+      const err = await batchRes.text();
+      throw new Error(`LFS Batch 失败: ${err}`);
+    }
+    const batchData = await batchRes.json();
+    const obj = batchData.objects?.[0];
+
+    if (obj?.error) {
+      throw new Error(`LFS 对象错误: ${obj.error.message}`);
+    }
+
+    if (!obj?.actions?.upload) {
+      return {
+        needsLfs: true,
+        alreadyExists: true,
+        oid: sha256,
+        filePath
+      };
+    }
+
+    return {
+      needsLfs: true,
+      alreadyExists: false,
+      oid: sha256,
+      filePath,
+      uploadAction: obj.actions.upload
+    };
+
+  } catch (error) {
+    console.error('getLfsUploadInfo error:', error);
+    throw error;
+  }
+}
+
+// ============================================================
+// 新增函数：提交 LFS 文件引用（前端上传完成后调用）
+// ============================================================
+export async function commitLfsFile(filePath, oid, fileSize, env) {
+  try {
+    const { token, repo } = getHFConfig(env);
+    
+    const commitBody = [
+      JSON.stringify({ key: 'header', value: { summary: `Upload ${filePath}` } }),
+      JSON.stringify({ 
+        key: 'lfsFile', 
+        value: { 
+          path: filePath, 
+          oid: oid, 
+          size: fileSize,
+          algo: 'sha256'
+        } 
+      })
+    ].join('\n');
+
+    const commitRes = await fetch(`https://huggingface.co/api/datasets/${repo}/commit/main`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/x-ndjson'
+      },
+      body: commitBody
+    });
+
+    if (!commitRes.ok) {
+      const err = await commitRes.text();
+      throw new Error(`Commit 失败: ${err}`);
+    }
+
+    return { success: true, data: await commitRes.json() };
+
+  } catch (error) {
+    console.error('commitLfsFile error:', error);
+    throw error;
+  }
+}
+
+// ============================================================
+// 删除函数
+// ============================================================
 export async function deleteFromHuggingFace(path, env) {
   try {
     const { token, repo } = getHFConfig(env);
@@ -180,6 +299,9 @@ export async function deleteFromHuggingFace(path, env) {
   }
 }
 
+// ============================================================
+// 列表函数
+// ============================================================
 export async function listFilesFromHuggingFace(env, folder = '') {
   try {
     const { token, repo } = getHFConfig(env);
