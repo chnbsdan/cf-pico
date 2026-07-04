@@ -7,6 +7,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const [bgRefresh, setBgRefresh] = useState(false)
   const [storageType, setStorageType] = useState('github')
   const [storageOpen, setStorageOpen] = useState(false)
+  const [folderOpen, setFolderOpen] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadStatus, setUploadStatus] = useState('')
   const [uploadSpeed, setUploadSpeed] = useState('')
@@ -98,15 +99,18 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     })
   }, [])
 
+  // ============================================================
+  // 配置选项
+  // ============================================================
   const folderOptions = [
-    { key: 'wallpaper', label: '横屏图片 (wallpaper)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
-    { key: 'sh', label: '横屏图片 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
-    { key: 'sd', label: '竖屏图片 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
+    { key: 'wallpaper', label: '横屏图片', icon: 'fa-arrows-alt-h', color: 'text-blue-400' },
+    { key: 'cover', label: '竖屏图片', icon: 'fa-mobile-alt', color: 'text-purple-400' },
+    { key: 'sh', label: '横屏 (sh)', icon: 'fa-arrows-alt-h', color: 'text-blue-400' },
+    { key: 'sd', label: '竖屏 (sd)', icon: 'fa-mobile-alt', color: 'text-purple-400' }
   ]
 
   const storageOptions = [
-    { value: 'github', label: 'GitHub', icon: 'fab fa-github' },
+    { value: 'github', label: 'GitHub', icon: 'fa-brands fa-github' },
     { value: 'r2', label: 'R2', icon: 'fa-cloud' },
     { value: 'telegram', label: 'Telegram', icon: 'fa-paper-plane' },
     { value: 'huggingface', label: 'HuggingFace', icon: 'fa-brain' },
@@ -493,17 +497,20 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             <i className="fas fa-sync-alt text-xs"></i>
           </button>
 
+          {/* ==================== 存储渠道下拉 ==================== */}
           <div className="relative">
             <button
               onClick={() => setStorageOpen(!storageOpen)}
-              className="px-3 py-1.5 rounded-lg bg-white/20 text-white border border-white/30 hover:bg-white/30 transition flex items-center gap-2 text-sm"
+              className="px-3 py-1.5 rounded-lg bg-white/20 text-white border border-white/30 hover:bg-white/30 transition flex items-center gap-2 text-sm min-w-[120px] justify-between"
             >
-              <i className={`fas ${storageOptions.find(o => o.value === storageType)?.icon}`}></i>
-              <span>{storageOptions.find(o => o.value === storageType)?.label}</span>
-              <i className="fas fa-chevron-down text-xs ml-1"></i>
+              <span className="flex items-center gap-2">
+                <i className={`${storageOptions.find(o => o.value === storageType)?.icon} w-4 text-center`}></i>
+                <span>{storageOptions.find(o => o.value === storageType)?.label}</span>
+              </span>
+              <i className="fas fa-chevron-down text-xs text-white/50"></i>
             </button>
             {storageOpen && (
-              <div className="absolute top-full left-0 mt-1 bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-lg shadow-lg border border-white/30 overflow-hidden z-50 min-w-[150px]">
+              <div className="absolute top-full left-0 mt-1 bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-lg shadow-lg border border-white/30 overflow-hidden z-50 min-w-[160px]">
                 {storageOptions.map(opt => (
                   <button
                     key={opt.value}
@@ -512,7 +519,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
                       storageType === opt.value ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400' : ''
                     }`}
                   >
-                    <i className={`fas ${opt.icon} w-4 text-center`}></i>
+                    <i className={`${opt.icon} w-5 text-center`}></i>
                     {opt.label}
                   </button>
                 ))}
@@ -520,16 +527,35 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             )}
           </div>
 
-          <select
-            value={folder}
-            onChange={(e) => setFolder(e.target.value)}
-            className="px-2 py-1 rounded-lg text-xs bg-white/20 text-white border border-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none cursor-pointer hover:bg-white/30 transition max-w-[80px]"
-          >
-            <option value="wallpaper" className="text-gray-800">横屏</option>
-            <option value="cover" className="text-gray-800">竖屏</option>
-            <option value="sh" className="text-gray-800">横屏(sh)</option>
-            <option value="sd" className="text-gray-800">竖屏(sd)</option>
-          </select>
+          {/* ==================== 文件夹下拉 ==================== */}
+          <div className="relative">
+            <button
+              onClick={() => setFolderOpen(!folderOpen)}
+              className="px-3 py-1.5 rounded-lg bg-white/20 text-white border border-white/30 hover:bg-white/30 transition flex items-center gap-2 text-sm min-w-[110px] justify-between"
+            >
+              <span className="flex items-center gap-2">
+                <i className={`fas fa-folder ${folderOptions.find(o => o.key === folder)?.color || ''} w-4 text-center`}></i>
+                <span>{folderOptions.find(o => o.key === folder)?.label}</span>
+              </span>
+              <i className="fas fa-chevron-down text-xs text-white/50"></i>
+            </button>
+            {folderOpen && (
+              <div className="absolute top-full left-0 mt-1 bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-lg shadow-lg border border-white/30 overflow-hidden z-50 min-w-[160px]">
+                {folderOptions.map(opt => (
+                  <button
+                    key={opt.key}
+                    onClick={() => { setFolder(opt.key); setFolderOpen(false); }}
+                    className={`w-full px-3 py-2 text-sm flex items-center gap-2 hover:bg-blue-500/10 transition text-gray-700 dark:text-gray-300 ${
+                      folder === opt.key ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400' : ''
+                    }`}
+                  >
+                    <i className={`fas fa-folder ${opt.color || ''} w-5 text-center`}></i>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <button
             onClick={() => onConvertChange?.(!convertToWebp)}
@@ -555,7 +581,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       </div>
 
       {/* ============================================================
-      上传卡片 - Sanyue-ImgHub 风格
+      上传卡片
       ============================================================ */}
       <div
         className="relative upload-card-wrapper group"
