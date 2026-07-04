@@ -986,15 +986,16 @@ const handleDeleteExternal = async (img) => {
 
         {activeTab === 'external' ? (
   <>
-    {/* 1. 外链转存 */}
-    <div className="mb-4">
-      <ExternalImport onImportComplete={loadImages} />
+    {/* 1. 外链转存 + 添加外链 - 左右并排 */}
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <div>
+        <ExternalImport onImportComplete={loadImages} />
+      </div>
+      <div>
+        <ExternalLinksManager onLinkAdded={loadImages} />
+      </div>
     </div>
-    {/* 2. 添加外链 */}
-    <div className="mb-4">
-      <ExternalLinksManager onLinkAdded={loadImages} />
-    </div>
-    {/* 3. 外链图片网格 */}
+    {/* 2. 外链图片网格 */}
     {loading ? (
       <SkeletonLoader count={12} type="card" />
     ) : paginatedImages.length === 0 ? (
