@@ -153,11 +153,9 @@ export default function Manage() {
     // 优先处理 HuggingFace
     if (img.source === 'huggingface') {
       const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
-      // 如果 url 已经是 /api/hf/ 开头，直接返回
       if (img.url && img.url.startsWith('/api/hf/')) {
         return img.url
       }
-      // 否则根据 path 生成
       if (img.path) {
         return `${baseUrl}/api/hf/${img.path}`
       }
@@ -338,6 +336,9 @@ export default function Manage() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
+  // ============================================================
+  // 普通删除（GitHub / R2 / Telegram / HuggingFace）
+  // ============================================================
   const handleDelete = async (img, folder, event) => {
     if (event) event.stopPropagation()
     if (!confirm(`确定要删除 "${img.name}" 吗？\n\n⚠️ 此操作不可恢复！`)) return
@@ -370,6 +371,39 @@ export default function Manage() {
       alert('❌ 删除失败，请稍后重试')
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  // ============================================================
+  // 外链删除（走 /api/external）
+  // ============================================================
+  const handleDeleteExternal = async (img) => {
+    if (!img || !img.url) {
+      alert('❌ 无效的外链')
+      return
+    }
+    if (!confirm(`确定要删除外链 "${img.name}" 吗？`)) return
+
+    try {
+      const response = await fetch('/api/external', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: img.url,
+          folder: 'wallpaper'
+        })
+      })
+      const result = await response.json()
+      if (result.success) {
+        await loadImages()
+        setSelectedImages(new Set())
+        alert(`✅ 已删除外链 "${img.name}"`)
+      } else {
+        alert(`❌ 删除失败: ${result.error || '未知错误'}`)
+      }
+    } catch (err) {
+      console.error('删除外链失败:', err)
+      alert('❌ 删除失败，请稍后重试')
     }
   }
 
@@ -910,11 +944,9 @@ export default function Manage() {
 
         {activeTab === 'external' ? (
           <>
-            {/* ✅ 添加外链入口 */}
             <div className="mb-4">
               <ExternalLinksManager onLinkAdded={loadImages} />
             </div>
-            {/* 外链图片网格 */}
             {loading ? (
               <SkeletonLoader count={12} type="card" />
             ) : paginatedImages.length === 0 ? (
@@ -939,7 +971,7 @@ export default function Manage() {
                         onPreview={() => openPreview(img)}
                         onDetail={() => setDetailFile(img)}
                         onCopy={() => handleCopy(proxyUrl, img.name)}
-                        onDelete={() => handleDeleteExternal(img)} // ✅ 改为调用新函数
+                        onDelete={() => handleDeleteExternal(img)}
                         getFileUrl={getProxyUrl}
                       />
                     )
@@ -1107,7 +1139,11 @@ export default function Manage() {
         visible={!!detailFile}
         onClose={() => setDetailFile(null)}
         onDelete={(file) => {
-          handleDelete(file, activeTab)
+          if (activeTab === 'external') {
+            handleDeleteExternal(file)
+          } else {
+            handleDelete(file, activeTab)
+          }
           setDetailFile(null)
         }}
         onCopy={(url) => handleCopy(url, detailFile?.name)}
@@ -1259,7 +1295,11 @@ export default function Manage() {
                   e.stopPropagation()
                   const confirmDelete = confirm(`确定要删除 "${previewImage.name}" 吗？\n\n⚠️ 此操作不可恢复！`)
                   if (confirmDelete) {
-                    handleDelete(previewImage, activeTab, e)
+                    if (activeTab === 'external') {
+                      handleDeleteExternal(previewImage)
+                    } else {
+                      handleDelete(previewImage, activeTab, e)
+                    }
                     setPreviewImage(null)
                     setPreviewScale(1)
                     setPreviewTranslateX(0)
