@@ -939,7 +939,7 @@ export default function Manage() {
                         onPreview={() => openPreview(img)}
                         onDetail={() => setDetailFile(img)}
                         onCopy={() => handleCopy(proxyUrl, img.name)}
-                        onDelete={() => handleDelete(img, activeTab)}
+                        onDelete={() => handleDeleteExternal(img)} // ✅ 改为调用新函数
                         getFileUrl={getProxyUrl}
                       />
                     )
