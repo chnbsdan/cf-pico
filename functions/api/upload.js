@@ -93,7 +93,9 @@ export async function onRequest(context) {
     let tgFileId = null
     let tgFilePath = null
 
+    // ============================================================
     // 1. Telegram 存储
+    // ============================================================
     if (storageType === 'telegram') {
       const botToken = env.TG_BOT_TOKEN;
       const chatId = env.TG_CHAT_ID;
@@ -172,7 +174,9 @@ export async function onRequest(context) {
         });
       }
 
-    // 2. HuggingFace 存储
+    // ============================================================
+    // 2. HuggingFace 存储（含大文件直传判断）
+    // ============================================================
     } else if (storageType === 'huggingface') {
       const hfToken = env.HF_TOKEN
       const hfRepo = env.HF_REPO
@@ -183,11 +187,27 @@ export async function onRequest(context) {
           headers: { 'Content-Type': 'application/json' }
         })
       }
-      
+
+      // ✅ 大文件（> 20MB）返回直传信息，让前端处理
+      const LFS_THRESHOLD = 20 * 1024 * 1024
+      if (file.size > LFS_THRESHOLD) {
+        return new Response(JSON.stringify({
+          success: false,
+          needDirectUpload: true,
+          message: '文件较大，使用直传模式',
+          fileSize: file.size,
+          fileName: filename,
+          folder: folder
+        }), {
+          status: 202,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      }
+
+      // 小文件：走代理上传（原有逻辑）
       try {
-        const hfPath = `w/${filename}`;  // ✅ 直接改成这样能改变文件夹名称
-        // ✅ 关键修改：传入 request 参数
-        const result = await uploadToHuggingFace(processedFile, hfPath, env, request)
+        const hfPath = `${folder}/${filename}`
+        const result = await uploadToHuggingFace(processedFile, hfPath, env)
         
         if (!result.success) {
           throw new Error(result.error || 'HuggingFace 上传失败')
@@ -196,7 +216,6 @@ export async function onRequest(context) {
         uploadedUrl = result.url
         usedStorage = 'huggingface'
         console.log(`✅ HuggingFace 上传成功: ${hfPath}`)
-        console.log(`✅ 链接: ${uploadedUrl}`)
       } catch (error) {
         console.error('HuggingFace upload error:', error)
         return new Response(JSON.stringify({ error: error.message }), {
@@ -205,7 +224,9 @@ export async function onRequest(context) {
         })
       }
 
+    // ============================================================
     // 3. R2 存储
+    // ============================================================
     } else if (storageType === 'r2') {
       if (!bucket) {
         return new Response(JSON.stringify({ error: 'R2 bucket not configured' }), {
@@ -221,7 +242,9 @@ export async function onRequest(context) {
       uploadedUrl = `${baseUrl}/api/image?path=${key}`
       usedStorage = 'r2'
 
+    // ============================================================
     // 4. GitHub 存储
+    // ============================================================
     } else {
       if (!token) {
         return new Response(JSON.stringify({ error: 'GITHUB_TOKEN not configured' }), {
