@@ -441,10 +441,10 @@ function App() {
   <div className="relative">
     <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 opacity-0 group-hover:opacity-100 blur-lg transition-opacity duration-300 -inset-1"></div>
     <img
-      src="/logo.png"
-      alt="Logo"
-      className="w-12 h-12 rounded-xl shadow-lg relative transition-all duration-300 group-hover:animate-logo-shake group-hover:scale-105"
-    />
+  src="/logo.png"
+  alt="Logo"
+  className="w-12 h-12 rounded-xl shadow-lg relative transition-all duration-300 group-hover:scale-105 group-hover:rotate-[50deg]"
+/>
   </div>
 </a>
 
