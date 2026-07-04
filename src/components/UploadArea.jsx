@@ -386,7 +386,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       // 1. 计算 SHA256 和 sample
       const sha256 = await computeSHA256(file)
       const sample = await getFileSample(file)
-      const filePath = `${folder}/${filename}`
+      const filePath = `hd/${filename}`
       
       setUploadStatus('获取上传信息...')
       
