@@ -1,5 +1,12 @@
 [
   {
+    "id": "1783143022000-20260704_195.webp",
+    "filename": "20260704_195.webp",
+    "url": "https://pico-beige.vercel.app/api/image?path=cover/20260704_195.webp",
+    "folder": "cover",
+    "time": "2026-07-04T13:30:22+08:00"
+  },
+  {
     "id": "1783132482000-20260704_huansan.webp",
     "filename": "20260704_huansan.webp",
     "url": "https://pico-beige.vercel.app/api/image?path=sd/20260704_huansan.webp",
