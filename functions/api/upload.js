@@ -207,7 +207,7 @@ export async function onRequest(context) {
       // 小文件：走代理上传（原有逻辑）
       try {
         const hfPath = `${folder}/${filename}`
-        const result = await uploadToHuggingFace(processedFile, hfPath, env)
+        const result = await uploadToHuggingFace(processedFile, hfPath, env, request)
         
         if (!result.success) {
           throw new Error(result.error || 'HuggingFace 上传失败')
