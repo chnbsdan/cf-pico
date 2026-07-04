@@ -908,103 +908,191 @@ export default function Manage() {
           </div>
         )}
 
-        {activeTab === 'external' ? (
-          <ExternalLinksManager />
-        ) : activeTab === 'history' ? (
-          historyLoading ? (
-            <div className="flex justify-center items-center py-20">
-              <i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i>
-            </div>
-          ) : filteredHistory.length === 0 ? (
-            <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl">
-              <i className="fas fa-inbox text-5xl text-gray-400 mb-3"></i>
-              <p className="text-gray-500">
-                {historySearchKeyword ? `没有找到 "${historySearchKeyword}" 相关的记录` : '暂无上传记录'}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {filteredHistory.map((record) => (
-                <div
-                  key={record.id}
-                  className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-xl p-4 border border-white/30 dark:border-gray-700 shadow-sm relative group"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedHistoryIds.has(record.id)}
-                    onChange={(e) => toggleSelectHistory(record.id, e)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute top-3 left-3 z-10 w-4 h-4 rounded border-gray-300 bg-white/80 checked:bg-teal-500 cursor-pointer"
-                  />
-                  <div className="flex items-center justify-between flex-wrap gap-2 ml-6">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-gray-800 dark:text-white truncate">
-                          {record.filename}
-                        </span>
-                        <span className="text-xs px-2 py-0.5 rounded bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300">
-                          {record.folder === 'wallpaper' || record.folder === 'sh' ? '横屏' : record.folder === 'telegram' ? '✈️ TG' : '竖屏'}
-                        </span>
-                      </div>
-                      <div className="text-xs text-blue-500 dark:text-blue-400 mt-1">
-                        {formatTime(record.time)}
-                      </div>
-                      <code className="text-xs text-gray-500 dark:text-gray-400 mt-1 block truncate">
-                        {record.url}
-                      </code>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleCopy(record.url, record.id)}
-                        className="p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-700/50 transition"
-                        title="复制链接"
-                      >
-                        {copiedId === record.id ? (
-                          <i className="fas fa-check text-green-500"></i>
-                        ) : (
-                          <i className="fas fa-copy text-gray-500"></i>
-                        )}
-                      </button>
-                      <a
-                        href={record.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-700/50 transition"
-                        title="打开图片"
-                      >
-                        <i className="fas fa-external-link-alt text-gray-500"></i>
-                      </a>
-                      <button
-                        onClick={() => handleDeleteHistory(record.id)}
-                        className="p-2 rounded-lg hover:bg-red-100/50 dark:hover:bg-red-900/30 transition"
-                        title="删除记录"
-                      >
-                        <i className="fas fa-trash-alt text-red-400"></i>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+      {activeTab === 'external' ? (
+  loading ? (
+    <SkeletonLoader count={12} type="card" />
+  ) : paginatedImages.length === 0 ? (
+    <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl">
+      <i className="fas fa-link text-5xl text-gray-400 mb-3"></i>
+      <p className="text-gray-500">暂无外链图片</p>
+    </div>
+  ) : (
+    <>
+      <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 sm:gap-3">
+        {paginatedImages.map((img, idx) => {
+          const proxyUrl = getProxyUrl(img)
+          return (
+            <FileCard
+              key={img.sha || idx}
+              file={img}
+              selected={selectedImages.has(img.name)}
+              onSelect={(e) => {
+                e.stopPropagation()
+                toggleSelect(img.name, e)
+              }}
+              onPreview={() => openPreview(img)}
+              onDetail={() => setDetailFile(img)}
+              onCopy={() => handleCopy(proxyUrl, img.name)}
+              onDelete={() => handleDelete(img, activeTab)}
+              getFileUrl={getProxyUrl}
+            />
           )
-        ) : loading ? (
-          <SkeletonLoader count={12} type="card" />
-        ) : paginatedImages.length === 0 ? (
-          <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl">
-            <i className="fas fa-folder-open text-5xl text-gray-400 mb-3"></i>
-            <p className="text-gray-500">
-              {searchKeyword ? `没有找到 "${searchKeyword}" 相关的图片` : '暂无图片'}
-            </p>
-            {searchKeyword && (
+        })}
+      </div>
+      {totalPages > 1 && (
+        <div className="flex justify-center gap-1 sm:gap-2 mt-6">
+          <button
+            onClick={() => setCurrentPage(1)}
+            disabled={currentPage === 1}
+            className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
+          >
+            首页
+          </button>
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
+          >
+            上一页
+          </button>
+          <span className="px-3 py-1.5 rounded-lg bg-white/70 dark:bg-gray-700/70 text-gray-700 dark:text-white text-sm backdrop-blur-sm">
+            {currentPage} / {totalPages}
+          </span>
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
+          >
+            下一页
+          </button>
+          <button
+            onClick={() => setCurrentPage(totalPages)}
+            disabled={currentPage === totalPages}
+            className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
+          >
+            末页
+          </button>
+        </div>
+      )}
+    </>
+  )
+) : activeTab === 'history' ? (
+  historyLoading ? (
+    <div className="flex justify-center items-center py-20">
+      <i className="fas fa-spinner fa-pulse text-3xl text-gray-400"></i>
+    </div>
+  ) : filteredHistory.length === 0 ? (
+    <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl">
+      <i className="fas fa-inbox text-5xl text-gray-400 mb-3"></i>
+      <p className="text-gray-500">
+        {historySearchKeyword ? `没有找到 "${historySearchKeyword}" 相关的记录` : '暂无上传记录'}
+      </p>
+    </div>
+  ) : (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {filteredHistory.map((record) => (
+        <div
+          key={record.id}
+          className="bg-white/70 dark:bg-gray-800/70 backdrop-blur-sm rounded-xl p-4 border border-white/30 dark:border-gray-700 shadow-sm relative group"
+        >
+          <input
+            type="checkbox"
+            checked={selectedHistoryIds.has(record.id)}
+            onChange={(e) => toggleSelectHistory(record.id, e)}
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-3 left-3 z-10 w-4 h-4 rounded border-gray-300 bg-white/80 checked:bg-teal-500 cursor-pointer"
+          />
+          <div className="flex items-center justify-between flex-wrap gap-2 ml-6">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-medium text-gray-800 dark:text-white truncate">
+                  {record.filename}
+                </span>
+                <span className="text-xs px-2 py-0.5 rounded bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300">
+                  {record.folder === 'wallpaper' || record.folder === 'sh' ? '横屏' : record.folder === 'telegram' ? '✈️ TG' : '竖屏'}
+                </span>
+              </div>
+              <div className="text-xs text-blue-500 dark:text-blue-400 mt-1">
+                {formatTime(record.time)}
+              </div>
+              <code className="text-xs text-gray-500 dark:text-gray-400 mt-1 block truncate">
+                {record.url}
+              </code>
+            </div>
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setSearchKeyword('')}
-                className="inline-block mt-4 text-blue-500 hover:text-blue-600"
+                onClick={() => handleCopy(record.url, record.id)}
+                className="p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-700/50 transition"
+                title="复制链接"
               >
-                <i className="fas fa-undo mr-1"></i>清除搜索
+                {copiedId === record.id ? (
+                  <i className="fas fa-check text-green-500"></i>
+                ) : (
+                  <i className="fas fa-copy text-gray-500"></i>
+                )}
               </button>
-            )}
+              <a
+                href={record.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-lg hover:bg-white/50 dark:hover:bg-gray-700/50 transition"
+                title="打开图片"
+              >
+                <i className="fas fa-external-link-alt text-gray-500"></i>
+              </a>
+              <button
+                onClick={() => handleDeleteHistory(record.id)}
+                className="p-2 rounded-lg hover:bg-red-100/50 dark:hover:bg-red-900/30 transition"
+                title="删除记录"
+              >
+                <i className="fas fa-trash-alt text-red-400"></i>
+              </button>
+            </div>
           </div>
-        ) : (
+        </div>
+      ))}
+    </div>
+  )
+) : loading ? (
+  <SkeletonLoader count={12} type="card" />
+) : paginatedImages.length === 0 ? (
+  <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl">
+    <i className="fas fa-folder-open text-5xl text-gray-400 mb-3"></i>
+    <p className="text-gray-500">
+      {searchKeyword ? `没有找到 "${searchKeyword}" 相关的图片` : '暂无图片'}
+    </p>
+    {searchKeyword && (
+      <button
+        onClick={() => setSearchKeyword('')}
+        className="inline-block mt-4 text-blue-500 hover:text-blue-600"
+      >
+        <i className="fas fa-undo mr-1"></i>清除搜索
+      </button>
+    )}
+  </div>
+) : (
+  <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 sm:gap-3">
+    {paginatedImages.map((img, idx) => {
+      const proxyUrl = getProxyUrl(img)
+      return (
+        <FileCard
+          key={img.sha || idx}
+          file={img}
+          selected={selectedImages.has(img.name)}
+          onSelect={(e) => {
+            e.stopPropagation()
+            toggleSelect(img.name, e)
+          }}
+          onPreview={() => openPreview(img)}
+          onDetail={() => setDetailFile(img)}
+          onCopy={() => handleCopy(proxyUrl, img.name)}
+          onDelete={() => handleDelete(img, activeTab)}
+          getFileUrl={getProxyUrl}
+        />
+      )
+    })}
+  </div>
+)}
           <>
             <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 sm:gap-3">
               {paginatedImages.map((img, idx) => {
