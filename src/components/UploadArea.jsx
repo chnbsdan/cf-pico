@@ -1,6 +1,17 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react'
 import { initChunkUpload, uploadChunk, completeChunkUpload } from '../lib/api'
 
+// 导入 generateFilename（从 helpers 或自己实现）
+function generateFilename(originalName) {
+  const now = new Date()
+  const dateStr = now.getFullYear() +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0')
+  const random = Math.random().toString(36).substring(2, 8)
+  const ext = originalName.split('.').pop() || ''
+  return `${dateStr}_${random}.${ext}`
+}
+
 export default function UploadArea({ onUpload, isLoading, convertToWebp, onConvertChange }) {
   const [dragOver, setDragOver] = useState(false)
   const [folder, setFolder] = useState('wallpaper')
@@ -103,18 +114,18 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   // 配置选项
   // ============================================================
   const folderOptions = [
-    { key: 'wallpaper', label: '横屏', icon: 'fa-arrows-alt-h', color: 'text-blue-400' },
-    { key: 'cover', label: '竖屏', icon: 'fa-mobile-alt', color: 'text-purple-400' },
+    { key: 'wallpaper', label: '横屏图片', icon: 'fa-arrows-alt-h', color: 'text-blue-400' },
+    { key: 'cover', label: '竖屏图片', icon: 'fa-mobile-alt', color: 'text-purple-400' },
     { key: 'sh', label: '横屏 (sh)', icon: 'fa-arrows-alt-h', color: 'text-blue-400' },
     { key: 'sd', label: '竖屏 (sd)', icon: 'fa-mobile-alt', color: 'text-purple-400' }
   ]
 
   const storageOptions = [
-  { value: 'github', label: 'GitHub', icon: 'fa-brands fa-github' },
-  { value: 'r2', label: 'R2', icon: 'fas fa-cloud' },
-  { value: 'telegram', label: 'Telegram', icon: 'fas fa-paper-plane' },
-  { value: 'huggingface', label: 'HuggingFace', icon: 'fas fa-brain' },
-]
+    { value: 'github', label: 'GitHub', icon: 'fa-brands fa-github' },
+    { value: 'r2', label: 'R2', icon: 'fas fa-cloud' },
+    { value: 'telegram', label: 'Telegram', icon: 'fas fa-paper-plane' },
+    { value: 'huggingface', label: 'HuggingFace', icon: 'fas fa-brain' },
+  ]
 
   const refreshBackground = () => {
     setBgRefresh(true)
@@ -160,7 +171,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   }, [uploadQueue, activeUploads])
 
   // ============================================================
-  // 大文件上传
+  // 大文件上传 (Telegram)
   // ============================================================
   const uploadLargeFile = async (file, folder) => {
     if (activeUploads >= maxConcurrentUploads) {
@@ -300,6 +311,18 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             } catch (e) {
               reject(new Error('解析响应失败'))
             }
+          } else if (xhr.status === 202) {
+            // ✅ 202 表示需要直传，解析返回的 JSON
+            try {
+              const result = JSON.parse(xhr.responseText)
+              if (result.needDirectUpload) {
+                resolve(result)
+              } else {
+                reject(new Error('上传失败'))
+              }
+            } catch (e) {
+              reject(new Error('解析响应失败'))
+            }
           } else {
             try {
               const error = JSON.parse(xhr.responseText)
@@ -335,6 +358,97 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   }
 
   // ============================================================
+  // HuggingFace 大文件直传相关函数
+  // ============================================================
+  
+  // 计算文件 SHA256（使用 Web Crypto API）
+  const computeSHA256 = async (file) => {
+    const buffer = await file.arrayBuffer()
+    const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
+    const hashArray = Array.from(new Uint8Array(hashBuffer))
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  }
+
+  // 获取文件前512字节的 base64
+  const getFileSample = async (file) => {
+    const sampleBuffer = await file.slice(0, 512).arrayBuffer()
+    const bytes = new Uint8Array(sampleBuffer)
+    let binary = ''
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+    return btoa(binary)
+  }
+
+  // HuggingFace 大文件直传
+  const uploadHuggingFaceDirect = async (file, folder, filename) => {
+    try {
+      setUploadStatus('计算文件指纹...')
+      
+      // 1. 计算 SHA256 和 sample
+      const sha256 = await computeSHA256(file)
+      const sample = await getFileSample(file)
+      const filePath = `${folder}/${filename}`
+      
+      setUploadStatus('获取上传信息...')
+      
+      // 2. 获取上传信息
+      const infoRes = await fetch(
+        `/api/hf-upload/info?size=${file.size}&path=${encodeURIComponent(filePath)}&sha256=${sha256}&sample=${encodeURIComponent(sample)}`
+      )
+      const info = await infoRes.json()
+      
+      if (info.error) {
+        throw new Error(info.error)
+      }
+      
+      if (!info.needsLfs) {
+        throw new Error('文件不需要 LFS 上传')
+      }
+      
+      if (info.alreadyExists) {
+        setUploadStatus('文件已存在')
+        return `/api/hf/${filePath}`
+      }
+      
+      // 3. 直传到 S3
+      setUploadStatus('上传到 HuggingFace (直传)...')
+      const uploadRes = await fetch(info.uploadAction.href, {
+        method: 'PUT',
+        headers: info.uploadAction.header || {},
+        body: file
+      })
+      
+      if (!uploadRes.ok) {
+        throw new Error(`直传失败: ${uploadRes.status}`)
+      }
+      
+      setUploadStatus('提交文件引用...')
+      
+      // 4. 提交 Commit
+      const commitRes = await fetch('/api/hf-upload/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filePath: filePath,
+          oid: sha256,
+          fileSize: file.size
+        })
+      })
+      
+      const commitResult = await commitRes.json()
+      if (!commitResult.success) {
+        throw new Error(commitResult.error || '提交失败')
+      }
+      
+      setUploadStatus('✅ 上传完成!')
+      return `/api/hf/${filePath}`
+      
+    } catch (error) {
+      console.error('HuggingFace 直传失败:', error)
+      throw error
+    }
+  }
+
+  // ============================================================
   // 处理文件
   // ============================================================
   const handleFiles = async (files) => {
@@ -358,6 +472,20 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           actualStorage = 'telegram'
         }
 
+        // ✅ HuggingFace 大文件直传（> 20MB）
+        if (actualStorage === 'huggingface' && file.size > 20 * 1024 * 1024) {
+          const newFilename = generateFilename(file.name)
+          const url = await uploadHuggingFaceDirect(file, folder, newFilename)
+          results.push({
+            success: true,
+            filename: file.name,
+            url: url,
+            folder: folder,
+            storage: 'huggingface'
+          })
+          continue
+        }
+
         const needChunk = actualStorage === 'telegram' && (file.size > 16 * 1024 * 1024 || isAudio || isVideo)
 
         let url
@@ -371,7 +499,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           if (actualStorage === 'telegram' && file.size > 50 * 1024 * 1024) {
             throw new Error('Telegram 直接上传限制 50MB')
           }
-          if (actualStorage !== 'telegram' && file.size > 25 * 1024 * 1024) {
+          if (actualStorage !== 'telegram' && actualStorage !== 'huggingface' && file.size > 25 * 1024 * 1024) {
             throw new Error(`${actualStorage === 'github' ? 'GitHub' : 'R2'} 限制 25MB，请切换到 Telegram`)
           }
           
@@ -380,10 +508,18 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           setUploadProgress(0)
           
           const result = await uploadNormalFile(file, folder, actualStorage)
-          if (!result.success) {
-            throw new Error(result.error || '上传失败')
+          
+          // 检查是否返回了 needDirectUpload（大文件直传）
+          if (result && result.needDirectUpload) {
+            // 后端返回了直传信息，走直传流程
+            const newFilename = generateFilename(file.name)
+            const directUrl = await uploadHuggingFaceDirect(file, result.folder || folder, result.fileName || newFilename)
+            url = directUrl
+          } else if (result && result.success !== false) {
+            url = result.url
+          } else {
+            throw new Error(result?.error || '上传失败')
           }
-          url = result.url
           setIsNormalUploading(false)
         }
 
