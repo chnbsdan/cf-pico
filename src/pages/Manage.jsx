@@ -395,7 +395,26 @@ export default function Manage() {
       })
       const result = await response.json()
       if (result.success) {
-        await loadImages()
+        // ✅ 重新加载外链数据
+        const extRes = await fetch('/api/external')
+        const extData = await extRes.json()
+        
+        const externalImages = (extData.wallpaper || []).map(url => ({
+          name: url.split('/').pop() || 'unknown',
+          url: url,
+          path: `external/${url.split('/').pop() || 'unknown'}`,
+          sha: '',
+          size: 0,
+          folder: 'external',
+          source: 'external',
+          originalFolder: 'wallpaper'
+        }))
+        
+        setImages(prev => ({
+          ...prev,
+          external: externalImages
+        }))
+        
         setSelectedImages(new Set())
         alert(`✅ 已删除外链 "${img.name}"`)
       } else {
