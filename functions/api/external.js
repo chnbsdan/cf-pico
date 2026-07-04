@@ -25,24 +25,50 @@ async function getExternalJson(token) {
 }
 
 async function saveExternalJson(token, data, sha) {
-  if (!token) return false
+  if (!token) {
+    console.error('saveExternalJson: 缺少 token')
+    return false
+  }
+  
   const url = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/external.json`
   
-  const response = await fetch(url, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'User-Agent': 'Cloudflare-Pages'
-    },
-    body: JSON.stringify({
-      message: 'Update external images list',
-      content: btoa(JSON.stringify(data, null, 2)),
-      sha: sha || undefined,
-      branch: 'main'
+  try {
+    // ✅ 使用 TextEncoder 处理 UTF-8 字符
+    const content = JSON.stringify(data, null, 2)
+    const encoder = new TextEncoder()
+    const encoded = encoder.encode(content)
+    let binary = ''
+    for (let i = 0; i < encoded.length; i++) {
+      binary += String.fromCharCode(encoded[i])
+    }
+    const base64Content = btoa(binary)
+    
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'Cloudflare-Pages'
+      },
+      body: JSON.stringify({
+        message: 'Update external images list',
+        content: base64Content,
+        sha: sha || undefined,
+        branch: 'main'
+      })
     })
-  })
-  return response.ok
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('GitHub PUT 失败:', response.status, errorText)
+      return false
+    }
+    
+    return true
+  } catch (error) {
+    console.error('saveExternalJson 异常:', error)
+    return false
+  }
 }
 
 export async function onRequest(context) {
@@ -106,13 +132,25 @@ export async function onRequest(context) {
         data[folder] = []
       }
       
-      // 去重
       const existing = new Set(data[folder])
+      let addedCount = 0
       for (const url of validUrls) {
         if (!existing.has(url)) {
           data[folder].push(url)
           existing.add(url)
+          addedCount++
         }
+      }
+      
+      if (addedCount === 0) {
+        return new Response(JSON.stringify({
+          success: true,
+          message: '所有链接已存在',
+          added: 0,
+          total: data[folder].length
+        }), {
+          headers: { 'Content-Type': 'application/json' }
+        })
       }
       
       const saved = await saveExternalJson(token, data, sha)
@@ -125,7 +163,7 @@ export async function onRequest(context) {
       
       return new Response(JSON.stringify({
         success: true,
-        added: validUrls.length,
+        added: addedCount,
         folder: folder,
         total: data[folder].length
       }), {
