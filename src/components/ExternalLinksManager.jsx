@@ -155,7 +155,7 @@ export default function ExternalLinksManager({ onLinkAdded }) {
   }
 
   return (
-    <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-white/30 p-4 sm:p-6">
+    <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-white/30 p-3 sm:p-4">
       <div className="flex items-center gap-2 mb-3">
         <i className="fas fa-link text-purple-500"></i>
         <h3 className="text-sm font-semibold text-gray-800 dark:text-white">添加外链图片</h3>
