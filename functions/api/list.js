@@ -150,7 +150,7 @@ export async function onRequest(context) {
             seen.add(key)
             images.push({
               name: img.name,
-              url: `https://cf-pico.pages.dev/api/image?path=${key}`,
+              url: `/api/image?path=${key}`, // ✅ 使用相对路径，自定义域名
               path: key,
               sha: img.sha,
               size: img.size,
@@ -177,7 +177,7 @@ export async function onRequest(context) {
             seen.add(key)
             images.push({
               name: name,
-              url: `https://cf-pico.pages.dev/api/image?path=${key}`,
+              url: `/api/image?path=${key}`, // ✅ 使用相对路径，自定义域名
               path: key,
               sha: obj.etag || '',
               size: obj.size || 0,
