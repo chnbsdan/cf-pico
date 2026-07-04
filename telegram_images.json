@@ -334,5 +334,17 @@
     "time": "2026-07-04T12:35:26.481Z",
     "size": 3273691,
     "mimeType": "image/jpeg"
+  },
+  {
+    "id": 1783173681490,
+    "filename": "20260704_bz2.webp",
+    "originalName": "bz2.webp",
+    "fileId": "CAACAgUAAyEGAAMBBNJvJQAD_GpJEi9aFl4ILwABO5XvVRrFYKVUKAACgCAAAvi8SFY_dX8taiQ0oTwE",
+    "messageId": 252,
+    "filePath": "stickers/file_288.webp",
+    "url": "https://pico.1356666.xyz/api/short/20260704_bz2.webp",
+    "time": "2026-07-04T14:01:21.490Z",
+    "size": 612350,
+    "mimeType": "image/webp"
   }
 ]
