@@ -1,4 +1,4 @@
-// src/components/ExternalLinksManager.jsx - 精简版（只保留添加外链功能）
+// src/components/ExternalLinksManager.jsx - 支持选择文件夹
 import React, { useState } from 'react'
 
 export default function ExternalLinksManager({ onLinkAdded }) {
@@ -9,6 +9,14 @@ export default function ExternalLinksManager({ onLinkAdded }) {
   const [links, setLinks] = useState([])
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(null)
+  const [selectedFolder, setSelectedFolder] = useState('wallpaper')  // ✅ 新增
+
+  const folderOptions = [
+    { value: 'wallpaper', label: '横屏 (wallpaper)' },
+    { value: 'cover', label: '竖屏 (cover)' },
+    { value: 'sh', label: '横屏 (sh)' },
+    { value: 'sd', label: '竖屏 (sd)' }
+  ]
 
   const loadExternalLinks = async () => {
     setLoading(true)
@@ -59,7 +67,7 @@ export default function ExternalLinksManager({ onLinkAdded }) {
       return
     }
 
-    // 获取已存在的链接
+    // 获取已存在的链接（去重）
     let existingUrls = []
     try {
       const res = await fetch('/api/external')
@@ -88,17 +96,18 @@ export default function ExternalLinksManager({ onLinkAdded }) {
 
     setAdding(true)
     try {
+      // ✅ 使用用户选择的文件夹
       const res = await fetch('/api/external', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           urls: newValidUrls,
-          folder: 'wallpaper'
+          folder: selectedFolder
         })
       })
       const data = await res.json()
       if (data.success) {
-        showMessage(`✅ 成功添加 ${data.added} 条外链`, 'success')
+        showMessage(`✅ 成功添加 ${data.added} 条外链到 ${selectedFolder}`, 'success')
         setNewUrls('')
         await loadExternalLinks()
         if (onLinkAdded) onLinkAdded()
@@ -116,6 +125,9 @@ export default function ExternalLinksManager({ onLinkAdded }) {
   const handleDeleteLink = async (url) => {
     if (!confirm(`确定要删除这条外链吗？\n\n${url}`)) return
     
+    const linkItem = links.find(item => item.url === url)
+    const folder = linkItem?.folder || 'wallpaper'
+    
     setDeleting(url)
     try {
       const res = await fetch('/api/external', {
@@ -123,15 +135,13 @@ export default function ExternalLinksManager({ onLinkAdded }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url: url,
-          folder: 'wallpaper'
+          folder: folder
         })
       })
       const data = await res.json()
       if (data.success) {
         showMessage('✅ 删除成功', 'success')
-        // ✅ 直接刷新外链列表
         await loadExternalLinks()
-        // ✅ 通知父组件刷新
         if (onLinkAdded) onLinkAdded()
       } else {
         showMessage('❌ 删除失败: ' + (data.error || '未知错误'), 'error')
@@ -171,14 +181,25 @@ export default function ExternalLinksManager({ onLinkAdded }) {
           className="flex-1 px-3 py-2 rounded-xl bg-white/60 dark:bg-gray-800/60 border border-white/30 dark:border-gray-700 text-gray-700 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 transition resize-none min-h-[60px] text-sm"
           rows={2}
         />
-        <button
-          onClick={handleAddLinks}
-          disabled={adding}
-          className="px-4 py-2 rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-sm transition disabled:opacity-50 whitespace-nowrap"
-        >
-          {adding ? <i className="fas fa-spinner fa-pulse mr-1"></i> : <i className="fas fa-plus mr-1"></i>}
-          {adding ? '添加中...' : '添加外链'}
-        </button>
+        <div className="flex gap-2">
+          <select
+            value={selectedFolder}
+            onChange={(e) => setSelectedFolder(e.target.value)}
+            className="px-3 py-2 rounded-xl bg-white/60 dark:bg-gray-800/60 border border-white/30 dark:border-gray-700 text-gray-700 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+          >
+            {folderOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={handleAddLinks}
+            disabled={adding}
+            className="px-4 py-2 rounded-xl bg-purple-500 hover:bg-purple-600 text-white text-sm transition disabled:opacity-50 whitespace-nowrap"
+          >
+            {adding ? <i className="fas fa-spinner fa-pulse mr-1"></i> : <i className="fas fa-plus mr-1"></i>}
+            {adding ? '添加中...' : '添加'}
+          </button>
+        </div>
       </div>
       <p className="text-xs text-gray-400 mt-2">
         <i className="fas fa-info-circle mr-1"></i>
