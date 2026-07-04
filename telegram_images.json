@@ -358,5 +358,17 @@
     "time": "2026-07-04T14:02:56.583Z",
     "size": 612350,
     "mimeType": "image/webp"
+  },
+  {
+    "id": 1783174566197,
+    "filename": "20260704_bj28.jpg",
+    "originalName": "bj28.jpg",
+    "fileId": "BQACAgUAAyEGAAMBBNJvJQAD_mpJFaLVg97IIp8rHzc-7UFbtzcfAAKKIAAC-LxIVhfNoQuoxLTaPAQ",
+    "messageId": 254,
+    "filePath": "documents/file_290.jpg",
+    "url": "https://pico.1356666.xyz/api/short/20260704_bj28.jpg",
+    "time": "2026-07-04T14:16:06.197Z",
+    "size": 8192660,
+    "mimeType": "image/jpeg"
   }
 ]
