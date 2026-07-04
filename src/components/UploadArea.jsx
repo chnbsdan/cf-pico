@@ -6,6 +6,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const [folder, setFolder] = useState('wallpaper')
   const [bgRefresh, setBgRefresh] = useState(false)
   const [storageType, setStorageType] = useState('github')
+  const [storageOpen, setStorageOpen] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadStatus, setUploadStatus] = useState('')
   const [uploadSpeed, setUploadSpeed] = useState('')
@@ -102,6 +103,13 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     { key: 'cover', label: '竖屏图片 (cover)', icon: 'fa-mobile-alt', color: 'purple' },
     { key: 'sh', label: '横屏图片 (sh)', icon: 'fa-arrows-alt', color: 'blue' },
     { key: 'sd', label: '竖屏图片 (sd)', icon: 'fa-mobile-alt', color: 'purple' }
+  ]
+
+  const storageOptions = [
+    { value: 'github', label: 'GitHub', icon: 'fa-github' },
+    { value: 'r2', label: 'R2', icon: 'fa-cloud' },
+    { value: 'telegram', label: 'Telegram', icon: 'fa-paper-plane' },
+    { value: 'huggingface', label: 'HuggingFace', icon: 'fa-hugging-face' },
   ]
 
   const refreshBackground = () => {
@@ -486,31 +494,31 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           </button>
 
           <div className="relative">
-  <button
-    onClick={() => setStorageOpen(!storageOpen)}
-    className="px-3 py-1.5 rounded-lg bg-white/20 text-white border border-white/30 hover:bg-white/30 transition flex items-center gap-2 text-sm"
-  >
-    <i className={`fas ${storageOptions.find(o => o.value === storageType)?.icon}`}></i>
-    <span>{storageOptions.find(o => o.value === storageType)?.label}</span>
-    <i className="fas fa-chevron-down text-xs ml-1"></i>
-  </button>
-  {storageOpen && (
-    <div className="absolute top-full left-0 mt-1 bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-lg shadow-lg border border-white/30 overflow-hidden z-50 min-w-[150px]">
-      {storageOptions.map(opt => (
-        <button
-          key={opt.value}
-          onClick={() => { setStorageType(opt.value); setStorageOpen(false); }}
-          className={`w-full px-3 py-2 text-sm flex items-center gap-2 hover:bg-blue-500/10 transition text-gray-700 dark:text-gray-300 ${
-            storageType === opt.value ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400' : ''
-          }`}
-        >
-          <i className={`fas ${opt.icon} w-4 text-center`}></i>
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  )}
-</div>
+            <button
+              onClick={() => setStorageOpen(!storageOpen)}
+              className="px-3 py-1.5 rounded-lg bg-white/20 text-white border border-white/30 hover:bg-white/30 transition flex items-center gap-2 text-sm"
+            >
+              <i className={`fas ${storageOptions.find(o => o.value === storageType)?.icon}`}></i>
+              <span>{storageOptions.find(o => o.value === storageType)?.label}</span>
+              <i className="fas fa-chevron-down text-xs ml-1"></i>
+            </button>
+            {storageOpen && (
+              <div className="absolute top-full left-0 mt-1 bg-white/95 dark:bg-gray-800/95 backdrop-blur-md rounded-lg shadow-lg border border-white/30 overflow-hidden z-50 min-w-[150px]">
+                {storageOptions.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => { setStorageType(opt.value); setStorageOpen(false); }}
+                    className={`w-full px-3 py-2 text-sm flex items-center gap-2 hover:bg-blue-500/10 transition text-gray-700 dark:text-gray-300 ${
+                      storageType === opt.value ? 'bg-blue-500/20 text-blue-600 dark:text-blue-400' : ''
+                    }`}
+                  >
+                    <i className={`fas ${opt.icon} w-4 text-center`}></i>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <select
             value={folder}
