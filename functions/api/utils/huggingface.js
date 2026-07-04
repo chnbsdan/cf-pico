@@ -24,7 +24,7 @@ async function getFileSample(file) {
 // ============================================================
 // 原有函数：上传（代理模式，用于小文件）
 // ============================================================
-export async function uploadToHuggingFace(file, path, env) {
+export async function uploadToHuggingFace(file, path, env, request) {
   try {
     const { token, repo } = getHFConfig(env);
     const fileBuffer = await file.arrayBuffer();
@@ -148,7 +148,8 @@ export async function uploadToHuggingFace(file, path, env) {
       console.log('✅ Commit 成功');
     }
 
-    const fileUrl = `https://huggingface.co/datasets/${repo}/resolve/main/${path}`;
+    const baseUrl = new URL(request.url).origin;
+    const fileUrl = `${baseUrl}/api/hf/${path}`;
     return { success: true, url: fileUrl, source: 'huggingface', path };
 
   } catch (error) {
