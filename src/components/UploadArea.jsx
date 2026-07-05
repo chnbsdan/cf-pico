@@ -6,6 +6,8 @@
 //   2. 移除 HuggingFace 20MB 大小限制 (所有 HF 文件走直传)
 //   3. 修复命名方式设置不生效的问题 (支持 default/origin/short)
 //   4. HuggingFace 返回完整 URL (包含域名)
+//   5. HuggingFace 上传支持进度显示 (用 XMLHttpRequest 替代 fetch)
+//   6. HuggingFace 支持 WebP 转换
 // ============================================================
 
 import React, { useRef, useState, useEffect, useCallback } from 'react'
@@ -416,14 +418,18 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     return btoa(binary)
   }
 
-  // ⚠️ 修改点 3：HuggingFace 直传返回完整 URL
+  // ============================================================
+  // ⚠️ 修改点 3：HuggingFace 直传（支持进度显示 + 返回完整 URL）
+  // 原代码：使用 fetch，无进度显示
+  // 现在：使用 XMLHttpRequest，有进度显示
+  // ============================================================
   const uploadHuggingFaceDirect = async (file, folder, filename) => {
     try {
       setUploadStatus('计算文件指纹...')
       
       const sha256 = await computeSHA256(file)
       const sample = await getFileSample(file)
-      const filePath = `hd/${filename}`  // 统一放在 hd 目录下
+      const filePath = `hd/${filename}`
       
       setUploadStatus('获取上传信息...')
       
@@ -443,57 +449,104 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       
       if (info.alreadyExists) {
         setUploadStatus('文件已存在')
-        // ⚠️ 修改点 4：加上域名返回完整 URL
         const baseUrl = window.location.origin
         return `${baseUrl}/api/hf/${filePath}`
       }
       
-      // 2. 直传到 HuggingFace S3
-      setUploadStatus('上传到 HuggingFace (直传)...')
-      const uploadRes = await fetch(info.uploadAction.href, {
-        method: 'PUT',
-        headers: info.uploadAction.header || {},
-        body: file
+      // 2. 使用 XMLHttpRequest 上传到 HuggingFace S3（支持进度）
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open('PUT', info.uploadAction.href)
+        
+        // 设置请求头
+        if (info.uploadAction.header) {
+          Object.entries(info.uploadAction.header).forEach(([key, value]) => {
+            xhr.setRequestHeader(key, value)
+          })
+        }
+        
+        const startTime = Date.now()
+        let lastProgress = 0
+        
+        // ✅ 上传进度监听
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const progress = Math.round((e.loaded / e.total) * 100)
+            if (progress !== lastProgress) {
+              lastProgress = progress
+              setUploadProgress(progress)
+              setUploadStatus(`上传到 HuggingFace ${progress}%`)
+              
+              const elapsed = (Date.now() - startTime) / 1000
+              if (elapsed > 0.5 && e.loaded > 0) {
+                const speed = (e.loaded / elapsed / 1024 / 1024).toFixed(1)
+                setUploadSpeed(`${speed} MB/s`)
+              }
+            }
+          }
+        }
+        
+        xhr.onload = async () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            setUploadStatus('提交文件引用...')
+            
+            // 3. 提交 Commit
+            try {
+              const commitRes = await fetch('/api/hf-upload/commit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  filePath: filePath,
+                  oid: sha256,
+                  fileSize: file.size
+                })
+              })
+              
+              const commitResult = await commitRes.json()
+              if (!commitResult.success) {
+                throw new Error(commitResult.error || '提交失败')
+              }
+              
+              setUploadStatus('✅ 上传完成!')
+              setUploadProgress(100)
+              setUploadSpeed('')
+              const baseUrl = window.location.origin
+              resolve(`${baseUrl}/api/hf/${filePath}`)
+            } catch (err) {
+              reject(err)
+            }
+          } else {
+            reject(new Error(`直传失败: ${xhr.status}`))
+          }
+        }
+        
+        xhr.onerror = () => {
+          reject(new Error('网络错误'))
+        }
+        
+        xhr.ontimeout = () => {
+          reject(new Error('上传超时'))
+        }
+        xhr.timeout = 600000  // 10分钟超时
+        
+        setUploadStatus('上传到 HuggingFace...')
+        xhr.send(file)
       })
-      
-      if (!uploadRes.ok) {
-        throw new Error(`直传失败: ${uploadRes.status}`)
-      }
-      
-      setUploadStatus('提交文件引用...')
-      
-      // 3. 提交 Commit
-      const commitRes = await fetch('/api/hf-upload/commit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filePath: filePath,
-          oid: sha256,
-          fileSize: file.size
-        })
-      })
-      
-      const commitResult = await commitRes.json()
-      if (!commitResult.success) {
-        throw new Error(commitResult.error || '提交失败')
-      }
-      
-      setUploadStatus('✅ 上传完成!')
-      // ⚠️ 修改点 4：加上域名返回完整 URL
-      const baseUrl = window.location.origin
-      return `${baseUrl}/api/hf/${filePath}`
       
     } catch (error) {
       console.error('HuggingFace 直传失败:', error)
+      setUploadProgress(0)
+      setUploadSpeed('')
       throw error
     }
   }
 
   // ============================================================
   // ⚠️⚠️⚠️ 核心修改：处理文件 ⚠️⚠️⚠️
-  // 修改点 5：移除音视频强制走 Telegram 的逻辑（选谁就传谁）
-  // 修改点 6：移除 HuggingFace 20MB 大小限制（所有 HF 文件走直传）
-  // 修改点 7：传入 uploadNameType 使命名方式生效
+  // 修改点 4：移除音视频强制走 Telegram 的逻辑（选谁就传谁）
+  // 修改点 5：移除 HuggingFace 20MB 大小限制（所有 HF 文件走直传）
+  // 修改点 6：传入 uploadNameType 使命名方式生效
+  // 修改点 7：HuggingFace 支持 WebP 转换
   // ============================================================
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
@@ -512,40 +565,43 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         const isAudio = audioExts.includes(ext)
         const isVideo = videoExts.includes(ext)
         
-        // ⚠️ 修改点 5：完全保留用户选择的存储，不做任何强制切换
+        // ⚠️ 修改点 4：完全保留用户选择的存储，不做任何强制切换
         // 原代码：if (isAudio || isVideo) { actualStorage = 'telegram' }
         // 现在：选谁就是谁，音频/视频也走用户选择的存储
         let actualStorage = storageType
 
-        // ⚠️ 修改点 6：HuggingFace 直传（去掉大小限制）
+        // ⚠️ 修改点 7：HuggingFace 分支（加上 WebP 转换）
+        // ⚠️ 修改点 5：HuggingFace 直传（去掉大小限制）
         // 原代码：if (actualStorage === 'huggingface' && file.size > 20 * 1024 * 1024)
         // 现在：所有选 HF 的文件都走直传，不管大小
         if (actualStorage === 'huggingface') {
-  // ✅ 先判断是否需要 WebP 转换
-  let fileToUpload = file
-  if (convertToWebp && file.type && file.type.startsWith('image/')) {
-    try {
-      const converted = await convertImageToWebp(file)
-      if (converted) {
-        fileToUpload = converted
-        setUploadStatus('✅ WebP 转换完成，开始上传...')
-      }
-    } catch (e) {
-      console.log('⚠️ WebP 转换失败，使用原图:', e.message)
-    }
-  }
-  
-  const newFilename = generateFilename(fileToUpload.name, uploadNameType)
-  const url = await uploadHuggingFaceDirect(fileToUpload, folder, newFilename)
-  results.push({
-    success: true,
-    filename: file.name,
-    url: url,
-    folder: folder,
-    storage: 'huggingface'
-  })
-  continue
-}
+          // ✅ 先处理 WebP 转换
+          let fileToUpload = file
+          if (convertToWebp && file.type && file.type.startsWith('image/')) {
+            try {
+              const converted = await convertImageToWebp(file)
+              if (converted) {
+                fileToUpload = converted
+                setUploadStatus('✅ WebP 转换完成，开始上传...')
+              }
+            } catch (e) {
+              console.log('⚠️ WebP 转换失败，使用原图:', e.message)
+            }
+          }
+          
+          // ⚠️ 修改点 6：传入 uploadNameType 使命名方式生效
+          const newFilename = generateFilename(fileToUpload.name, uploadNameType)
+          const url = await uploadHuggingFaceDirect(fileToUpload, folder, newFilename)
+          results.push({
+            success: true,
+            filename: file.name,
+            url: url,
+            folder: folder,
+            storage: 'huggingface'
+          })
+          continue  // 跳过后续处理
+        }
+
         // 判断是否需要分片上传（仅 Telegram）
         const needChunk = actualStorage === 'telegram' && (file.size > 16 * 1024 * 1024 || isAudio || isVideo)
 
@@ -574,7 +630,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           
           // 处理后端返回的直传信息
           if (result && result.needDirectUpload) {
-            // ⚠️ 修改点 7：传入 uploadNameType 使命名方式生效
+            // ⚠️ 修改点 6：传入 uploadNameType 使命名方式生效
             const newFilename = generateFilename(file.name, uploadNameType)
             const directUrl = await uploadHuggingFaceDirect(file, result.folder || folder, result.fileName || newFilename)
             url = directUrl
