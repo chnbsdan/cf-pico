@@ -4,8 +4,9 @@ import React from 'react'
 export default function UploadResult({ results }) {
   console.log('=== UploadResult 组件渲染 ===')
   console.log('接收到的 results 长度:', results?.length || 0)
+  console.log('results 数据:', results)
 
-  // ✅ 即使 results 为空，也显示一个占位状态，避免闪退
+  // 即使 results 为空，也显示一个占位状态，避免闪退
   if (!results || results.length === 0) {
     return (
       <div className="mt-4 text-center text-sm text-gray-400 dark:text-gray-500">
@@ -20,7 +21,7 @@ export default function UploadResult({ results }) {
   const failCount = results.filter(r => !r.success).length
 
   return (
-    <div className="mt-4 space-y-2 animate-fade-in">
+    <div className="mt-4 space-y-2">
       {/* 统计信息 */}
       <div className="flex items-center gap-4 px-2 py-1 text-sm">
         <span className="text-green-500">
