@@ -6,7 +6,7 @@
 //   2. 移除 HuggingFace 20MB 大小限制 (所有 HF 文件走直传)
 //   3. 修复命名方式设置不生效的问题 (支持 default/origin/short)
 //   4. HuggingFace 返回完整 URL (包含域名)
-//   5. HuggingFace 上传支持进度显示 (分片上传 + 模拟进度)
+//   5. HuggingFace 上传支持进度显示 (模拟进度)
 //   6. HuggingFace 支持 WebP 转换
 // ============================================================
 
@@ -419,15 +419,13 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   }
 
   // ============================================================
-  // ⚠️ 修改点 3：HuggingFace 直传（分片方式 + 进度显示）
+  // ⚠️ 修改点 3：HuggingFace 直传（支持进度显示）
   // 原代码：使用 fetch，无进度显示
-  // 现在：分片上传 + 真实进度，参考 Sanyue-ImgHub 实现
+  // 现在：使用模拟进度，让用户知道在上传中
   // ============================================================
   const uploadHuggingFaceDirect = async (file, folder, filename) => {
     try {
       setUploadStatus('计算文件指纹...')
-      setUploadProgress(0)
-      setUploadSpeed('')
       
       const sha256 = await computeSHA256(file)
       const sample = await getFileSample(file)
@@ -452,102 +450,53 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       if (info.alreadyExists) {
         setUploadStatus('文件已存在')
         const baseUrl = window.location.origin
-        setUploadProgress(100)
         return `${baseUrl}/api/hf/${filePath}`
       }
       
-      const uploadAction = info.uploadAction
+      // 2. 开始模拟进度（直传无法监听真实进度，用模拟进度让用户知道在上传中）
+      setUploadStatus('上传到 HuggingFace...')
+      setUploadProgress(0)
+      setUploadSpeed('')
       
-      // 2. 检查是否支持分片
-      const header = uploadAction.header || {}
-      const chunkSize = parseInt(header['chunk_size'])
-      const parts = Object.keys(header).filter(key => /^[0-9]+$/.test(key))
+      let fakeProgress = 0
+      const startTime = Date.now()
       
-      if (chunkSize && parts.length > 0) {
-        // ===== 分片上传（有真实进度） =====
-        const totalParts = parts.length
-        const completeParts = []
+      const progressTimer = setInterval(() => {
+        // 模拟进度，最多到 90%
+        fakeProgress += Math.random() * 6 + 1
+        if (fakeProgress > 90) fakeProgress = 90
+        setUploadProgress(Math.round(fakeProgress))
+        setUploadStatus(`上传到 HuggingFace ${Math.round(fakeProgress)}%`)
         
-        setUploadStatus(`分片上传中 0/${totalParts}`)
-        setUploadProgress(5)
-        
-        for (let i = 0; i < parts.length; i++) {
-          const part = parts[i]
-          const index = parseInt(part) - 1
-          const start = index * chunkSize
-          const end = Math.min(start + chunkSize, file.size)
-          const chunk = file.slice(start, end)
-          
-          setUploadStatus(`分片上传中 ${i + 1}/${totalParts}`)
-          
-          const response = await fetch(header[part], {
-            method: 'PUT',
-            body: chunk
-          })
-          
-          if (!response.ok) {
-            throw new Error(`分片 ${part} 上传失败: ${response.status}`)
-          }
-          
-          const etag = response.headers.get('ETag')
-          completeParts.push({ partNumber: parseInt(part), etag: etag || '' })
-          
-          // ✅ 更新进度（10% - 90%）
-          const progress = 10 + Math.round(((i + 1) / totalParts) * 80)
-          setUploadProgress(progress)
-          setUploadStatus(`上传到 HuggingFace ${progress}%`)
+        // 模拟速度
+        const elapsed = (Date.now() - startTime) / 1000
+        if (elapsed > 1) {
+          const speed = (file.size / 1024 / 1024 / elapsed * (fakeProgress / 100)).toFixed(1)
+          setUploadSpeed(`${speed} MB/s`)
         }
-        
-        // 完成分片上传
-        setUploadStatus('完成分片上传...')
-        setUploadProgress(92)
-        
-        const completeResponse = await fetch(uploadAction.href, {
-          method: 'POST',
-          headers: {
-            'Accept': 'application/vnd.git-lfs+json',
-            'Content-Type': 'application/vnd.git-lfs+json'
-          },
-          body: JSON.stringify({
-            oid: sha256,
-            parts: completeParts
-          })
-        })
-        
-        if (!completeResponse.ok) {
-          throw new Error(`分片完成失败: ${completeResponse.status}`)
-        }
-        
-      } else {
-        // ===== 普通上传（模拟进度） =====
-        setUploadStatus('上传到 HuggingFace...')
-        setUploadProgress(5)
-        
-        let fakeProgress = 5
-        const progressTimer = setInterval(() => {
-          fakeProgress += Math.random() * 5 + 1
-          if (fakeProgress > 85) fakeProgress = 85
-          setUploadProgress(Math.round(fakeProgress))
-          setUploadStatus(`上传到 HuggingFace ${Math.round(fakeProgress)}%`)
-        }, 300)
-        
-        const uploadRes = await fetch(uploadAction.href, {
+      }, 300)
+      
+      // 3. 直传到 HuggingFace S3
+      let uploadRes
+      try {
+        uploadRes = await fetch(info.uploadAction.href, {
           method: 'PUT',
-          headers: uploadAction.header || {},
+          headers: info.uploadAction.header || {},
           body: file
         })
-        
+      } finally {
+        // 清除模拟进度
         clearInterval(progressTimer)
-        
-        if (!uploadRes.ok) {
-          throw new Error(`直传失败: ${uploadRes.status}`)
-        }
       }
       
-      // 3. 提交 Commit
+      if (!uploadRes.ok) {
+        throw new Error(`直传失败: ${uploadRes.status}`)
+      }
+      
       setUploadStatus('提交文件引用...')
       setUploadProgress(95)
       
+      // 4. 提交 Commit
       const commitRes = await fetch('/api/hf-upload/commit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -583,6 +532,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   // 修改点 5：移除 HuggingFace 20MB 大小限制（所有 HF 文件走直传）
   // 修改点 6：传入 uploadNameType 使命名方式生效
   // 修改点 7：HuggingFace 支持 WebP 转换
+  // 修改点 8：HuggingFace 上传时设置 setIsNormalUploading 让进度条显示
   // ============================================================
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
@@ -625,16 +575,25 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             }
           }
           
-          // ⚠️ 修改点 6：传入 uploadNameType 使命名方式生效
-          const newFilename = generateFilename(fileToUpload.name, uploadNameType)
-          const url = await uploadHuggingFaceDirect(fileToUpload, folder, newFilename)
-          results.push({
-            success: true,
-            filename: file.name,
-            url: url,
-            folder: folder,
-            storage: 'huggingface'
-          })
+          // ✅ 修改点 8：设置普通上传状态，让进度条显示
+          setIsNormalUploading(true)
+          
+          try {
+            // ⚠️ 修改点 6：传入 uploadNameType 使命名方式生效
+            const newFilename = generateFilename(fileToUpload.name, uploadNameType)
+            const url = await uploadHuggingFaceDirect(fileToUpload, folder, newFilename)
+            
+            results.push({
+              success: true,
+              filename: file.name,
+              url: url,
+              folder: folder,
+              storage: 'huggingface'
+            })
+          } finally {
+            // ✅ 上传完成后重置状态
+            setIsNormalUploading(false)
+          }
           continue  // 跳过后续处理
         }
 
@@ -662,20 +621,23 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           setUploadStatus('准备上传...')
           setUploadProgress(0)
           
-          const result = await uploadNormalFile(file, folder, actualStorage)
-          
-          // 处理后端返回的直传信息
-          if (result && result.needDirectUpload) {
-            // ⚠️ 修改点 6：传入 uploadNameType 使命名方式生效
-            const newFilename = generateFilename(file.name, uploadNameType)
-            const directUrl = await uploadHuggingFaceDirect(file, result.folder || folder, result.fileName || newFilename)
-            url = directUrl
-          } else if (result && result.success !== false) {
-            url = result.url
-          } else {
-            throw new Error(result?.error || '上传失败')
+          try {
+            const result = await uploadNormalFile(file, folder, actualStorage)
+            
+            // 处理后端返回的直传信息
+            if (result && result.needDirectUpload) {
+              // ⚠️ 修改点 6：传入 uploadNameType 使命名方式生效
+              const newFilename = generateFilename(file.name, uploadNameType)
+              const directUrl = await uploadHuggingFaceDirect(file, result.folder || folder, result.fileName || newFilename)
+              url = directUrl
+            } else if (result && result.success !== false) {
+              url = result.url
+            } else {
+              throw new Error(result?.error || '上传失败')
+            }
+          } finally {
+            setIsNormalUploading(false)
           }
-          setIsNormalUploading(false)
         }
 
         // 记录上传结果
