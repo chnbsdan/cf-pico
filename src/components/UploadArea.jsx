@@ -1,7 +1,9 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react'
 import { initChunkUpload, uploadChunk, completeChunkUpload } from '../lib/api'
 
-// 导入 generateFilename（从 helpers 或自己实现）
+// ============================================================
+// 生成文件名：日期_随机数.扩展名
+// ============================================================
 function generateFilename(originalName) {
   const now = new Date()
   const dateStr = now.getFullYear() +
@@ -13,27 +15,30 @@ function generateFilename(originalName) {
 }
 
 export default function UploadArea({ onUpload, isLoading, convertToWebp, onConvertChange }) {
+  // ============================================================
+  // 状态定义
+  // ============================================================
   const [dragOver, setDragOver] = useState(false)
-  const [folder, setFolder] = useState('wallpaper')
-  const [bgRefresh, setBgRefresh] = useState(false)
-  const [storageType, setStorageType] = useState('github')
-  const [storageOpen, setStorageOpen] = useState(false)
-  const [folderOpen, setFolderOpen] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [uploadStatus, setUploadStatus] = useState('')
-  const [uploadSpeed, setUploadSpeed] = useState('')
-  const [isChunkUploading, setIsChunkUploading] = useState(false)
-  const [isNormalUploading, setIsNormalUploading] = useState(false)
+  const [folder, setFolder] = useState('wallpaper')           // 当前选中的文件夹
+  const [bgRefresh, setBgRefresh] = useState(false)           // 背景刷新状态
+  const [storageType, setStorageType] = useState('github')    // ⚠️ 修改点：默认改为 github
+  const [storageOpen, setStorageOpen] = useState(false)       // 存储下拉菜单开关
+  const [folderOpen, setFolderOpen] = useState(false)         // 文件夹下拉菜单开关
+  const [uploadProgress, setUploadProgress] = useState(0)     // 上传进度
+  const [uploadStatus, setUploadStatus] = useState('')        // 上传状态文字
+  const [uploadSpeed, setUploadSpeed] = useState('')          // 上传速度
+  const [isChunkUploading, setIsChunkUploading] = useState(false) // 分片上传中
+  const [isNormalUploading, setIsNormalUploading] = useState(false) // 普通上传中
   const fileInputRef = useRef(null)
   const glowRef = useRef(null)
 
-  // 上传队列控制
+  // 上传队列控制（并发限制）
   const [uploadQueue, setUploadQueue] = useState([])
   const [activeUploads, setActiveUploads] = useState(0)
   const maxConcurrentUploads = 3
   const abortControllers = useRef(new Map())
 
-  // 设置状态
+  // 设置弹窗状态
   const [showSettings, setShowSettings] = useState(false)
   const [compressQuality, setCompressQuality] = useState(4)
   const [compressBar, setCompressBar] = useState(5)
@@ -41,10 +46,10 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const [autoRetry, setAutoRetry] = useState(true)
   const [uploadNameType, setUploadNameType] = useState('default')
 
-  const CHUNK_SIZE = 16 * 1024 * 1024
+  const CHUNK_SIZE = 16 * 1024 * 1024  // 16MB 分片
 
   // ============================================================
-  // 光效函数
+  // 光效函数（卡片跟随鼠标发光）
   // ============================================================
   const handleCardMouseMove = (e) => {
     const glow = glowRef.current
@@ -64,10 +69,11 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   }
 
   // ============================================================
-  // WebP 转换
+  // WebP 转换（客户端转换）
   // ============================================================
   const convertImageToWebp = useCallback((file) => {
     return new Promise((resolve, reject) => {
+      // GIF、SVG、WebP 不转换
       if (file.type.includes('gif') || file.type.includes('svg') || file.type.includes('webp')) {
         resolve(null)
         return
@@ -127,6 +133,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     { value: 'huggingface', label: 'HuggingFace', icon: 'fas fa-brain' },
   ]
 
+  // 刷新背景壁纸
   const refreshBackground = () => {
     setBgRefresh(true)
     setTimeout(() => setBgRefresh(false), 200)
@@ -139,7 +146,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   }
 
   // ============================================================
-  // 分片上传带重试
+  // 分片上传带重试（Telegram 大文件）
   // ============================================================
   const uploadChunkWithRetry = async (uploadId, chunkIndex, chunk, maxRetries = 3) => {
     let lastError
@@ -171,7 +178,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   }, [uploadQueue, activeUploads])
 
   // ============================================================
-  // 大文件上传 (Telegram)
+  // 大文件上传（Telegram 分片）
   // ============================================================
   const uploadLargeFile = async (file, folder) => {
     if (activeUploads >= maxConcurrentUploads) {
@@ -264,13 +271,14 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   }
 
   // ============================================================
-  // 普通上传
+  // 普通上传（GitHub、R2、Telegram 小文件）
   // ============================================================
   const uploadNormalFile = async (file, folder, storage) => {
     return new Promise((resolve, reject) => {
       const processFile = async () => {
         let fileToUpload = file
         
+        // WebP 转换
         if (convertToWebp && file.type && file.type.startsWith('image/')) {
           try {
             const converted = await convertImageToWebp(file)
@@ -312,7 +320,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
               reject(new Error('解析响应失败'))
             }
           } else if (xhr.status === 202) {
-            // ✅ 202 表示需要直传，解析返回的 JSON
+            // 202 表示需要直传（HuggingFace 大文件）
             try {
               const result = JSON.parse(xhr.responseText)
               if (result.needDirectUpload) {
@@ -358,10 +366,10 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   }
 
   // ============================================================
-  // HuggingFace 大文件直传相关函数
+  // HuggingFace 直传相关函数
   // ============================================================
   
-  // 计算文件 SHA256（使用 Web Crypto API）
+  // 计算文件 SHA256
   const computeSHA256 = async (file) => {
     const buffer = await file.arrayBuffer()
     const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
@@ -369,7 +377,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
   }
 
-  // 获取文件前512字节的 base64
+  // 获取文件前 512 字节的 base64
   const getFileSample = async (file) => {
     const sampleBuffer = await file.slice(0, 512).arrayBuffer()
     const bytes = new Uint8Array(sampleBuffer)
@@ -378,19 +386,18 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     return btoa(binary)
   }
 
-  // HuggingFace 大文件直传
+  // HuggingFace 直传（支持任意大小）
   const uploadHuggingFaceDirect = async (file, folder, filename) => {
     try {
       setUploadStatus('计算文件指纹...')
       
-      // 1. 计算 SHA256 和 sample
       const sha256 = await computeSHA256(file)
       const sample = await getFileSample(file)
-      const filePath = `hd/${filename}`
+      const filePath = `hd/${filename}`  // 统一放在 hd 目录下
       
       setUploadStatus('获取上传信息...')
       
-      // 2. 获取上传信息
+      // 1. 获取上传信息
       const infoRes = await fetch(
         `/api/hf-upload/info?size=${file.size}&path=${encodeURIComponent(filePath)}&sha256=${sha256}&sample=${encodeURIComponent(sample)}`
       )
@@ -409,7 +416,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         return `/api/hf/${filePath}`
       }
       
-      // 3. 直传到 S3
+      // 2. 直传到 HuggingFace S3
       setUploadStatus('上传到 HuggingFace (直传)...')
       const uploadRes = await fetch(info.uploadAction.href, {
         method: 'PUT',
@@ -423,7 +430,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       
       setUploadStatus('提交文件引用...')
       
-      // 4. 提交 Commit
+      // 3. 提交 Commit
       const commitRes = await fetch('/api/hf-upload/commit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -449,7 +456,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   }
 
   // ============================================================
-  // 处理文件（核心修改）
+  // ⚠️⚠️⚠️ 核心修改：处理文件（重点） ⚠️⚠️⚠️
   // ============================================================
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
@@ -461,19 +468,21 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       if (!file) continue
 
       try {
+        // 获取文件扩展名，判断类型
         const ext = file.name.split('.').pop().toLowerCase()
         const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a']
         const videoExts = ['mp4', 'webm', 'avi', 'mov', 'mkv']
         const isAudio = audioExts.includes(ext)
         const isVideo = videoExts.includes(ext)
         
+        // ⚠️ 修改点 1：完全保留用户选择的存储，不做任何强制切换
+        // 原代码：if (isAudio || isVideo) { actualStorage = 'telegram' }
+        // 现在：选谁就是谁，音频/视频也走用户选择的存储
         let actualStorage = storageType
-        // 音频/视频强制走 Telegram（如果你想改，可以调整这里的逻辑）
-        if (isAudio || isVideo) {
-          actualStorage = 'telegram'
-        }
 
-        // ✅ 修改点 1：HuggingFace 直传（所有文件，不再限制大小）
+        // ⚠️ 修改点 2：HuggingFace 直传（去掉大小限制）
+        // 原代码：if (actualStorage === 'huggingface' && file.size > 20 * 1024 * 1024)
+        // 现在：所有选 HF 的文件都走直传，不管大小
         if (actualStorage === 'huggingface') {
           const newFilename = generateFilename(file.name)
           const url = await uploadHuggingFaceDirect(file, folder, newFilename)
@@ -484,20 +493,23 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             folder: folder,
             storage: 'huggingface'
           })
-          continue
+          continue  // 跳过后续处理
         }
 
+        // 判断是否需要分片上传（仅 Telegram）
         const needChunk = actualStorage === 'telegram' && (file.size > 16 * 1024 * 1024 || isAudio || isVideo)
 
         let url
         if (needChunk) {
+          // Telegram 分片上传（大文件、音频、视频）
           if (file.size > 500 * 1024 * 1024) {
             throw new Error('文件超过 500MB，暂不支持')
           }
           console.log(`📦 ${isAudio ? '音频' : isVideo ? '视频' : '大文件'} (${(file.size / 1024 / 1024).toFixed(1)}MB)，使用分片上传`)
           url = await uploadLargeFile(file, folder)
         } else {
-          // ✅ 修改点 2：更新限制检查（HuggingFace 已被拦截，不会走到这里）
+          // 普通上传（GitHub、R2、Telegram 小文件）
+          // ⚠️ 修改点 3：移除 HuggingFace 的大小限制检查（因为已被拦截）
           if (actualStorage === 'telegram' && file.size > 50 * 1024 * 1024) {
             throw new Error('Telegram 直接上传限制 50MB')
           }
@@ -511,7 +523,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           
           const result = await uploadNormalFile(file, folder, actualStorage)
           
-          // 检查是否返回了 needDirectUpload（大文件直传）
+          // 处理后端返回的直传信息
           if (result && result.needDirectUpload) {
             const newFilename = generateFilename(file.name)
             const directUrl = await uploadHuggingFaceDirect(file, result.folder || folder, result.fileName || newFilename)
@@ -524,6 +536,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           setIsNormalUploading(false)
         }
 
+        // 记录上传结果
         results.push({
           success: true,
           filename: file.name,
@@ -532,6 +545,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           storage: actualStorage
         })
 
+        // 单文件时自动复制链接
         if (fileArray.length === 1 && url) {
           try {
             await navigator.clipboard.writeText(url)
@@ -551,6 +565,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       }
     }
 
+    // 重置上传状态
     setIsChunkUploading(false)
     setIsNormalUploading(false)
     
@@ -562,11 +577,15 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       }
     }, 3000)
 
+    // 回调父组件
     if (onUpload) {
       await onUpload(results)
     }
   }
 
+  // ============================================================
+  // 事件处理：文件选择、拖拽、粘贴
+  // ============================================================
   const handleFileSelect = async (e) => {
     const files = e.target.files
     console.log('选择文件数量:', files.length)
@@ -584,6 +603,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     await handleFiles(files)
   }
 
+  // 粘贴上传
   useEffect(() => {
     const handlePaste = async (e) => {
       const items = e.clipboardData?.items
@@ -615,17 +635,19 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const currentFolder = folderOptions.find(opt => opt.key === folder) || folderOptions[0]
   const isUploading = isLoading || isChunkUploading || isNormalUploading
 
+  // ============================================================
+  // 界面渲染
+  // ============================================================
   return (
     <div className="mb-4">
-      {/* ============================================================
-      顶部工具栏
-      ============================================================ */}
+      {/* ==================== 顶部工具栏 ==================== */}
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 className="font-semibold text-green-500 text-sm flex items-center gap-1">
           <i className="fas fa-upload text-orange-600 text-sm"></i>
           上传文件
         </h3>
         <div className="flex items-center gap-1.5 flex-wrap">
+          {/* 刷新背景按钮 */}
           <button
             onClick={refreshBackground}
             className={`text-xs transition flex items-center gap-1 px-2 py-1 rounded-lg ${bgRefresh ? 'bg-green-700 text-white shadow-md' : 'bg-green-500 text-white hover:bg-green-400'}`}
@@ -634,7 +656,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             <i className="fas fa-sync-alt text-xs"></i>
           </button>
 
-          {/* ==================== 存储渠道下拉 ==================== */}
+          {/* ===== 存储渠道下拉菜单 ===== */}
           <div className="relative">
             <button
               onClick={() => setStorageOpen(!storageOpen)}
@@ -664,7 +686,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             )}
           </div>
 
-          {/* ==================== 文件夹下拉 ==================== */}
+          {/* ===== 文件夹下拉菜单 ===== */}
           <div className="relative">
             <button
               onClick={() => setFolderOpen(!folderOpen)}
@@ -694,6 +716,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             )}
           </div>
 
+          {/* WebP 开关 */}
           <button
             onClick={() => onConvertChange?.(!convertToWebp)}
             className={`text-xs px-2 py-1 rounded-lg transition flex items-center gap-1 ${
@@ -707,6 +730,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             {convertToWebp && <span className="text-[10px]">WebP</span>}
           </button>
 
+          {/* 设置按钮 */}
           <button
             onClick={() => setShowSettings(true)}
             className="text-xs px-2 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white/70 hover:text-white transition"
@@ -717,9 +741,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         </div>
       </div>
 
-      {/* ============================================================
-      上传卡片
-      ============================================================ */}
+      {/* ==================== 上传卡片 ==================== */}
       <div
         className="relative upload-card-wrapper group"
         onMouseMove={handleCardMouseMove}
@@ -763,6 +785,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
         >
+          {/* 上传中的旋转边框 */}
           {isUploading && (
             <div className="uploading-border" style={{
               position: 'absolute',
@@ -798,6 +821,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
             </p>
           )}
 
+          {/* 上传进度条 */}
           {isUploading && (
             <div className="mt-4 w-full max-w-xs relative z-10">
               <div className="flex justify-between text-xs text-white/60 mb-1">
@@ -810,10 +834,13 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
                   style={{ width: `${uploadProgress}%` }}
                 />
               </div>
+              {uploadSpeed && (
+                <div className="text-xs text-white/40 text-center mt-1">{uploadSpeed}</div>
+              )}
             </div>
           )}
 
-          {/* 星空背景 */}
+          {/* 星空背景动画 */}
           <div className="stars-layer absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700 z-0">
             <div className="stars-1 absolute inset-0" style={{
               backgroundImage: `
@@ -847,6 +874,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         </div>
       </div>
 
+      {/* 隐藏的文件输入 */}
       <input 
         ref={fileInputRef} 
         type="file" 
@@ -856,9 +884,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         onChange={handleFileSelect} 
       />
 
-      {/* ============================================================
-      设置弹窗
-      ============================================================ */}
+      {/* ==================== 设置弹窗 ==================== */}
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowSettings(false)}>
           <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -869,6 +895,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
               </button>
             </div>
 
+            {/* 文件命名方式 */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">文件命名方式</label>
               <div className="grid grid-cols-2 gap-2">
@@ -892,6 +919,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
               </div>
             </div>
 
+            {/* 客户端压缩 */}
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
                 <label className="text-sm font-medium text-gray-700 dark:text-gray-300">客户端压缩</label>
@@ -927,6 +955,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
               </div>
             </div>
 
+            {/* 自动重试 */}
             <div className="flex items-center justify-between mb-4">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">失败自动重试</label>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -945,9 +974,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         </div>
       )}
 
-      {/* ============================================================
-      全局动画样式
-      ============================================================ */}
+      {/* ==================== 全局动画样式 ==================== */}
       <style>{`
         @property --border-angle {
           syntax: '<angle>';
