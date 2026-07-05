@@ -65,7 +65,7 @@ export default function ApiDocs() {
     },
 
     // ----------------------------------------
-    // 4. Telegram 随机图片接口（新增）
+    // 4. Telegram 随机图片接口
     // ----------------------------------------
     {
       id: 'tg',
@@ -76,9 +76,35 @@ export default function ApiDocs() {
       example: `# 返回图片\ncurl ${baseUrl}/api/tg\n\n# 全屏壁纸模式（浏览器访问）\n${baseUrl}/api/tg?format=html`,
       response: '直接返回图片文件 或 全屏 HTML 页面'
     },
+
+    // ----------------------------------------
+    // 5. HuggingFace 图片访问接口
+    // ----------------------------------------
+    {
+      id: 'hf',
+      name: 'HuggingFace 图片',
+      path: '/api/hf/{path}',
+      method: 'GET',
+      description: '访问 HuggingFace 存储的图片，支持代理访问，避免跨域问题',
+      example: `# 访问 HuggingFace 图片\n${baseUrl}/api/hf/20260705_xxx.jpg\n\n# 访问 HuggingFace 图片（带文件夹）\n${baseUrl}/api/hf/pic/20260705_xxx.jpg`,
+      response: '直接返回图片文件'
+    },
+
+    // ----------------------------------------
+    // 6. HuggingFace 随机图片
+    // ----------------------------------------
+    {
+      id: 'hf-random',
+      name: 'HuggingFace 随机图片',
+      path: '/api/hf/random',
+      method: 'GET',
+      description: '从 HuggingFace 存储中随机返回一张图片',
+      example: `curl ${baseUrl}/api/hf/random`,
+      response: '直接返回图片文件'
+    },
     
     // ----------------------------------------
-    // 5. JSON 格式接口
+    // 7. JSON 格式接口
     // ----------------------------------------
     {
       id: 'json',
@@ -96,14 +122,14 @@ export default function ApiDocs() {
     },
     
     // ----------------------------------------
-    // 6. 统计信息接口
+    // 8. 统计信息接口
     // ----------------------------------------
     {
       id: 'stats',
       name: '统计信息',
       path: '/api/stats',
       method: 'GET',
-      description: '返回图片统计信息（各文件夹数量、Telegram 图片数量、外部图片数量、总数）',
+      description: '返回图片统计信息（各文件夹数量、Telegram 图片数量、HuggingFace 图片数量、外部图片数量、总数）',
       example: `curl ${baseUrl}/api/stats`,
       response: `{
   "github_folders": {
@@ -114,45 +140,46 @@ export default function ApiDocs() {
   },
   "github_total": 56,
   "telegram_total": 12,
+  "huggingface_total": 8,
   "external_total": 15,
-  "grand_total": 83
+  "grand_total": 91
 }`
     },
     
     // ----------------------------------------
-    // 7. 图片列表接口
+    // 9. 图片列表接口
     // ----------------------------------------
     {
       id: 'list',
       name: '图片列表',
       path: '/api/list',
       method: 'GET',
-      description: '返回所有图片列表（按文件夹分组，包含 Telegram 分类）',
+      description: '返回所有图片列表（按文件夹分组，包含 Telegram 分类和 HuggingFace 分类）',
       example: `curl ${baseUrl}/api/list`,
       response: '返回 JSON 格式的图片列表，包含文件名、URL、大小、来源等信息'
     },
     
     // ----------------------------------------
-    // 8. 上传图片接口
+    // 10. 上传图片接口
     // ----------------------------------------
     {
       id: 'upload',
       name: '上传图片',
       path: '/api/upload',
       method: 'POST',
-      description: '上传图片到指定分类，支持选择存储方式（github/r2/telegram）',
-      example: `# 上传到 GitHub（默认）\ncurl -X POST -F "file=@image.jpg" -F "folder=wallpaper" ${baseUrl}/api/upload\n\n# 上传到 Telegram\ncurl -X POST -F "file=@image.jpg" -F "folder=wallpaper" -F "storage=telegram" ${baseUrl}/api/upload`,
+      description: '上传图片到指定分类，支持选择存储方式（github/r2/telegram/huggingface）',
+      example: `# 上传到 GitHub（默认）\ncurl -X POST -F "file=@image.jpg" -F "folder=wallpaper" ${baseUrl}/api/upload\n\n# 上传到 HuggingFace\ncurl -X POST -F "file=@image.jpg" -F "storage=huggingface" ${baseUrl}/api/upload`,
       response: `{
   "success": true,
-  "filename": "20260616_image.jpg",
+  "filename": "20260705_image.jpg",
   "folder": "wallpaper",
-  "url": "${baseUrl}/api/image?path=wallpaper/20260616_image.jpg",
+  "url": "${baseUrl}/api/image?path=wallpaper/20260705_image.jpg",
   "storage": "github"
 }`
     },
     
     // ----------------------------------------
-    // 9. 图片代理接口
+    // 11. 图片代理接口
     // ----------------------------------------
     {
       id: 'image',
@@ -160,8 +187,34 @@ export default function ApiDocs() {
       path: '/api/image',
       method: 'GET',
       description: '代理访问图片（支持 GitHub/R2/Telegram 三种存储），解决私有仓库和 Telegram 文件无法直接访问的问题',
-      example: `# GitHub/R2 图片\n${baseUrl}/api/image?path=wallpaper/20260616_image.jpg\n\n# Telegram 图片\n${baseUrl}/api/image?path=telegram/photos%2Ffile_10.jpg`,
+      example: `# GitHub/R2 图片\n${baseUrl}/api/image?path=wallpaper/20260705_image.jpg\n\n# Telegram 图片\n${baseUrl}/api/image?path=telegram/photos%2Ffile_10.jpg`,
       response: '直接返回图片文件'
+    },
+
+    // ----------------------------------------
+    // 12. 外链转存接口
+    // ----------------------------------------
+    {
+      id: 'import',
+      name: '外链转存',
+      path: '/api/external/import',
+      method: 'POST',
+      description: '下载外链图片并转存到指定存储渠道（github/r2/telegram/huggingface），支持批量转存',
+      example: `curl -X POST ${baseUrl}/api/external/import \\\n  -H "Content-Type: application/json" \\\n  -d '{"urls":["https://example.com/image.jpg"],"storage":"huggingface"}'`,
+      response: `{
+  "success": true,
+  "total": 1,
+  "successCount": 1,
+  "failCount": 0,
+  "results": [
+    {
+      "success": true,
+      "originalUrl": "https://example.com/image.jpg",
+      "newUrl": "${baseUrl}/api/hf/20260705_xxx.jpg",
+      "storage": "huggingface"
+    }
+  ]
+}`
     }
   ]
 
