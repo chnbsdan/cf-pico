@@ -322,5 +322,17 @@
     "time": "2026-07-05T00:36:19.698Z",
     "size": 8192660,
     "mimeType": "image/jpeg"
+  },
+  {
+    "id": 1783238862328,
+    "filename": "20260705_blue2.jpg",
+    "originalName": "blue2.jpg",
+    "fileId": "BQACAgUAAyEGAAMBBNJvJQACAQxqShDLEp5P9MyOb94R58KFDcCyyQACbh4AAsIrUVa7IhxLGk_KdjwE",
+    "messageId": 268,
+    "filePath": "documents/file_339.jpg",
+    "url": "https://pico.1356666.xyz/api/short/20260705_blue2.jpg",
+    "time": "2026-07-05T08:07:42.328Z",
+    "size": 5753847,
+    "mimeType": "image/jpeg"
   }
 ]
