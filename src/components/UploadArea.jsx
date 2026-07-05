@@ -449,7 +449,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   }
 
   // ============================================================
-  // 处理文件
+  // 处理文件（核心修改）
   // ============================================================
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
@@ -468,12 +468,13 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         const isVideo = videoExts.includes(ext)
         
         let actualStorage = storageType
+        // 音频/视频强制走 Telegram（如果你想改，可以调整这里的逻辑）
         if (isAudio || isVideo) {
           actualStorage = 'telegram'
         }
 
-        // ✅ HuggingFace 大文件直传（> 20MB）
-        if (actualStorage === 'huggingface' && file.size > 20 * 1024 * 1024) {
+        // ✅ 修改点 1：HuggingFace 直传（所有文件，不再限制大小）
+        if (actualStorage === 'huggingface') {
           const newFilename = generateFilename(file.name)
           const url = await uploadHuggingFaceDirect(file, folder, newFilename)
           results.push({
@@ -496,10 +497,11 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           console.log(`📦 ${isAudio ? '音频' : isVideo ? '视频' : '大文件'} (${(file.size / 1024 / 1024).toFixed(1)}MB)，使用分片上传`)
           url = await uploadLargeFile(file, folder)
         } else {
+          // ✅ 修改点 2：更新限制检查（HuggingFace 已被拦截，不会走到这里）
           if (actualStorage === 'telegram' && file.size > 50 * 1024 * 1024) {
             throw new Error('Telegram 直接上传限制 50MB')
           }
-          if (actualStorage !== 'telegram' && actualStorage !== 'huggingface' && file.size > 25 * 1024 * 1024) {
+          if (actualStorage !== 'telegram' && file.size > 25 * 1024 * 1024) {
             throw new Error(`${actualStorage === 'github' ? 'GitHub' : 'R2'} 限制 25MB，请切换到 Telegram`)
           }
           
@@ -511,7 +513,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           
           // 检查是否返回了 needDirectUpload（大文件直传）
           if (result && result.needDirectUpload) {
-            // 后端返回了直传信息，走直传流程
             const newFilename = generateFilename(file.name)
             const directUrl = await uploadHuggingFaceDirect(file, result.folder || folder, result.fileName || newFilename)
             url = directUrl
