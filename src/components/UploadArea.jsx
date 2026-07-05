@@ -1,17 +1,46 @@
+// ============================================================
+// 文件名: src/components/UploadArea.jsx
+// 说明: 上传区域组件 - 支持拖拽、粘贴、多种存储渠道
+// 修改记录:
+//   1. 移除音视频强制走 Telegram 的逻辑 (选谁就传谁)
+//   2. 移除 HuggingFace 20MB 大小限制 (所有 HF 文件走直传)
+//   3. 修复命名方式设置不生效的问题 (支持 default/origin/short)
+//   4. HuggingFace 返回完整 URL (包含域名)
+// ============================================================
+
 import React, { useRef, useState, useEffect, useCallback } from 'react'
 import { initChunkUpload, uploadChunk, completeChunkUpload } from '../lib/api'
 
 // ============================================================
-// 生成文件名：日期_随机数.扩展名
+// ⚠️ 修改点 1：生成文件名（支持三种命名方式）
+// 原代码：只有默认方式（日期_随机数）
+// 现在：支持 default / origin / short 三种方式
 // ============================================================
-function generateFilename(originalName) {
-  const now = new Date()
-  const dateStr = now.getFullYear() +
-    String(now.getMonth() + 1).padStart(2, '0') +
-    String(now.getDate()).padStart(2, '0')
-  const random = Math.random().toString(36).substring(2, 8)
+function generateFilename(originalName, nameType = 'default') {
   const ext = originalName.split('.').pop() || ''
-  return `${dateStr}_${random}.${ext}`
+  const baseName = originalName.replace(/\.[^/.]+$/, '')
+  
+  switch (nameType) {
+    case 'origin':
+      // 原始名称 + 日期后缀（防重名）
+      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      return `${baseName}_${dateStr}.${ext}`
+    
+    case 'short':
+      // 6位随机短名称
+      const short = Math.random().toString(36).substring(2, 8)
+      return `${short}.${ext}`
+    
+    case 'default':
+    default:
+      // 默认：日期_随机数
+      const now = new Date()
+      const dateStr2 = now.getFullYear() +
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0')
+      const random = Math.random().toString(36).substring(2, 8)
+      return `${dateStr2}_${random}.${ext}`
+  }
 }
 
 export default function UploadArea({ onUpload, isLoading, convertToWebp, onConvertChange }) {
@@ -21,7 +50,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const [dragOver, setDragOver] = useState(false)
   const [folder, setFolder] = useState('wallpaper')           // 当前选中的文件夹
   const [bgRefresh, setBgRefresh] = useState(false)           // 背景刷新状态
-  const [storageType, setStorageType] = useState('github')    // ⚠️ 修改点：默认改为 github
+  const [storageType, setStorageType] = useState('github')    // 当前选中的存储渠道
   const [storageOpen, setStorageOpen] = useState(false)       // 存储下拉菜单开关
   const [folderOpen, setFolderOpen] = useState(false)         // 文件夹下拉菜单开关
   const [uploadProgress, setUploadProgress] = useState(0)     // 上传进度
@@ -44,6 +73,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   const [compressBar, setCompressBar] = useState(5)
   const [serverCompress, setServerCompress] = useState(true)
   const [autoRetry, setAutoRetry] = useState(true)
+  // ⚠️ 修改点 2：命名方式状态（原代码已有，但未使用）
   const [uploadNameType, setUploadNameType] = useState('default')
 
   const CHUNK_SIZE = 16 * 1024 * 1024  // 16MB 分片
@@ -386,7 +416,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
     return btoa(binary)
   }
 
-  // HuggingFace 直传（支持任意大小）
+  // ⚠️ 修改点 3：HuggingFace 直传返回完整 URL
   const uploadHuggingFaceDirect = async (file, folder, filename) => {
     try {
       setUploadStatus('计算文件指纹...')
@@ -413,7 +443,9 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       
       if (info.alreadyExists) {
         setUploadStatus('文件已存在')
-        return `/api/hf/${filePath}`
+        // ⚠️ 修改点 4：加上域名返回完整 URL
+        const baseUrl = window.location.origin
+        return `${baseUrl}/api/hf/${filePath}`
       }
       
       // 2. 直传到 HuggingFace S3
@@ -447,6 +479,7 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       }
       
       setUploadStatus('✅ 上传完成!')
+      // ⚠️ 修改点 4：加上域名返回完整 URL
       const baseUrl = window.location.origin
       return `${baseUrl}/api/hf/${filePath}`
       
@@ -457,7 +490,10 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
   }
 
   // ============================================================
-  // ⚠️⚠️⚠️ 核心修改：处理文件（重点） ⚠️⚠️⚠️
+  // ⚠️⚠️⚠️ 核心修改：处理文件 ⚠️⚠️⚠️
+  // 修改点 5：移除音视频强制走 Telegram 的逻辑（选谁就传谁）
+  // 修改点 6：移除 HuggingFace 20MB 大小限制（所有 HF 文件走直传）
+  // 修改点 7：传入 uploadNameType 使命名方式生效
   // ============================================================
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
@@ -476,16 +512,17 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         const isAudio = audioExts.includes(ext)
         const isVideo = videoExts.includes(ext)
         
-        // ⚠️ 修改点 1：完全保留用户选择的存储，不做任何强制切换
+        // ⚠️ 修改点 5：完全保留用户选择的存储，不做任何强制切换
         // 原代码：if (isAudio || isVideo) { actualStorage = 'telegram' }
         // 现在：选谁就是谁，音频/视频也走用户选择的存储
         let actualStorage = storageType
 
-        // ⚠️ 修改点 2：HuggingFace 直传（去掉大小限制）
+        // ⚠️ 修改点 6：HuggingFace 直传（去掉大小限制）
         // 原代码：if (actualStorage === 'huggingface' && file.size > 20 * 1024 * 1024)
         // 现在：所有选 HF 的文件都走直传，不管大小
         if (actualStorage === 'huggingface') {
-          const newFilename = generateFilename(file.name)
+          // ⚠️ 修改点 7：传入 uploadNameType 使命名方式生效
+          const newFilename = generateFilename(file.name, uploadNameType)
           const url = await uploadHuggingFaceDirect(file, folder, newFilename)
           results.push({
             success: true,
@@ -510,7 +547,6 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           url = await uploadLargeFile(file, folder)
         } else {
           // 普通上传（GitHub、R2、Telegram 小文件）
-          // ⚠️ 修改点 3：移除 HuggingFace 的大小限制检查（因为已被拦截）
           if (actualStorage === 'telegram' && file.size > 50 * 1024 * 1024) {
             throw new Error('Telegram 直接上传限制 50MB')
           }
@@ -526,7 +562,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
           
           // 处理后端返回的直传信息
           if (result && result.needDirectUpload) {
-            const newFilename = generateFilename(file.name)
+            // ⚠️ 修改点 7：传入 uploadNameType 使命名方式生效
+            const newFilename = generateFilename(file.name, uploadNameType)
             const directUrl = await uploadHuggingFaceDirect(file, result.folder || folder, result.fileName || newFilename)
             url = directUrl
           } else if (result && result.success !== false) {
