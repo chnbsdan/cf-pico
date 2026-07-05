@@ -611,32 +611,40 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         // 原代码：if (actualStorage === 'huggingface' && file.size > 20 * 1024 * 1024)
         // 现在：所有选 HF 的文件都走直传，不管大小
         if (actualStorage === 'huggingface') {
-          // ✅ 先处理 WebP 转换
-          let fileToUpload = file
-          if (convertToWebp && file.type && file.type.startsWith('image/')) {
-            try {
-              const converted = await convertImageToWebp(file)
-              if (converted) {
-                fileToUpload = converted
-                setUploadStatus('✅ WebP 转换完成，开始上传...')
-              }
-            } catch (e) {
-              console.log('⚠️ WebP 转换失败，使用原图:', e.message)
-            }
-          }
-          
-          // ⚠️ 修改点 6：传入 uploadNameType 使命名方式生效
-          const newFilename = generateFilename(fileToUpload.name, uploadNameType)
-          const url = await uploadHuggingFaceDirect(fileToUpload, folder, newFilename)
-          results.push({
-            success: true,
-            filename: file.name,
-            url: url,
-            folder: folder,
-            storage: 'huggingface'
-          })
-          continue  // 跳过后续处理
-        }
+  // 先处理 WebP 转换
+  let fileToUpload = file
+  if (convertToWebp && file.type && file.type.startsWith('image/')) {
+    try {
+      const converted = await convertImageToWebp(file)
+      if (converted) {
+        fileToUpload = converted
+        setUploadStatus('✅ WebP 转换完成，开始上传...')
+      }
+    } catch (e) {
+      console.log('⚠️ WebP 转换失败，使用原图:', e.message)
+    }
+  }
+  
+  // ✅ 让进度条显示
+  setIsUploading(true)
+  
+  try {
+    const newFilename = generateFilename(fileToUpload.name, uploadNameType)
+    const url = await uploadHuggingFaceDirect(fileToUpload, folder, newFilename)
+    
+    results.push({
+      success: true,
+      filename: file.name,
+      url: url,
+      folder: folder,
+      storage: 'huggingface'
+    })
+  } finally {
+    // ✅ 无论成功失败，都隐藏进度条
+    setIsUploading(false)
+  }
+  continue
+}
 
         // 判断是否需要分片上传（仅 Telegram）
         const needChunk = actualStorage === 'telegram' && (file.size > 16 * 1024 * 1024 || isAudio || isVideo)
