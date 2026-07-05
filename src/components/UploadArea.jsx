@@ -447,7 +447,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
       }
       
       setUploadStatus('✅ 上传完成!')
-      return `/api/hf/${filePath}`
+      const baseUrl = window.location.origin
+      return `${baseUrl}/api/hf/${filePath}`
       
     } catch (error) {
       console.error('HuggingFace 直传失败:', error)
