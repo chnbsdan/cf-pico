@@ -986,8 +986,8 @@ const handleDeleteExternal = async (img) => {
 
         {activeTab === 'external' ? (
   <>
-    {/* 1. 外链转存 + 添加外链 - 左右并排 */}
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+    {/* 外链转存 + 添加外链 - 左右并排，固定在最上方 */}
+    <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
       <div>
         <ExternalImport onImportComplete={loadImages} />
       </div>
@@ -995,74 +995,76 @@ const handleDeleteExternal = async (img) => {
         <ExternalLinksManager onLinkAdded={loadImages} />
       </div>
     </div>
-    {/* 2. 外链图片网格 */}
-    {loading ? (
-      <SkeletonLoader count={12} type="card" />
-    ) : paginatedImages.length === 0 ? (
-      <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl">
-        <i className="fas fa-link text-5xl text-gray-400 mb-3"></i>
-        <p className="text-gray-500">暂无外链图片</p>
-      </div>
-    ) : (
-      <>
-        <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 sm:gap-3">
-          {paginatedImages.map((img, idx) => {
-            const proxyUrl = getProxyUrl(img)
-            return (
-              <FileCard
-                key={img.sha || idx}
-                file={img}
-                selected={selectedImages.has(img.name)}
-                onSelect={(e) => {
-                  e.stopPropagation()
-                  toggleSelect(img.name, e)
-                }}
-                onPreview={() => openPreview(img)}
-                onDetail={() => setDetailFile(img)}
-                onCopy={() => handleCopy(proxyUrl, img.name)}
-                onDelete={() => handleDeleteExternal(img)}
-                getFileUrl={getProxyUrl}
-              />
-            )
-          })}
+    {/* 外链图片网格 - 降低层级 */}
+    <div className="relative z-0">
+      {loading ? (
+        <SkeletonLoader count={12} type="card" />
+      ) : paginatedImages.length === 0 ? (
+        <div className="text-center py-20 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-xl">
+          <i className="fas fa-link text-5xl text-gray-400 mb-3"></i>
+          <p className="text-gray-500">暂无外链图片</p>
         </div>
-        {totalPages > 1 && (
-          <div className="flex justify-center gap-1 sm:gap-2 mt-6">
-            <button
-              onClick={() => setCurrentPage(1)}
-              disabled={currentPage === 1}
-              className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
-            >
-              首页
-            </button>
-            <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
-            >
-              上一页
-            </button>
-            <span className="px-3 py-1.5 rounded-lg bg-white/70 dark:bg-gray-700/70 text-gray-700 dark:text-white text-sm backdrop-blur-sm">
-              {currentPage} / {totalPages}
-            </span>
-            <button
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
-            >
-              下一页
-            </button>
-            <button
-              onClick={() => setCurrentPage(totalPages)}
-              disabled={currentPage === totalPages}
-              className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
-            >
-              末页
-            </button>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 sm:gap-3">
+            {paginatedImages.map((img, idx) => {
+              const proxyUrl = getProxyUrl(img)
+              return (
+                <FileCard
+                  key={img.sha || idx}
+                  file={img}
+                  selected={selectedImages.has(img.name)}
+                  onSelect={(e) => {
+                    e.stopPropagation()
+                    toggleSelect(img.name, e)
+                  }}
+                  onPreview={() => openPreview(img)}
+                  onDetail={() => setDetailFile(img)}
+                  onCopy={() => handleCopy(proxyUrl, img.name)}
+                  onDelete={() => handleDeleteExternal(img)}
+                  getFileUrl={getProxyUrl}
+                />
+              )
+            })}
           </div>
-        )}
-      </>
-    )}
+          {totalPages > 1 && (
+            <div className="flex justify-center gap-1 sm:gap-2 mt-6">
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
+              >
+                首页
+              </button>
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
+              >
+                上一页
+              </button>
+              <span className="px-3 py-1.5 rounded-lg bg-white/70 dark:bg-gray-700/70 text-gray-700 dark:text-white text-sm backdrop-blur-sm">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
+              >
+                下一页
+              </button>
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1.5 rounded-lg bg-white/50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 hover:bg-white/70 dark:hover:bg-gray-600/70 disabled:opacity-30 transition text-sm backdrop-blur-sm"
+              >
+                末页
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
   </>
         ) : activeTab === 'history' ? (
           historyLoading ? (
