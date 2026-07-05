@@ -470,10 +470,8 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         
         // ✅ 上传进度监听
         xhr.upload.onprogress = (e) => {
-  console.log('📊 onprogress 触发!', e.loaded, e.total)  // ← 添加这行
   if (e.lengthComputable) {
     const progress = Math.round((e.loaded / e.total) * 100)
-    console.log('📊 进度:', progress, '%')  // ← 添加这行
     if (progress !== lastProgress) {
       lastProgress = progress
       setUploadProgress(progress)
