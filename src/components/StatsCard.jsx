@@ -31,6 +31,13 @@ const statsConfig = [
     bg: 'bg-blue-50/60 dark:bg-blue-900/20' 
   },
   { 
+    id: 'huggingface', 
+    label: 'HuggingFace 图片', 
+    icon: 'fas fa-brain', 
+    color: 'text-yellow-600 dark:text-yellow-400', 
+    bg: 'bg-yellow-50 dark:bg-yellow-900/30' 
+  },
+  { 
     id: 'external', 
     label: '外部图源', 
     icon: 'fa-globe', 
@@ -45,22 +52,25 @@ export default function StatsCard({ stats }) {
   // 竖屏图片 = cover + sd
   const portraitCount = (stats.github_folders?.cover || 0) + (stats.github_folders?.sd || 0)
   
-  // ✅ 新增：Telegram 图片数量
+  // Telegram 图片数量
   const telegramCount = stats.telegram_total || 0
+  // HuggingFace 图片数量
+  const huggingfaceCount = stats.huggingface_total || 0
   
-  // 总图片数 = GitHub总 + 外部 + Telegram
-  const totalCount = (stats.grand_total || stats.total_count || 0) + telegramCount
+  // 总图片数 = GitHub总 + 外部 + Telegram + HuggingFace
+  const totalCount = (stats.grand_total || stats.total_count || 0) + telegramCount + huggingfaceCount
   
   const data = [
     { value: totalCount, ...statsConfig[0] },
     { value: landscapeCount, ...statsConfig[1] },
     { value: portraitCount, ...statsConfig[2] },
     { value: telegramCount, ...statsConfig[3] },
-    { value: stats.external_total || 0, ...statsConfig[4] },
+    { value: huggingfaceCount, ...statsConfig[4] },
+    { value: stats.external_total || 0, ...statsConfig[5] },
   ]
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 animate-fade-in">
+    <div className="grid grid-cols-2 md:grid-cols-6 gap-3 animate-fade-in">
       {data.map((item) => (
         <div key={item.id} className="card py-3 px-3 hover:shadow-2xl transition-all duration-300 hover:-translate-y-0.5">
           <div className="flex items-center gap-3">
