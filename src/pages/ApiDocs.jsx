@@ -114,7 +114,7 @@ export default function ApiDocs() {
   description: '从外部图源中随机返回一张图片',
   example: `curl ${baseUrl}/api/external/random`,
   response: '直接返回图片文件'
-}
+},
     
     // ----------------------------------------
     // 8. JSON 格式接口
