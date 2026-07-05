@@ -470,21 +470,23 @@ export default function UploadArea({ onUpload, isLoading, convertToWebp, onConve
         
         // ✅ 上传进度监听
         xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            const progress = Math.round((e.loaded / e.total) * 100)
-            if (progress !== lastProgress) {
-              lastProgress = progress
-              setUploadProgress(progress)
-              setUploadStatus(`上传到 HuggingFace ${progress}%`)
-              
-              const elapsed = (Date.now() - startTime) / 1000
-              if (elapsed > 0.5 && e.loaded > 0) {
-                const speed = (e.loaded / elapsed / 1024 / 1024).toFixed(1)
-                setUploadSpeed(`${speed} MB/s`)
-              }
-            }
-          }
-        }
+  console.log('📊 onprogress 触发!', e.loaded, e.total)  // ← 添加这行
+  if (e.lengthComputable) {
+    const progress = Math.round((e.loaded / e.total) * 100)
+    console.log('📊 进度:', progress, '%')  // ← 添加这行
+    if (progress !== lastProgress) {
+      lastProgress = progress
+      setUploadProgress(progress)
+      setUploadStatus(`上传到 HuggingFace ${progress}%`)
+      
+      const elapsed = (Date.now() - startTime) / 1000
+      if (elapsed > 0.5 && e.loaded > 0) {
+        const speed = (e.loaded / elapsed / 1024 / 1024).toFixed(1)
+        setUploadSpeed(`${speed} MB/s`)
+      }
+    }
+  }
+}
         
         xhr.onload = async () => {
           if (xhr.status >= 200 && xhr.status < 300) {
