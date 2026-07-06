@@ -1,6 +1,6 @@
 // functions/api/upload.js - POST /api/upload 普通上传
 import { GITHUB_USER, GITHUB_REPO, generateFilename } from './utils/helpers.js'
-import { getTelegramImages, saveTelegramImages } from './utils/github.js'
+import { getTelegramImages, saveTelegramImages, uploadToGitHubRelease } from './utils/github.js'
 import { uploadToTelegram } from './utils/telegram.js'
 import { uploadToHuggingFace } from './utils/huggingface.js'
 
@@ -45,9 +45,11 @@ export async function onRequest(context) {
       })
     }
 
-    if (storageType !== 'telegram' && storageType !== 'huggingface' && file.size > 25 * 1024 * 1024) {
+    // GitHub 存储的大小限制：小文件走 contents API，大文件走 Releases
+    // 这里只检查 R2 的限制，GitHub 在分支里单独处理
+    if (storageType === 'r2' && file.size > 25 * 1024 * 1024) {
       return new Response(JSON.stringify({ 
-        error: `${storageType === 'github' ? 'GitHub' : 'R2'} 不支持超过 25MB 的文件，请切换到 Telegram 或 HuggingFace`,
+        error: 'R2 不支持超过 25MB 的文件，请切换到 Telegram 或 HuggingFace',
         maxSize: 25 * 1024 * 1024
       }), {
         status: 400,
@@ -206,7 +208,7 @@ export async function onRequest(context) {
 
       // 小文件：走代理上传（原有逻辑）
       try {
-        const hfPath = `hd/${filename}` // ✅ 改成 hd 文件夹
+        const hfPath = `hd/${filename}`
         const result = await uploadToHuggingFace(processedFile, hfPath, env, request)
         
         if (!result.success) {
@@ -243,7 +245,7 @@ export async function onRequest(context) {
       usedStorage = 'r2'
 
     // ============================================================
-    // 4. GitHub 存储
+    // 4. GitHub 存储（小文件走 contents，大文件走 Releases）
     // ============================================================
     } else {
       if (!token) {
@@ -253,49 +255,74 @@ export async function onRequest(context) {
         })
       }
       
-      const ext = processedName.split('.').pop().toLowerCase()
-      const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'ico', 'svg']
-      if (!imageExts.includes(ext)) {
-        return new Response(JSON.stringify({ 
-          error: `GitHub 存储仅支持图片格式，${ext.toUpperCase()} 文件请使用 Telegram 存储` 
-        }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' }
-        })
-      }
+      const GITHUB_CONTENTS_LIMIT = 25 * 1024 * 1024  // 25MB
       
-      let binary = ''
-      for (let i = 0; i < uint8Array.length; i++) {
-        binary += String.fromCharCode(uint8Array[i])
-      }
-      const base64Content = btoa(binary)
-      
-      const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}/${filename}`
-      const response = await fetch(apiUrl, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'Cloudflare-Pages'
-        },
-        body: JSON.stringify({
-          message: `Upload ${filename}`,
-          content: base64Content,
-          branch: 'main'
+      // ✅ 大文件：走 GitHub Releases（支持 2GB）
+      if (processedFile.size > GITHUB_CONTENTS_LIMIT) {
+        try {
+          const result = await uploadToGitHubRelease(processedFile, filename, folder, env)
+          
+          if (!result.success) {
+            throw new Error(result.error || 'GitHub Release 上传失败')
+          }
+          
+          uploadedUrl = result.url
+          usedStorage = 'github-release'
+          console.log(`✅ GitHub Release 上传成功: ${filename} (${(processedFile.size / 1024 / 1024).toFixed(1)}MB)`)
+          
+        } catch (error) {
+          console.error('GitHub Release 上传失败:', error)
+          return new Response(JSON.stringify({ error: error.message || 'GitHub Release 上传失败' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+          })
+        }
+      } else {
+        // ✅ 小文件：走原来的 contents API（仅图片）
+        const ext = processedName.split('.').pop().toLowerCase()
+        const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'ico', 'svg']
+        if (!imageExts.includes(ext)) {
+          return new Response(JSON.stringify({ 
+            error: `GitHub 存储仅支持图片格式，${ext.toUpperCase()} 文件请使用 Telegram 或 HuggingFace 存储` 
+          }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' }
+          })
+        }
+        
+        let binary = ''
+        for (let i = 0; i < uint8Array.length; i++) {
+          binary += String.fromCharCode(uint8Array[i])
+        }
+        const base64Content = btoa(binary)
+        
+        const apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/${folder}/${filename}`
+        const response = await fetch(apiUrl, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'User-Agent': 'Cloudflare-Pages'
+          },
+          body: JSON.stringify({
+            message: `Upload ${filename}`,
+            content: base64Content,
+            branch: 'main'
+          })
         })
-      })
-      if (!response.ok) {
-        const error = await response.text()
-        console.error('GitHub upload error:', error)
-        return new Response(JSON.stringify({ error: 'GitHub upload failed' }), {
-          status: response.status,
-          headers: { 'Content-Type': 'application/json' }
-        })
+        if (!response.ok) {
+          const error = await response.text()
+          console.error('GitHub upload error:', error)
+          return new Response(JSON.stringify({ error: 'GitHub upload failed' }), {
+            status: response.status,
+            headers: { 'Content-Type': 'application/json' }
+          })
+        }
+        const data = await response.json()
+        const baseUrl = new URL(request.url).origin;
+        uploadedUrl = `${baseUrl}/api/image?path=${folder}/${filename}`
+        usedStorage = 'github'
       }
-      const data = await response.json()
-      const baseUrl = new URL(request.url).origin;
-      uploadedUrl = `${baseUrl}/api/image?path=${folder}/${filename}`
-      usedStorage = 'github'
     }
 
     return new Response(JSON.stringify({
