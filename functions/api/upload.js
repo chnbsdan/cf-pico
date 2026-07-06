@@ -255,7 +255,7 @@ export async function onRequest(context) {
         })
       }
       
-      const GITHUB_CONTENTS_LIMIT = 25 * 1024 * 1024  // 25MB
+      const GITHUB_CONTENTS_LIMIT = 10 * 1024 * 1024  // 25MB
       
       // ✅ 大文件：走 GitHub Releases（支持 2GB，所有文件类型）
       if (processedFile.size > GITHUB_CONTENTS_LIMIT) {
