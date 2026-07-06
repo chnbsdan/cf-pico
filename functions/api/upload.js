@@ -244,7 +244,7 @@ export async function onRequest(context) {
       uploadedUrl = `${baseUrl}/api/image?path=${key}`
       usedStorage = 'r2'
 
-    // ============================================================
+       // ============================================================
     // 4. GitHub 存储（小文件走 contents，大文件走 Releases）
     // ============================================================
     } else {
@@ -257,7 +257,7 @@ export async function onRequest(context) {
       
       const GITHUB_CONTENTS_LIMIT = 25 * 1024 * 1024  // 25MB
       
-      // ✅ 大文件：走 GitHub Releases（支持 2GB）
+      // ✅ 大文件：走 GitHub Releases（支持 2GB，所有文件类型）
       if (processedFile.size > GITHUB_CONTENTS_LIMIT) {
         try {
           const result = await uploadToGitHubRelease(processedFile, filename, folder, env)
@@ -278,12 +278,19 @@ export async function onRequest(context) {
           })
         }
       } else {
-        // ✅ 小文件：走原来的 contents API（仅图片）
+        // ✅ 小文件：走 contents API（支持图片 + 视频 + 音频）
         const ext = processedName.split('.').pop().toLowerCase()
-        const imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'ico', 'svg']
-        if (!imageExts.includes(ext)) {
+        const allowedExts = [
+          // 图片
+          'jpg', 'jpeg', 'png', 'webp', 'gif', 'avif', 'bmp', 'ico', 'svg',
+          // 视频
+          'mp4', 'webm', 'avi', 'mov', 'mkv', 'flv', 'wmv',
+          // 音频
+          'mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a'
+        ]
+        if (!allowedExts.includes(ext)) {
           return new Response(JSON.stringify({ 
-            error: `GitHub 存储仅支持图片格式，${ext.toUpperCase()} 文件请使用 Telegram 或 HuggingFace 存储` 
+            error: `不支持的文件格式: ${ext.toUpperCase()}` 
           }), {
             status: 400,
             headers: { 'Content-Type': 'application/json' }
