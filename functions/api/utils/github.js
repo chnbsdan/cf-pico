@@ -93,6 +93,36 @@ export async function getFolderImages(folder, token) {
 // 新增：GitHub Releases 大文件存储（支持 2GB）
 // ============================================================
 
+// 创建 Release
+async function createRelease(token, repo, tag) {
+  const apiBase = 'https://api.github.com'
+  const [owner, repoName] = repo.split('/')
+  
+  const createRes = await fetch(`${apiBase}/repos/${owner}/${repoName}/releases`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'cf-pico'
+    },
+    body: JSON.stringify({
+      tag_name: tag,
+      name: `CF-Pico Storage ${tag}`,
+      body: 'Auto-generated release for file storage',
+      draft: false,
+      prerelease: false
+    })
+  })
+  
+  if (!createRes.ok) {
+    const error = await createRes.text()
+    throw new Error(`创建 Release 失败: ${createRes.status} - ${error}`)
+  }
+  
+  return await createRes.json()
+}
+
 // 获取或创建 Release
 async function getOrCreateRelease(token, repo, tag) {
   const apiBase = 'https://api.github.com'
@@ -107,6 +137,11 @@ async function getOrCreateRelease(token, repo, tag) {
     }
   })
   
+  // ✅ 404 表示没有 Release，直接创建
+  if (listRes.status === 404) {
+    return await createRelease(token, repo, tag)
+  }
+  
   if (!listRes.ok) {
     throw new Error(`获取 Release 列表失败: ${listRes.status}`)
   }
@@ -114,30 +149,9 @@ async function getOrCreateRelease(token, repo, tag) {
   const releases = await listRes.json()
   let release = releases.find(r => r.tag_name === tag)
   
-  // 2. 不存在则创建
+  // 2. 如果不存在，创建新的 Release
   if (!release) {
-    const createRes = await fetch(`${apiBase}/repos/${owner}/${repoName}/releases`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json',
-        'User-Agent': 'cf-pico'
-      },
-      body: JSON.stringify({
-        tag_name: tag,
-        name: `CF-Pico Storage ${tag}`,
-        body: 'Auto-generated release for file storage',
-        draft: false,
-        prerelease: false
-      })
-    })
-    
-    if (!createRes.ok) {
-      throw new Error(`创建 Release 失败: ${createRes.status}`)
-    }
-    
-    release = await createRes.json()
+    release = await createRelease(token, repo, tag)
   }
   
   return release
