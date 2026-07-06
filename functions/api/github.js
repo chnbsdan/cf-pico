@@ -1,4 +1,4 @@
-// functions/api/github.js - GitHub Release 文件代理（支持在线预览）
+// functions/api/github.js - 完整修改版
 export async function onRequest(context) {
   const { request, env } = context;
   const url = new URL(request.url);
@@ -8,9 +8,8 @@ export async function onRequest(context) {
     return new Response('Missing path parameter', { status: 400 });
   }
 
-  // 从环境变量获取配置
   const token = env.GITHUB_TOKEN;
-  const repo = env.GITHUB_REPO; // 格式: "用户名/仓库名"
+  const repo = env.GITHUB_REPO;
   const tag = env.GITHUB_RELEASE_TAG || 'cf-pico-storage';
 
   if (!token || !repo) {
@@ -18,9 +17,9 @@ export async function onRequest(context) {
   }
 
   try {
-    // 1. 获取 Release 信息，找到对应附件
-    const releaseUrl = `https://api.github.com/repos/${repo}/releases/tags/${tag}`;
-    const releaseRes = await fetch(releaseUrl, {
+    // 1. 先获取所有 Release，再过滤
+    const listUrl = `https://api.github.com/repos/${repo}/releases`;
+    const listRes = await fetch(listUrl, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/vnd.github.v3+json',
@@ -28,18 +27,25 @@ export async function onRequest(context) {
       }
     });
 
-    if (!releaseRes.ok) {
-      return new Response('Release not found', { status: 404 });
+    if (!listRes.ok) {
+      return new Response('Failed to fetch releases', { status: listRes.status });
     }
 
-    const release = await releaseRes.json();
+    const releases = await listRes.json();
+    const release = releases.find(r => r.tag_name === tag);
+
+    if (!release) {
+      return new Response(`Release with tag "${tag}" not found`, { status: 404 });
+    }
+
+    // 2. 在 Release 的 assets 中查找文件
     const asset = release.assets.find(a => a.name === filename);
 
     if (!asset) {
-      return new Response('File not found in release', { status: 404 });
+      return new Response(`File "${filename}" not found in release "${tag}"`, { status: 404 });
     }
 
-    // 2. 获取文件内容
+    // 3. 获取文件内容
     const fileRes = await fetch(asset.browser_download_url, {
       headers: {
         'User-Agent': 'cf-pico-proxy'
@@ -50,7 +56,7 @@ export async function onRequest(context) {
       return new Response('Failed to fetch file', { status: fileRes.status });
     }
 
-    // 3. 判断文件类型，设置正确的 Content-Type
+    // 4. 判断文件类型
     const ext = filename.split('.').pop()?.toLowerCase() || '';
     const contentTypeMap = {
       'mp4': 'video/mp4',
@@ -67,7 +73,7 @@ export async function onRequest(context) {
     };
     const contentType = contentTypeMap[ext] || 'application/octet-stream';
 
-    // 4. 返回文件，关键点：设置 Content-Disposition 为 inline
+    // 5. 返回文件
     const fileBuffer = await fileRes.arrayBuffer();
     return new Response(fileBuffer, {
       headers: {
