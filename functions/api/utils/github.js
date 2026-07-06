@@ -193,9 +193,12 @@ export async function uploadToGitHubRelease(file, filename, folder, env) {
     
     const data = await uploadRes.json()
     
+    // ✅ 获取当前域名
+    const baseUrl = env.PUBLIC_BASE_URL || new URL(env.BASE_URL || 'https://your-domain.com').origin
+    
     return {
       success: true,
-      url: data.browser_download_url,
+      url: `${baseUrl}/api/github?path=${encodeURIComponent(filename)}`, // ✅ 改为代理链接
       storage: 'github-release',
       filename: filename,
       id: data.id
