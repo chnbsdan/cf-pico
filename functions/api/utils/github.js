@@ -88,3 +88,160 @@ export async function getFolderImages(folder, token) {
     return []
   }
 }
+
+// ============================================================
+// 新增：GitHub Releases 大文件存储（支持 2GB）
+// ============================================================
+
+// 获取或创建 Release
+async function getOrCreateRelease(token, repo, tag) {
+  const apiBase = 'https://api.github.com'
+  const [owner, repoName] = repo.split('/')
+  
+  // 1. 获取已存在的 Release
+  const listRes = await fetch(`${apiBase}/repos/${owner}/${repoName}/releases`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept': 'application/vnd.github.v3+json',
+      'User-Agent': 'cf-pico'
+    }
+  })
+  
+  if (!listRes.ok) {
+    throw new Error(`获取 Release 列表失败: ${listRes.status}`)
+  }
+  
+  const releases = await listRes.json()
+  let release = releases.find(r => r.tag_name === tag)
+  
+  // 2. 不存在则创建
+  if (!release) {
+    const createRes = await fetch(`${apiBase}/repos/${owner}/${repoName}/releases`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'cf-pico'
+      },
+      body: JSON.stringify({
+        tag_name: tag,
+        name: `CF-Pico Storage ${tag}`,
+        body: 'Auto-generated release for file storage',
+        draft: false,
+        prerelease: false
+      })
+    })
+    
+    if (!createRes.ok) {
+      throw new Error(`创建 Release 失败: ${createRes.status}`)
+    }
+    
+    release = await createRes.json()
+  }
+  
+  return release
+}
+
+// 上传文件到 GitHub Releases
+export async function uploadToGitHubRelease(file, filename, folder, env) {
+  const token = env.GITHUB_TOKEN
+  const repo = env.GITHUB_REPO || `${env.GITHUB_USER}/cf-pico`
+  const tag = env.GITHUB_RELEASE_TAG || 'cf-pico-storage'
+  
+  if (!token) {
+    throw new Error('GITHUB_TOKEN 未配置')
+  }
+  
+  try {
+    // 1. 获取或创建 Release
+    const release = await getOrCreateRelease(token, repo, tag)
+    
+    // 2. 获取上传 URL
+    const uploadUrl = release.upload_url.replace('{?name,label}', `?name=${encodeURIComponent(filename)}`)
+    
+    // 3. 上传文件到 Release 附件
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/octet-stream',
+        'User-Agent': 'cf-pico'
+      },
+      body: file
+    })
+    
+    if (!uploadRes.ok) {
+      const error = await uploadRes.text()
+      throw new Error(`上传到 Release 失败: ${uploadRes.status} - ${error}`)
+    }
+    
+    const data = await uploadRes.json()
+    
+    return {
+      success: true,
+      url: data.browser_download_url,
+      storage: 'github-release',
+      filename: filename,
+      id: data.id
+    }
+    
+  } catch (error) {
+    console.error('GitHub Release 上传失败:', error)
+    throw error
+  }
+}
+
+// 从 GitHub Releases 删除文件
+export async function deleteFromGitHubRelease(filename, env) {
+  const token = env.GITHUB_TOKEN
+  const repo = env.GITHUB_REPO || `${env.GITHUB_USER}/cf-pico`
+  const tag = env.GITHUB_RELEASE_TAG || 'cf-pico-storage'
+  
+  if (!token) {
+    throw new Error('GITHUB_TOKEN 未配置')
+  }
+  
+  try {
+    const release = await getOrCreateRelease(token, repo, tag)
+    
+    const assetsRes = await fetch(release.assets_url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'cf-pico'
+      }
+    })
+    
+    if (!assetsRes.ok) {
+      throw new Error(`获取附件列表失败: ${assetsRes.status}`)
+    }
+    
+    const assets = await assetsRes.json()
+    const target = assets.find(a => a.name === filename)
+    
+    if (!target) {
+      return { success: true, message: '文件不存在，无需删除' }
+    }
+    
+    const deleteRes = await fetch(target.url, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'cf-pico'
+      }
+    })
+    
+    if (!deleteRes.ok) {
+      throw new Error(`删除附件失败: ${deleteRes.status}`)
+    }
+    
+    return { success: true, message: '文件已删除' }
+    
+  } catch (error) {
+    console.error('GitHub Release 删除失败:', error)
+    throw error
+  }
+}
