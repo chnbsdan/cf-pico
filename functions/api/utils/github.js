@@ -194,7 +194,9 @@ export async function uploadToGitHubRelease(file, filename, folder, env) {
     const data = await uploadRes.json()
     
     // ✅ 获取当前域名
-    const baseUrl = env.PUBLIC_BASE_URL || new URL(env.BASE_URL || 'https://your-domain.com').origin
+    // const baseUrl = env.PUBLIC_BASE_URL || new URL(env.BASE_URL || 'https://your-domain.com').origin
+    // ✅ 直接使用你的真实域名
+       const baseUrl = 'https://pico.1356666.xyz';
     
     return {
       success: true,
